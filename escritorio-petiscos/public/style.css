@@ -299,3 +299,34 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .compartilhar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .compartilhar code { background: var(--creme); padding: 8px 10px; border-radius: 8px; font-size: 14px; word-break: break-all; }
 .vazio { color: var(--texto-2); font-style: italic; }
+
+/* ---------- Comparativo ---------- */
+.titulo-secao { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin: 28px 0 12px; }
+.titulo-secao h2 { font-family: var(--display); font-weight: 400; color: var(--creme); margin: 0; font-size: 24px; }
+
+.segmentado { display: inline-flex; background: var(--creme); border-radius: 10px; padding: 3px; gap: 2px; flex-wrap: wrap; }
+.segmentado button { font: inherit; font-size: 13px; font-weight: 700; border: 0; background: none; color: var(--cafe-700); padding: 7px 12px; border-radius: 8px; cursor: pointer; }
+.segmentado button.ativa { background: var(--cafe-800); color: var(--creme); }
+
+table.mapa { font-size: 13px; border-collapse: separate; border-spacing: 2px; }
+table.mapa th, table.mapa td { border: 0; padding: 7px 6px; text-align: center; white-space: nowrap; }
+table.mapa th { font-size: 11px; line-height: 1.15; white-space: normal; vertical-align: bottom; min-width: 44px; max-width: 64px; text-transform: none; letter-spacing: 0; hyphens: manual; }
+table.mapa th:first-child, table.mapa td:first-child { text-align: left; position: sticky; left: 0; background: var(--papel); z-index: 1; min-width: 130px; max-width: 190px; white-space: normal; }
+table.mapa td.celula { border-radius: 4px; font-variant-numeric: tabular-nums; font-weight: 700; }
+table.mapa td.final { outline: 2px solid var(--cafe-800); outline-offset: -2px; }
+table.mapa td.sem { color: var(--texto-2); font-weight: 400; background: #f3ece2; }
+table.mapa .nome-lanche { background: none; border: 0; font: inherit; color: var(--cafe-800); cursor: pointer; padding: 0; text-align: left; text-decoration: underline dotted; }
+.legenda-mapa { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--texto-2); }
+.legenda-mapa i { display: block; width: 160px; height: 10px; border-radius: 999px; background: linear-gradient(90deg, #fdf0e3, #f5b27a, #e8761e, #c2410c, #7c2d12); }
+
+/* ---------- Impressão (relatório final) ---------- */
+@media print {
+  body::before, .abas, #btn-imprimir, .segmentado, .toast, #login { display: none !important; }
+  body { background: #fff; }
+  .marca .nome, .marca .cia { color: var(--cafe-800); text-shadow: none; }
+  .titulo-secao h2 { color: var(--cafe-800); }
+  .cartao, .kpi { box-shadow: none; border: 1px solid var(--linha); break-inside: avoid; }
+  [data-painel]:not([data-painel="resumo"]) { display: none !important; }
+  table.mapa th:first-child, table.mapa td:first-child { position: static; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

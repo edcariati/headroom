@@ -178,7 +178,150 @@
     pizza("g-chegou", "chegou", av);
     pizza("g-espera", "espera", av);
     pizza("g-tamanho", "tamanho_percepcao", av);
+
+    renderMapa(stats);
+    renderDistribuicao();
+    renderPrecos(stats);
   }
+
+  // ---------- Comparativo entre os lanches ----------
+  // Escala sequencial laranja (clara → escura) para o mapa de notas.
+  const RAMPA = ["#fdf0e3", "#f5b27a", "#e8761e", "#c2410c", "#7c2d12"];
+  function corNota(v) {
+    const t = Math.max(0, Math.min(1, v / 10)) * (RAMPA.length - 1);
+    const i = Math.min(RAMPA.length - 2, Math.floor(t));
+    const f = t - i;
+    const a = RAMPA[i].match(/\w\w/g).map((h) => parseInt(h, 16));
+    const b = RAMPA[i + 1].match(/\w\w/g).map((h) => parseInt(h, 16));
+    const rgb = a.map((x, k) => Math.round(x + (b[k] - x) * f));
+    const lum = rgb.map((c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+    const L = 0.2126 * lum[0] + 0.7152 * lum[1] + 0.0722 * lum[2];
+    return { fundo: `rgb(${rgb.join(",")})`, texto: L < 0.2 ? "#fff" : "#2b1a10" };
+  }
+
+  function renderMapa(stats) {
+    const CURTOS = { nota_espera: "Espera", nota_temperatura: "Temp.", nota_aparencia: "Aparên&shy;cia", nota_montagem: "Monta&shy;gem",
+      nota_sabor: "Sabor", nota_carne: "Carne", nota_pao: "Pão", nota_molho: "Molho", nota_ingredientes: "Ingre&shy;dientes",
+      nota_tamanho: "Tama&shy;nho", nota_facilidade: "Facili&shy;dade", nota_pediria: "Pediria de novo", nota_indicaria: "Indica&shy;ria" };
+    const colunas = NOTAS.map(([c, r]) => [c, r, CURTOS[c]]).concat([["nota_final", "Nota final", "<b>Nota final</b>"]]);
+    const linhas = stats.slice().sort((a, b) => (b.nota ?? -1) - (a.nota ?? -1) || a.id - b.id);
+    $("mapa-notas").innerHTML = `
+      <thead><tr><th>Lanche</th><th class="num">Aval.</th>${colunas.map(([, r, curto]) => `<th title="${r}">${curto}</th>`).join("")}</tr></thead>
+      <tbody>${linhas.map((st) => `<tr>
+        <td><button class="nome-lanche" data-lanche="${st.id}">${st.id}. ${esc(nomeLanche(st.id))}</button></td>
+        <td class="num">${st.n}</td>
+        ${colunas.map(([c, r]) => {
+          if (!st.n) return `<td class="celula sem">–</td>`;
+          const m = media(st.av.map((a) => a[c]));
+          const cor = corNota(m);
+          return `<td class="celula${c === "nota_final" ? " final" : ""}" style="background:${cor.fundo};color:${cor.texto}" title="${esc(nomeLanche(st.id))} · ${r}: ${num(m, 2)}">${num(m)}</td>`;
+        }).join("")}
+      </tr>`).join("")}</tbody>`;
+  }
+  $("mapa-notas").addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-lanche]");
+    if (b) irParaLanche(Number(b.dataset.lanche));
+  });
+
+  let campoDist = "espera";
+  const DESC_DIST = {
+    espera: "Quanto tempo cada lanche demorou para chegar, em % das avaliações.",
+    chegou: "Como cada lanche chegou à mesa (quente, morno ou frio), em % das avaliações.",
+    tamanho_percepcao: "Como os avaliadores acharam o tamanho de cada lanche, em % das avaliações.",
+  };
+  $("seg-dist").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-campo]");
+    if (!b) return;
+    campoDist = b.dataset.campo;
+    document.querySelectorAll("#seg-dist button").forEach((x) => x.classList.toggle("ativa", x === b));
+    renderDistribuicao();
+  });
+
+  function renderDistribuicao() {
+    if (graficos.dist) graficos.dist.destroy();
+    const box = $("dist-box");
+    box.querySelector(".vazio")?.remove();
+    $("dist-desc").textContent = DESC_DIST[campoDist];
+    const stats = Array.from({ length: TOTAL }, (_, i) => statsLanche(i + 1)).filter((s) => s.n);
+    box.style.height = Math.max(stats.length, 1) * 30 + 80 + "px";
+    if (!stats.length || !window.Chart) {
+      box.insertAdjacentHTML("beforeend", `<p class="vazio">${stats.length ? "Gráfico indisponível (sem internet?)" : "Sem avaliações ainda."}</p>`);
+      return;
+    }
+    const estreito = window.innerWidth < 600;
+    const curto = (t, n) => (t.length > n ? t.slice(0, n - 1) + "…" : t);
+    const contagem = (s, v) => s.av.filter((a) => a[campoDist] === v).length;
+    graficos.dist = new Chart($("g-dist"), {
+      type: "bar",
+      data: {
+        labels: stats.map((s) => `${s.id}. ${estreito ? curto(nomeLanche(s.id), 14) : nomeLanche(s.id)}`),
+        datasets: OPCOES[campoDist].map(([v, r], i) => ({
+          label: r,
+          data: stats.map((s) => (100 * contagem(s, v)) / s.n),
+          contagens: stats.map((s) => contagem(s, v)),
+          backgroundColor: CORES[i],
+          borderColor: FUNDO,
+          borderWidth: { right: 2 },
+          barPercentage: 0.78,
+          categoryPercentage: 1,
+        })),
+      },
+      options: {
+        indexAxis: "y",
+        maintainAspectRatio: false,
+        scales: {
+          x: { stacked: true, min: 0, max: 100, ticks: { callback: (v) => v + "%", stepSize: estreito ? 25 : 10 }, grid: { color: "#efe2cf" } },
+          y: { stacked: true, grid: { display: false }, ticks: { autoSkip: false, color: "#2b1a10", font: { size: estreito ? 12 : 13 } } },
+        },
+        plugins: {
+          legend: { position: "top", align: "start", labels: { boxWidth: 14, padding: 14, font: { size: 13 } } },
+          tooltip: {
+            mode: "index",
+            callbacks: {
+              label: (c) => ` ${c.dataset.label}: ${c.dataset.contagens[c.dataIndex]} (${Math.round(c.raw)}%)`,
+            },
+          },
+        },
+        onClick: (_, els) => { if (els.length) irParaLanche(stats[els[0].index].id); },
+      },
+    });
+  }
+
+  function renderPrecos(stats) {
+    if (graficos.preco) graficos.preco.destroy();
+    const box = $("preco-box");
+    box.querySelector(".vazio")?.remove();
+    const lista = stats.filter((s) => s.n).sort((a, b) => b.preco - a.preco);
+    box.style.height = Math.max(lista.length, 1) * 30 + 50 + "px";
+    if (!lista.length || !window.Chart) {
+      box.insertAdjacentHTML("beforeend", `<p class="vazio">${lista.length ? "Gráfico indisponível (sem internet?)" : "Sem avaliações ainda."}</p>`);
+      return;
+    }
+    const estreito = window.innerWidth < 600;
+    const curto = (t, n) => (t.length > n ? t.slice(0, n - 1) + "…" : t);
+    graficos.preco = new Chart($("g-preco"), {
+      type: "bar",
+      data: {
+        labels: lista.map((s) => `${s.id}. ${estreito ? curto(nomeLanche(s.id), 12) : nomeLanche(s.id)}  ${reais(s.preco)}`),
+        datasets: [{ data: lista.map((s) => s.preco), backgroundColor: CORES[0], borderRadius: 4, borderSkipped: "start", barPercentage: 0.72, categoryPercentage: 1 }],
+      },
+      options: {
+        indexAxis: "y",
+        maintainAspectRatio: false,
+        scales: {
+          x: { beginAtZero: true, ticks: { callback: (v) => "R$ " + v, maxRotation: 0 }, grid: { color: "#efe2cf" } },
+          y: { grid: { display: false }, ticks: { autoSkip: false, color: "#2b1a10", font: { size: estreito ? 12 : 13 } } },
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (c) => { const s = lista[c.dataIndex]; const ps = s.av.map((a) => Number(a.preco)); return ` Média ${reais(s.preco)} · de ${reais(Math.min(...ps))} a ${reais(Math.max(...ps))} · ${s.n} aval.`; } } },
+        },
+        onClick: (_, els) => { if (els.length) irParaLanche(lista[els[0].index].id); },
+      },
+    });
+  }
+
+  $("btn-imprimir").addEventListener("click", () => window.print());
 
   // ---------- Por lanche ----------
   function renderSelect() {

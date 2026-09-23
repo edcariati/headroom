@@ -52,6 +52,35 @@
           <div class="cartao"><h3>Tempo de espera</h3><div class="grafico-pizza"><canvas id="g-espera"></canvas></div></div>
           <div class="cartao"><h3>Percepção de tamanho</h3><div class="grafico-pizza"><canvas id="g-tamanho"></canvas></div></div>
         </div>
+
+        <!-- Comparativo entre os lanches -->
+        <div class="titulo-secao">
+          <h2>Comparativo entre os lanches</h2>
+          <button class="botao pequeno secundario" id="btn-imprimir" type="button">🖨 Imprimir / salvar PDF</button>
+        </div>
+        <div class="cartao">
+          <h3>Notas de cada lanche por critério</h3>
+          <p class="muted">Média de 0 a 10. Quanto mais escura a célula, maior a nota. Clique no lanche para ver o detalhe.</p>
+          <div class="tabela-wrap"><table class="mapa" id="mapa-notas"></table></div>
+          <div class="legenda-mapa" aria-hidden="true"><span>0</span><i></i><span>10</span></div>
+        </div>
+        <div class="cartao">
+          <div class="acoes" style="justify-content:space-between;margin-bottom:8px">
+            <h3 style="margin:0">Distribuição por lanche</h3>
+            <div class="segmentado" id="seg-dist" role="tablist">
+              <button type="button" data-campo="espera" class="ativa">Tempo de espera</button>
+              <button type="button" data-campo="chegou">Temperatura</button>
+              <button type="button" data-campo="tamanho_percepcao">Tamanho</button>
+            </div>
+          </div>
+          <p class="muted" id="dist-desc"></p>
+          <div class="grafico-barras" id="dist-box"><canvas id="g-dist"></canvas></div>
+        </div>
+        <div class="cartao">
+          <h3>Preço médio que pagariam, por lanche</h3>
+          <p class="muted">Média do valor (R$) informado pelos avaliadores, do maior para o menor.</p>
+          <div class="grafico-barras" id="preco-box"><canvas id="g-preco"></canvas></div>
+        </div>
       </section>
 
       <!-- Por lanche -->
