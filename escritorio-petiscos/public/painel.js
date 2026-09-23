@@ -1,5 +1,5 @@
 (function () {
-  const { rpc, OPCOES, NOTAS, rotulo, num, reais, esc, configurado, cfg } = window.EP;
+  const { rpc, OPCOES, NOTAS, rotulo, num, reais, esc, cfg } = window.EP;
   const TOTAL = cfg.TOTAL_LANCHES;
   const $ = (id) => document.getElementById(id);
   const CHAVE_SENHA = "ep_painel_senha";
@@ -382,10 +382,6 @@
 
   // ---------- Início ----------
   (async function () {
-    if (!configurado()) {
-      $("erro-login").textContent = "Site ainda não configurado: preencha config.js com os dados do Supabase.";
-      return;
-    }
     let salva = null;
     try { salva = sessionStorage.getItem(CHAVE_SENHA); } catch (e) {}
     if (salva) {

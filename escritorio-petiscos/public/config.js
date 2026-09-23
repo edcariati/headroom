@@ -1,8 +1,4 @@
-// Preencha com os dados do seu projeto Supabase
-// (Supabase → Project Settings → API).
-// A chave "anon"/"publishable" é pública por natureza: pode ficar aqui.
+// Configuração do site. Os dados ficam no Vercel Blob, acessados pela API em /api/rpc.
 window.CONFIG = {
-  SUPABASE_URL: "https://SEU-PROJETO.supabase.co",
-  SUPABASE_ANON_KEY: "COLE-AQUI-A-CHAVE-ANON",
   TOTAL_LANCHES: 20,
 };

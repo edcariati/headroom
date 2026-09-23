@@ -3,22 +3,20 @@
   const cfg = window.CONFIG;
 
   async function rpc(fn, args) {
-    const key = cfg.SUPABASE_ANON_KEY;
-    const headers = { apikey: key, "Content-Type": "application/json" };
-    if (key.startsWith("eyJ")) headers.Authorization = "Bearer " + key; // chave anon legada (JWT)
     let res;
     try {
-      res = await fetch(cfg.SUPABASE_URL.replace(/\/$/, "") + "/rest/v1/rpc/" + fn, {
+      res = await fetch("/api/rpc?fn=" + encodeURIComponent(fn), {
         method: "POST",
-        headers,
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(args || {}),
       });
     } catch (e) {
       throw new Error("Sem conexão com o servidor. Verifique a internet e tente de novo.");
     }
     const text = await res.text();
-    const body = text ? JSON.parse(text) : null;
-    if (!res.ok) throw new Error((body && body.message) || "Erro " + res.status);
+    let body = null;
+    try { body = text ? JSON.parse(text) : null; } catch (e) { /* resposta não-JSON */ }
+    if (!res.ok) throw new Error((body && body.message) || "Erro " + res.status + ". Tente de novo.");
     return body;
   }
 
@@ -70,7 +68,5 @@
   const esc = (s) =>
     String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-  const configurado = () => !/SEU-PROJETO|COLE-AQUI/.test(cfg.SUPABASE_URL + cfg.SUPABASE_ANON_KEY);
-
-  window.EP = { rpc, OPCOES, NOTAS, rotulo, num, reais, esc, configurado, cfg };
+  window.EP = { rpc, OPCOES, NOTAS, rotulo, num, reais, esc, cfg };
 })();

@@ -1,5 +1,5 @@
 (function () {
-  const { rpc, OPCOES, NOTAS, num, esc, configurado, cfg } = window.EP;
+  const { rpc, OPCOES, NOTAS, num, esc, cfg } = window.EP;
   const TOTAL = cfg.TOTAL_LANCHES;
   const CHAVE_TOKEN = "ep_degustacao_token";
   const $ = (id) => document.getElementById(id);
@@ -64,10 +64,6 @@
 
   // ---------- Início ----------
   async function iniciar() {
-    if (!configurado()) {
-      $("carregando").innerHTML = "⚙️ Site ainda não configurado.<br>Preencha <code>config.js</code> com os dados do Supabase.";
-      return;
-    }
     try {
       estado.lanches = await rpc("listar_lanches");
     } catch (e) {

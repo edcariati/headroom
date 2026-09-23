@@ -1,6 +1,6 @@
 {
-  "outputDirectory": "public",
   "cleanUrls": true,
+  "regions": ["gru1"],
   "headers": [
     { "source": "/painel", "headers": [{ "key": "X-Robots-Tag", "value": "noindex" }] }
   ]
