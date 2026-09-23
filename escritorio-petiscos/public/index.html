@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#24150c" />
   <meta property="og:title" content="Degustação · Escritório Petiscos & Cia" />
   <meta property="og:description" content="Prove, avalie e ajude a escolher os lanches do cardápio." />
-  <meta property="og:image" content="poster.jpg" />
+  <meta property="og:image" content="https://escritorio-petiscos.vercel.app/poster.jpg" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍔</text></svg>" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -20,7 +20,12 @@
 
     <!-- 1. Identificação -->
     <section id="tela-inicio" class="escondido">
-      <header class="marca">
+      <header class="capa" id="capa">
+        <img src="poster.jpg" alt="Escritório Petiscos &amp; Cia — Feito pra matar a fome" width="750" height="1125"
+             onerror="document.getElementById('capa').classList.add('escondido');document.getElementById('marca-texto').classList.remove('escondido')" />
+        <div class="marca" style="padding:0"><span class="sub">Degustação</span></div>
+      </header>
+      <header class="marca escondido" id="marca-texto">
         <div class="chamada">Feito pra matar a fome</div>
         <div class="nome">ESCRITÓRIO</div>
         <div class="cia">PETISCOS &amp; CIA</div>

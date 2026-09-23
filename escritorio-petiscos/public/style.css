@@ -30,16 +30,14 @@ body {
   background-color: var(--cafe-900);
   line-height: 1.4;
 }
-/* Fundo com o pôster da marca (camada fixa: funciona também no iPhone) */
+/* Fundo com o pôster da marca, desfocado (camada fixa: funciona também no iPhone) */
 body::before {
   content: "";
   position: fixed;
-  inset: 0;
+  inset: -40px;
   z-index: -1;
-  background:
-    linear-gradient(180deg, rgba(36, 21, 12, 0.55) 0%, rgba(36, 21, 12, 0.85) 45%, rgba(36, 21, 12, 0.96) 100%),
-    url("poster.jpg") center top / cover no-repeat,
-    var(--cafe-900);
+  background: url("poster.jpg") center top / cover no-repeat, var(--cafe-900);
+  filter: blur(14px) brightness(0.38) saturate(1.1);
 }
 
 .pagina { max-width: 720px; margin: 0 auto; padding: 16px 16px 120px; }
@@ -47,11 +45,22 @@ body::before {
 
 /* ---------- Marca (inspirada no logo: ESCRITÓRIO • PETISCOS & CIA •) ---------- */
 body.painel-bg::before {
-  background:
-    linear-gradient(180deg, rgba(20, 12, 7, 0.78) 0%, rgba(20, 12, 7, 0.94) 100%),
-    url("poster-escuro.jpg") center top / cover no-repeat,
-    var(--cafe-900);
+  background: url("poster-escuro.jpg") center top / cover no-repeat, var(--cafe-900);
+  filter: blur(10px) brightness(0.45);
 }
+.capa { text-align: center; padding: 8px 0 18px; }
+.capa img {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  max-height: 58vh;
+  object-fit: cover;
+  object-position: center top;
+  margin: 0 auto;
+  border-radius: var(--raio);
+  box-shadow: var(--sombra), 0 0 0 3px rgba(232, 118, 30, 0.55);
+}
+.capa .sub { margin-top: -18px; position: relative; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4); }
 .marca { text-align: center; color: var(--creme); padding: 22px 0 16px; }
 .marca .chamada {
   font-family: var(--display);
