@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Painel da Degustação</title>
+  <meta name="robots" content="noindex" />
+  <meta name="theme-color" content="#24150c" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Roboto+Slab:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="painel-bg">
+  <main class="pagina larga" style="padding-bottom:40px">
+    <header class="marca">
+      <div class="nome" style="font-size:clamp(28px,8vw,44px)">ESCRITÓRIO</div>
+      <div class="cia">PETISCOS &amp; CIA</div>
+      <div class="sub">Painel da degustação</div>
+    </header>
+
+    <form id="login" class="cartao" style="max-width:420px;margin:0 auto">
+      <h2>Acesso do dono</h2>
+      <label class="campo" for="senha">Senha</label>
+      <input id="senha" type="password" autocomplete="current-password" required />
+      <div class="erro-msg" id="erro-login"></div>
+      <button class="botao cheio" type="submit" id="btn-entrar">Entrar</button>
+    </form>
+
+    <div id="app" class="escondido">
+      <nav class="abas" id="abas">
+        <button data-aba="resumo" class="ativa">Resumo</button>
+        <button data-aba="lanches">Por lanche</button>
+        <button data-aba="avaliadores">Avaliadores</button>
+        <button data-aba="nomes">Renomear lanches</button>
+        <button data-aba="link">Link para enviar</button>
+        <button id="btn-atualizar" style="margin-left:auto">↻ Atualizar</button>
+      </nav>
+
+      <!-- Resumo -->
+      <section data-painel="resumo">
+        <div class="kpis" id="kpis"></div>
+        <div class="cartao">
+          <h2>Ranking dos lanches</h2>
+          <p class="muted">Média da nota final de cada lanche (0 a 10). Passe o dedo/mouse nas barras para ver detalhes.</p>
+          <div class="grafico-barras" id="ranking-box"><canvas id="g-ranking" aria-label="Ranking dos lanches"></canvas></div>
+          <p class="muted" id="sem-aval" style="margin-top:10px"></p>
+        </div>
+        <div class="linha-graficos">
+          <div class="cartao"><h3>Temperatura na chegada</h3><div class="grafico-pizza"><canvas id="g-chegou"></canvas></div></div>
+          <div class="cartao"><h3>Tempo de espera</h3><div class="grafico-pizza"><canvas id="g-espera"></canvas></div></div>
+          <div class="cartao"><h3>Percepção de tamanho</h3><div class="grafico-pizza"><canvas id="g-tamanho"></canvas></div></div>
+        </div>
+      </section>
+
+      <!-- Por lanche -->
+      <section data-painel="lanches" class="escondido">
+        <div class="cartao">
+          <label class="campo" for="sel-lanche" style="margin-top:0">Escolha o lanche</label>
+          <select id="sel-lanche"></select>
+        </div>
+        <div class="kpis" id="kpis-lanche"></div>
+        <div class="linha-graficos">
+          <div class="cartao"><h3>Média por critério</h3><div id="criterios"></div></div>
+          <div class="cartao"><h3>Comentários</h3><div id="comentarios"></div></div>
+        </div>
+        <div class="linha-graficos">
+          <div class="cartao"><h3>Temperatura na chegada</h3><div class="grafico-pizza"><canvas id="gl-chegou"></canvas></div></div>
+          <div class="cartao"><h3>Tempo de espera</h3><div class="grafico-pizza"><canvas id="gl-espera"></canvas></div></div>
+          <div class="cartao"><h3>Percepção de tamanho</h3><div class="grafico-pizza"><canvas id="gl-tamanho"></canvas></div></div>
+        </div>
+      </section>
+
+      <!-- Avaliadores -->
+      <section data-painel="avaliadores" class="escondido">
+        <div class="cartao">
+          <div class="acoes" style="justify-content:space-between;margin-bottom:12px">
+            <h2 style="margin:0">Avaliadores</h2>
+            <div class="acoes">
+              <button class="botao pequeno" id="btn-xlsx">⬇ Excel (.xlsx)</button>
+              <button class="botao pequeno secundario" id="btn-csv">⬇ CSV</button>
+            </div>
+          </div>
+          <div class="tabela-wrap"><table id="tab-avaliadores"></table></div>
+        </div>
+      </section>
+
+      <!-- Renomear -->
+      <section data-painel="nomes" class="escondido">
+        <form class="cartao" id="form-nomes">
+          <h2>Nomes dos 20 lanches</h2>
+          <p class="muted">Os avaliadores veem estes nomes abaixo de cada número. Deixe em branco para manter o nome atual.</p>
+          <div class="renomear" id="lista-nomes"></div>
+          <div class="erro-msg" id="erro-nomes"></div>
+          <button class="botao" type="submit" id="btn-nomes" style="margin-top:12px">Salvar nomes</button>
+        </form>
+      </section>
+
+      <!-- Link -->
+      <section data-painel="link" class="escondido">
+        <div class="cartao">
+          <h2>Link para os avaliadores</h2>
+          <p class="muted">Envie este link. Qualquer pessoa abre no celular, sem login.</p>
+          <div class="compartilhar">
+            <code id="link-publico"></code>
+            <button class="botao pequeno secundario" id="btn-copiar">Copiar</button>
+            <a class="botao pequeno" id="btn-whats" target="_blank" rel="noopener">Enviar no WhatsApp</a>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+  <div class="toast" id="toast"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="config.js"></script>
+  <script src="api.js"></script>
+  <script src="painel.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "outputDirectory": "public",
+  "cleanUrls": true,
+  "headers": [
+    { "source": "/painel", "headers": [{ "key": "X-Robots-Tag", "value": "noindex" }] }
+  ]
+}

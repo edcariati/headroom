@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Degustação · Escritório Petiscos &amp; Cia</title>
+  <meta name="description" content="Prove, avalie e ajude a escolher os lanches do Escritório Petiscos & Cia." />
+  <meta name="theme-color" content="#24150c" />
+  <meta property="og:title" content="Degustação · Escritório Petiscos & Cia" />
+  <meta property="og:description" content="Prove, avalie e ajude a escolher os lanches do cardápio." />
+  <meta property="og:image" content="poster.jpg" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍔</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Roboto+Slab:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="pagina">
+
+    <!-- 1. Identificação -->
+    <section id="tela-inicio" class="escondido">
+      <header class="marca">
+        <div class="chamada">Feito pra matar a fome</div>
+        <div class="nome">ESCRITÓRIO</div>
+        <div class="cia">PETISCOS &amp; CIA</div>
+        <div class="sub">Degustação</div>
+      </header>
+
+      <div id="continuar" class="cartao escondido">
+        <h2>Bem-vindo de volta!</h2>
+        <p>Continuar como <b id="continuar-nome"></b>?</p>
+        <button class="botao cheio" id="btn-continuar">Continuar avaliando</button>
+        <p class="muted" style="text-align:center;margin-top:14px">
+          Não é você? <button class="link" id="btn-trocar">Começar como outra pessoa</button>
+        </p>
+      </div>
+
+      <form id="form-inicio" class="cartao">
+        <h2>Vamos começar</h2>
+        <p class="muted">Você vai provar <b>20 lanches</b> e dar notas de 0 a 10 para cada um. Leva poucos minutos por lanche e ajuda muito a montar o cardápio!</p>
+        <label class="campo" for="nome">Seu nome *</label>
+        <input id="nome" type="text" autocomplete="name" maxlength="80" required placeholder="Ex.: Maria Souza" />
+        <label class="campo" for="idade">Idade</label>
+        <input id="idade" type="number" inputmode="numeric" min="1" max="120" placeholder="Ex.: 32" />
+        <div class="erro-msg" id="erro-inicio"></div>
+        <button class="botao cheio" type="submit" id="btn-comecar">Começar a degustação →</button>
+      </form>
+    </section>
+
+    <!-- 2. Lista de lanches -->
+    <section id="tela-lista" class="escondido">
+      <header class="marca" style="padding-bottom:6px">
+        <div class="nome" style="font-size:clamp(26px,8vw,40px)">ESCRITÓRIO</div>
+        <div class="cia">PETISCOS &amp; CIA</div>
+      </header>
+      <div class="saudacao">
+        <div>Olá, <b id="ola-nome"></b>!</div>
+        <button class="link" id="btn-sair">Não é você?</button>
+      </div>
+      <div class="progresso">
+        <div class="rotulo"><span>Seu progresso</span><span id="progresso-txt">0 de 20</span></div>
+        <div class="trilho" role="progressbar" aria-valuemin="0" aria-valuemax="20" id="progresso-trilho"><div class="barra" id="progresso-barra"></div></div>
+      </div>
+      <div class="grade" id="grade"></div>
+      <p class="dica" id="dica">Toque no número do lanche que você está provando.</p>
+    </section>
+
+    <!-- 3. Ficha -->
+    <section id="tela-ficha" class="escondido">
+      <div class="topo-ficha">
+        <button class="voltar" id="btn-voltar" type="button">← Voltar</button>
+        <div class="titulo" id="ficha-titulo"></div>
+      </div>
+      <form id="form-ficha" novalidate></form>
+      <div class="rodape-ficha">
+        <div class="dentro">
+          <div class="nota-final"><small>Nota final</small><b id="nota-final">–</b> <small id="nota-cont">0 de 13 notas</small></div>
+          <button class="botao" id="btn-salvar" type="button">Salvar avaliação</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="carregando" class="carregando">Carregando…</div>
+  </main>
+  <div class="toast" id="toast"></div>
+
+  <script src="config.js"></script>
+  <script src="api.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
