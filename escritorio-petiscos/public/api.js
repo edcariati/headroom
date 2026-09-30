@@ -68,5 +68,9 @@
   const esc = (s) =>
     String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-  window.EP = { rpc, OPCOES, NOTAS, rotulo, num, reais, esc, cfg };
+  // Lanche vegano: identificado pelo nome ou pelos ingredientes (ex.: "Vegan", "queijo vegano").
+  const vegano = (l) => /vegan|vegetal/i.test(`${l.nome || ""} ${l.descricao || ""}`);
+  const SELO_VEGANO = '<span class="selo-vegano" title="Lanche vegano">🌱 Vegano</span>';
+
+  window.EP = { vegano, SELO_VEGANO, rpc, OPCOES, NOTAS, rotulo, num, reais, esc, cfg };
 })();

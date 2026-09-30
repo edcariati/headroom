@@ -1,6 +1,6 @@
 # Degustação — Escritório Petiscos & Cia
 
-Site público para avaliar os 20 lanches pelo celular (sem login) + painel de resultados com senha.
+Site público para avaliar os 13 lanches pelo celular (sem login) + painel de resultados com senha.
 
 - **Avaliadores:** https://escritorio-petiscos.vercel.app
 - **Painel do dono:** https://escritorio-petiscos.vercel.app/painel
@@ -33,7 +33,7 @@ corrigir. Se fechar e voltar no mesmo celular, continua de onde parou.
 **Ficha:** 13 notas de 0 a 10 (obrigatórias), tempo de espera, como chegou, percepção de tamanho, quanto
 pagaria (obrigatório) e comentários (opcionais). **Nota final = média das 13 notas**, calculada no servidor.
 
-**Painel (senha):** resumo com totais e média geral, ranking dos 20 lanches, pizzas (temperatura, espera,
+**Painel (senha):** resumo com totais e média geral, ranking dos 13 lanches, pizzas (temperatura, espera,
 tamanho) no geral e por lanche, média por critério, preço médio, comentários, lista de avaliadores
 (com exclusão de testes), exportação Excel (.xlsx, 3 abas) e CSV, renomear lanches e link para WhatsApp.
 

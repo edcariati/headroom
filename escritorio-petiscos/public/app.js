@@ -1,5 +1,5 @@
 (function () {
-  const { rpc, OPCOES, NOTAS, num, esc, cfg } = window.EP;
+  const { rpc, OPCOES, NOTAS, num, esc, cfg, vegano, SELO_VEGANO } = window.EP;
   const TOTAL = cfg.TOTAL_LANCHES;
   const CHAVE_TOKEN = "ep_degustacao_token";
   const $ = (id) => document.getElementById(id);
@@ -156,7 +156,7 @@
       const b = document.createElement("button");
       b.type = "button";
       b.className = "lanche" + (a ? " feito" : "");
-      b.innerHTML = `${a ? `<span class="selo">✓ ${num(a.nota_final)}</span>` : ""}<span class="n">${i}</span><span class="cod">${esc(infoLanche(i).codinome).replace(/^(O|A|Os|As) /, "$1&nbsp;")}</span><span class="nm">${esc(infoLanche(i).nome)}</span>`;
+      b.innerHTML = `${a ? `<span class="selo">✓ ${num(a.nota_final)}</span>` : ""}<span class="n">${i}</span><span class="cod">${esc(infoLanche(i).codinome).replace(/^(O|A|Os|As) /, "$1&nbsp;")}</span><span class="nm">${esc(infoLanche(i).nome)}</span>${vegano(infoLanche(i)) ? SELO_VEGANO : ""}`;
       b.setAttribute("aria-label", `Lanche ${i}, ${nomeLanche(i)}${a ? ", avaliado com nota " + num(a.nota_final) : ", não avaliado"}`);
       b.addEventListener("click", () => abrirFicha(i));
       grade.appendChild(b);
@@ -235,7 +235,7 @@
     }
     const info = infoLanche(id);
     $("ficha-titulo").innerHTML = `${id}. ${esc(info.codinome || info.nome)}<small>${esc(info.nome)}${existente ? " · corrigindo avaliação" : ""}</small>`;
-    $("ficha-desc").innerHTML = `<div class="rotulo-desc">O que vem no lanche</div><p>${esc(info.descricao || "")}</p>`;
+    $("ficha-desc").innerHTML = `<div class="rotulo-desc">O que vem no lanche ${vegano(info) ? SELO_VEGANO : ""}</div><p>${esc(info.descricao || "")}</p>`;
     $("ficha-desc").classList.toggle("escondido", !info.descricao);
     const f = $("form-ficha");
     f.querySelectorAll(".pergunta").forEach((p) => p.classList.remove("falta"));

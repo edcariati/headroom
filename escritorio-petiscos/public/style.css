@@ -365,3 +365,11 @@ table.mapa .nome-lanche { background: none; border: 0; font: inherit; color: var
 .editar-lanche input, .editar-lanche textarea { margin-top: 4px; font-size: 15px; padding: 9px 11px; text-transform: none; letter-spacing: 0; font-weight: 400; }
 .editar-lanche textarea { min-height: 64px; }
 .renomear:has(.editar-lanche) { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+
+.selo-vegano {
+  display: inline-block; vertical-align: middle;
+  background: #2f7d4a; color: #fff;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.3px; text-transform: none;
+  padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+}
+.lanche .selo-vegano { margin-top: 2px; }

@@ -39,7 +39,7 @@
   <script src="api.js"></script>
   <script>
     (async function () {
-      const { rpc, esc } = window.EP;
+      const { rpc, esc, vegano, SELO_VEGANO } = window.EP;
       const lista = document.getElementById("lista");
       try {
         const lanches = await rpc("listar_lanches");
@@ -47,7 +47,7 @@
           <article class="item-cardapio">
             <div class="num">${l.id}</div>
             <div class="cod">${esc(l.codinome || l.nome)}</div>
-            <div class="nome">${esc(l.nome)}</div>
+            <div class="nome">${esc(l.nome)} ${vegano(l) ? SELO_VEGANO : ""}</div>
             <p class="ing">${esc(l.descricao || "")}</p>
           </article>`).join("");
       } catch (e) {
