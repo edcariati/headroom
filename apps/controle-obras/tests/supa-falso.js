@@ -12,6 +12,7 @@ function supaFalso(opts) {
     const s = opts.seed[t][id];
     tab(t).set(id, { id, obra_id: s.obra_id || s.obraId || null, dados: clone(s.dados || s), versao: s.versao || 1, excluido_em: s.excluido_em || null });
   }));
+  Object.keys(opts.cruas || {}).forEach((t) => opts.cruas[t].forEach((r) => tab(t).set(String(r.id), clone(r))));
   if (opts.perfil !== null) tab('perfis').set(uid, { user_id: uid, nome: 'Edson', papel: 'dono', ativo: true, ...(opts.perfil || {}) });
   let session = opts.session === false ? null : { user: { id: uid, email: 'edson@cariati.com', user_metadata: {} } };
 

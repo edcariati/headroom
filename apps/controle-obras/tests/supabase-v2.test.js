@@ -75,7 +75,7 @@ test('supabase v2 · excluir chama a função do servidor (nunca DELETE físico)
 
 test('supabase v2 · mudança de outra pessoa (Realtime) aparece e exclusão remove', async () => {
   const e = await abrir({ supa: { seed: seedObra() }, hash: '#/painel' });
-  assert.equal(e.supa.canais(), 1);
+  assert.equal(e.supa.canais(), 2); // dados + avisos
   e.supa.emite('obras', { id: 'o9', obra_id: 'o9', dados: obra({ nome: 'Obra Nova Remota' }), versao: 1, excluido_em: null });
   await e.tick(150);
   assert.match(e.app(), /Obra Nova Remota/);
@@ -111,4 +111,41 @@ test('supabase v2 · nenhum segredo: o app nunca usa a chave service_role', asyn
   const html = fs.readFileSync(require('path').join(__dirname, '..', 'index.html'), 'utf8');
   assert.doesNotMatch(html, /eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\./);
   assert.doesNotMatch(html, /sb_secret_[A-Za-z0-9]/);
+});
+
+const aviso = (id, extra) => Object.assign({ id, tipo: 'oc_critica', titulo: 'Ocorrência crítica aberta', corpo: 'Obra: Casa Teste', link: '#/obra/o1/ocorrencias', critico: true, criada_em: '2026-09-30T18:00:00Z', lida_em: null }, extra || {});
+
+test('avisos · sino mostra quantos não lidos e a página lista', async () => {
+  const e = await abrir({ supa: { seed: seedObra(), cruas: { notificacoes: [aviso(1), aviso(2, { titulo: 'Conta a pagar vencida', critico: false }), aviso(3, { lida_em: '2026-09-30T19:00:00Z' })] } }, hash: '#/avisos' });
+  assert.match(e.doc.querySelector('.top').textContent, /🔔\s*2/);
+  assert.match(e.app(), /Ocorrência crítica aberta/);
+  assert.match(e.app(), /Conta a pagar vencida/);
+  assert.match(e.app(), /Crítico/);
+});
+
+test('avisos · marcar como lido grava lida_em e baixa o contador', async () => {
+  const e = await abrir({ supa: { seed: seedObra(), cruas: { notificacoes: [aviso(1), aviso(2)] } }, hash: '#/avisos' });
+  await e.click('[data-act="aviso-lido"][data-id="1"]', 200);
+  assert.ok(e.supa.linhas('notificacoes').find((n) => n.id === 1).lida_em);
+  assert.equal(e.supa.linhas('notificacoes').find((n) => n.id === 2).lida_em, null);
+  assert.match(e.doc.querySelector('.top').textContent, /🔔\s*1/);
+  await e.click('[data-act="avisos-todos"]', 200);
+  assert.ok(e.supa.linhas('notificacoes').every((n) => n.lida_em));
+  assert.doesNotMatch(e.doc.querySelector('.top').textContent, /🔔\s*\d/);
+});
+
+test('avisos · aviso novo chega em tempo real', async () => {
+  const e = await abrir({ supa: { seed: seedObra(), cruas: { notificacoes: [aviso(1)] } }, hash: '#/avisos' });
+  e.supa.tabelas.notificacoes.set('2', aviso(2, { titulo: 'Medição em análise há muitos dias', critico: false }));
+  e.supa.emite('notificacoes', { id: 2 });
+  await e.tick(200);
+  assert.match(e.app(), /Medição em análise há muitos dias/);
+});
+
+test('avisos · texto do aviso é escapado e sem perfil na nuvem não há sino', async () => {
+  const e = await abrir({ supa: { seed: seedObra(), cruas: { notificacoes: [aviso(1, { titulo: '<img src=x onerror="window.__a=1">' })] } }, hash: '#/avisos' });
+  assert.equal(e.doc.querySelector('img[src="x"]'), null);
+  assert.equal(e.win.__a, undefined);
+  const local = await abrir({ seed: seedObra() && { obras: { o1: obra() } }, hash: '#/painel' });
+  assert.doesNotMatch(local.doc.querySelector('.top').textContent, /🔔/);
 });

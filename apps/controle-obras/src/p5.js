@@ -776,3 +776,28 @@ function eventosP5(o,add,b){
   var cc=contratoCliente(oid); if(cc&&cc.fim) add(cc.fim,'Fim do contrato do cliente (encerramento previsto)','cliente',b+'encerramento');
 }
 COBX.alertasP5=alertasP5; COBX.indRowsP5=indRowsP5;
+
+/* ================= EVENTOS NOTIFICÁVEIS (espelho de public.eventos_notificaveis no servidor) =================
+   Regra de ouro: qualquer mudança aqui exige a mesma mudança em supabase/migrations/0003_notificacoes.sql.
+   tests/equivalencia.test.js compara as duas listas com os mesmos dados. */
+function eventosNotificaveis(){
+  var out=[], hj=hoje();
+  L('obras').forEach(function(o){
+    if(encerrada(o)) return;
+    var oid=o.id, dias=o.diasEscalar==null?7:o.diasEscalar;
+    byObra('ocorrencias',oid).filter(ocAberta).forEach(function(x){
+      if(x.gravidade==='critica') out.push(['oc_critica',oid,x.id]);
+      if(vencidaOc(x)){ out.push(['oc_vencida',oid,x.id]); if(atrasoOc(x)>dias) out.push(['oc_escalada',oid,x.id]); }
+    });
+    if(modAdm(o)){
+      byObra('contasPagar',oid).forEach(function(c){
+        if(contaVencida(c)) out.push(['conta_vencida',oid,c.id]);
+        else if(contaAVencer(c,3)) out.push(['conta_a_vencer',oid,c.id]);
+      });
+      byObra('aportes',oid).forEach(function(a){ if(!a.dataRecebida && a.dataPrevista && a.dataPrevista<hj) out.push(['aporte_atrasado',oid,a.id]); });
+    }
+    byObra('medicoes',oid).forEach(function(m){ if(m.status==='em_analise' && m.analiseDesde && diffDays(m.analiseDesde.slice(0,10),hj)>dias) out.push(['medicao_parada',oid,m.id]); });
+  });
+  return out.map(function(e){ return e.join('|'); }).sort();
+}
+COBX.eventosNotificaveis=eventosNotificaveis;

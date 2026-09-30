@@ -166,7 +166,9 @@ var Store={
         this.db=Supa.adapter(); this.mode='db'; this.backend='supabase';
         this.uid=Supa.uid(); this.user=Supa.userShim();
         if(Supa.v2()){ this.papel=Supa.papel; this.writable=['dono','gestor','financeiro','campo'].indexOf(Supa.papel)>=0; }
-        await this.subscribeSupa(); return;
+        await this.subscribeSupa();
+        if(typeof Notif!=='undefined') Notif.iniciar();
+        return;
       }
       this.supaErro=st;
     }

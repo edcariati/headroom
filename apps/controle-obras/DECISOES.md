@@ -306,3 +306,17 @@ O Edson aprovou o passo 2. `supabase/migrations/0002_regras.sql` (testada em Pos
 - **Carregamento:** por ora carrega tudo que a RLS deixa o usuário ver (o painel e os alertas dependem de todas as obras). Carregar por obra e sob demanda fica como otimização.
 - **Nomes de quem alterou:** a RLS só deixa cada um ler o próprio perfil (e o dono ler todos); para os demais o app mostra “Alguém” até existir uma visão segura de nomes (proposta: view `perfis_publicos` com id e nome).
 - **Ainda simulado:** nada foi testado contra um Supabase real. Faltam: aplicar as migrações no `cariati-obras-dev`, script de migração dos dados da ponte `registros`, Storage com caminho por obra e políticas, e teste de login real.
+
+## Fase 7 — Passo 2 (7A.1: motor, central de avisos, resumo diário)
+
+O Edson respondeu “pode” ao desenho de `docs/fase7/`; adotei as recomendações dele como padrão (catálogo do Anexo B, silêncio 20h–7h, resumo 7h em dias úteis, regras em SQL com teste de equivalência). Tudo validado em Postgres local e jsdom; **nada rodou num Supabase real**.
+
+- **D-7.2.1 Eventos entregues (7 de ~25):** ocorrência crítica aberta; apontamento vencido; apontamento escalado (> `diasEscalar`); conta a pagar vencida; conta a vencer em 3 dias; aporte atrasado; medição em análise há mais de `diasEscalar` dias. Os demais do Anexo B entram no passo 3 (um evento novo = SQL + espelho no app + caso no teste de equivalência).
+- **D-7.2.2 Uma fonte das regras por lado, travada por teste:** `public.eventos_notificaveis(data)` (SQL) e `COBX.eventosNotificaveis()` (app). `tests/equivalencia.test.js` sobe Postgres local, carrega o mesmo cenário (inclui limites: vence hoje, exatamente `diasEscalar`, `diasEscalar` próprio da obra, obra encerrada, Gestão sem contas) e exige listas idênticas. Sem Postgres local o teste é pulado (com aviso).
+- **D-7.2.3 Destinatários por perfil** (tabela `notificacao_regras`, editável pelo dono): crítica → dono + engenharia da obra; vencida → engenharia; escalada → dono; contas/aporte/medição → dono + financeiro. Campo, cliente e quem não é da obra **não recebem nada**. “Engenharia” = perfil `gestor` membro da obra; “administrativo” = perfil `financeiro`.
+- **D-7.2.4 Idempotência:** chave `tipo:registro` única por usuário; o motor roda a cada 15 min sem duplicar. Um aviso por degrau da escada (vencida e escalada são avisos diferentes).
+- **D-7.2.5 Sem valores:** o texto dos avisos traz só título e nome da obra; o valor fica no registro, atrás do login e da RLS. Testado (nenhum `R$` nem número de valor nas mensagens).
+- **D-7.2.6 Silêncio:** e-mail não crítico espera até 7h (fuso de São Paulo; preferência pessoal respeitada); crítico sai na hora; a central do app sempre recebe.
+- **D-7.2.7 Resumo diário:** dias úteis, só contagens por tipo, não é criado se o usuário não tem pendências; quem desliga em preferências não recebe. O resumo semanal da diretoria fica para o passo 3.
+- **D-7.2.8 Central de avisos no app:** sino com contador, página `#/avisos`, marcar como lido (o usuário só consegue alterar `lida_em`), tempo real. Só aparece na nuvem v2.
+- **Não feito / depende do Edson:** função de borda que envia o e-mail (depende do provedor e do domínio), `pg_cron` (só existe no projeto real; o comando está comentado no fim da migração 0003) e push web.

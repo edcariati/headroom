@@ -133,6 +133,9 @@ var ANuvem={
     try{ if(Supa.cli) await Supa.cli.auth.signOut(); }catch(e){}
     Supa.saveConfig(null); location.hash='#/nuvem'; location.reload();
   },
+  'aviso-lido':function(d){ Notif.marcar([Number(d.id)]); },
+  'aviso-abrir':function(d){ Notif.marcar([Number(d.id)]); },
+  'avisos-todos':function(){ Notif.marcar(Notif.rows.filter(function(n){ return !n.lida_em; }).map(function(n){ return n.id; })); },
   'nuvem-sair':async function(){ try{ await Supa.cli.auth.signOut(); }catch(e){} location.reload(); },
   'nuvem-enviar-local':function(){
     var cols={}; COLS.forEach(function(c){ try{ var raw=localStorage.getItem('cob.'+c); if(raw) cols[c]=JSON.parse(raw); }catch(e){} });
@@ -179,3 +182,49 @@ document.addEventListener('change', function(e){
   }
 });
 
+
+/* ---------- central de avisos (notificações dentro do app; esquema v2) ---------- */
+var Notif={ rows:[], ok:false, erro:'',
+  ativo:function(){ return Store.backend==='supabase' && Supa.v2(); },
+  naoLidas:function(){ return this.rows.filter(function(n){ return !n.lida_em; }).length; },
+  carregar:async function(){
+    try{
+      var r=sbErr(await Supa.cli.from('notificacoes').select('id,tipo,titulo,corpo,link,critico,criada_em,lida_em').order('criada_em',{ascending:false}).limit(100));
+      this.rows=r.data||[]; this.ok=true; this.erro='';
+    }catch(e){ this.erro=e.message||'erro'; }
+    scheduleRender();
+  },
+  iniciar:function(){
+    if(!this.ativo()) return;
+    var self=this, ch=Supa.cli.channel('avisos-app').on('postgres_changes', {event:'*', schema:'public', table:'notificacoes'}, function(){ self.carregar(); }).subscribe();
+    Store.unsubs.push(function(){ Supa.cli.removeChannel(ch); });
+    return this.carregar();
+  },
+  marcar:async function(ids){
+    if(!ids.length) return;
+    var agora=new Date().toISOString();
+    this.rows.forEach(function(n){ if(ids.indexOf(n.id)>=0) n.lida_em=agora; });
+    scheduleRender();
+    try{ sbErr(await Supa.cli.from('notificacoes').update({lida_em:agora}).in('id', ids)); }
+    catch(e){ toast('Não foi possível marcar como lido. Tente de novo.', true); this.carregar(); }
+  }
+};
+function sinoAvisos(r){
+  if(!Notif.ativo()) return '';
+  var n=Notif.naoLidas();
+  return '<a class="btn ghost sm" href="#/avisos"'+(r&&r.view==='avisos'?' aria-current="page"':'')+' title="Avisos" aria-label="Avisos'+(n?', '+n+' não lidos':'')+'">🔔'+(n?' <span class="chip crit" style="margin-left:2px">'+n+'</span>':'')+'</a>';
+}
+function quandoAviso(iso){ var d=new Date(iso); return isNaN(d)?'':pad(d.getDate())+'/'+pad(d.getMonth()+1)+' '+pad(d.getHours())+':'+pad(d.getMinutes()); }
+function vAvisos(){
+  if(!Notif.ativo()) return '<div class="wrap"><div class="card empty"><h3>Avisos disponíveis na nuvem</h3><p>Conecte o aplicativo ao Supabase para receber avisos das obras. <a href="#/nuvem">Conectar</a></p></div></div>';
+  var h='<div class="wrap"><div class="sec-h"><div><h1>Avisos</h1><p class="muted" style="margin-top:4px">O que precisa da sua atenção nas obras. Cada aviso aparece uma vez.</p></div>'
+    +(Notif.naoLidas()?'<button class="btn" data-act="avisos-todos">Marcar tudo como lido</button>':'')+'</div>';
+  if(Notif.erro) h+='<div class="callout crit sec">Não foi possível carregar os avisos: '+esc(Notif.erro)+'</div>';
+  if(!Notif.ok && !Notif.erro) return h+'<div class="card sec"><p class="empty">Carregando avisos…</p></div></div>';
+  if(!Notif.rows.length) return h+'<div class="card sec empty"><h3>Nenhum aviso por enquanto</h3><p>Quando algo vencer ou ficar crítico, aparece aqui.</p></div></div>';
+  return h+'<section class="card sec"><ul class="hist">'+Notif.rows.map(function(n){
+    return '<li><div class="q">'+quandoAviso(n.criada_em)+'</div><div><div class="row" style="gap:6px">'+(n.critico?'<span class="chip crit">Crítico</span>':'')+(n.lida_em?'':'<span class="chip steel">Novo</span>')+'</div>'
+      +'<div style="margin-top:4px;font-weight:'+(n.lida_em?'400':'600')+'">'+esc(n.titulo)+'</div>'+(n.corpo?'<div class="d">'+esc(n.corpo)+'</div>':'')+'</div>'
+      +'<div class="row">'+(n.link?'<a class="btn sm" href="'+esc(n.link)+'" data-act="aviso-abrir" data-id="'+n.id+'">Abrir</a>':'')+(n.lida_em?'':'<button class="btn sm ghost" data-act="aviso-lido" data-id="'+n.id+'">Lido</button>')+'</div></li>';
+  }).join('')+'</ul></section></div>';
+}

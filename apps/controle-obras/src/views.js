@@ -14,6 +14,7 @@ function parseRoute(){
   if(p[0]==='dre') return {view:'dre'};
   if(p[0]==='nuvem') return {view:'nuvem'};
   if(p[0]==='historico') return {view:'historico'};
+  if(p[0]==='avisos') return {view:'avisos'};
   return {view:'painel'};
 }
 function topbar(r){
@@ -21,7 +22,7 @@ function topbar(r){
   var obraAtiva=(r.view==='obra'||r.view==='etapa');
   return '<header class="top"><div class="top-in"><a class="brand" href="#/painel">Cariati<span>·Obras</span></a>'
     +'<nav class="nav" aria-label="Principal"><a href="#/painel"'+(r.view==='painel'||obraAtiva?' aria-current="page"':'')+'>Obras</a><a href="#/agenda"'+cur('agenda')+'>Agenda</a><a href="#/prestadores"'+cur('prestadores')+'>Prestadores</a><a href="#/fornecedores"'+cur('fornecedores')+'>Fornecedores</a><a href="#/dre"'+cur('dre')+'>DRE</a>'+(Store.backend==='supabase'?'<a href="#/historico"'+cur('historico')+'>Histórico</a>':'')+'<a href="#/nuvem"'+cur('nuvem')+'>Nuvem</a></nav>'
-    +'<div class="tools"><button class="btn ghost sm" data-act="exportar" title="Baixar uma cópia dos dados">Exportar</button><button class="btn ghost sm" data-act="tema" title="Alternar tema claro e escuro" aria-label="Alternar tema">◐</button></div></div></header>';
+    +'<div class="tools">'+sinoAvisos(r)+'<button class="btn ghost sm" data-act="exportar" title="Baixar uma cópia dos dados">Exportar</button><button class="btn ghost sm" data-act="tema" title="Alternar tema claro e escuro" aria-label="Alternar tema">◐</button></div></div></header>';
 }
 function banners(){
   var b='';
@@ -287,9 +288,9 @@ function render(){
   var gs=document.querySelector('.gantt-scroll'); if(gs) ui.ganttScroll=gs.scrollLeft;
   if(Store.mode==='login'){ app.innerHTML=vLogin(); lastKey=null; return; }
   if(Store.mode==='sem_acesso'){ app.innerHTML=vSemAcesso(); lastKey=null; return; }
-  if(r.view==='nuvem'||r.view==='historico'){
+  if(r.view==='nuvem'||r.view==='historico'||r.view==='avisos'){
     document.body.classList.toggle('ro', !Store.writable);
-    app.innerHTML=topbar(r)+banners()+(r.view==='nuvem'?vNuvem():vHistorico());
+    app.innerHTML=topbar(r)+banners()+(r.view==='nuvem'?vNuvem():(r.view==='avisos'?vAvisos():vHistorico()));
     if(key!==lastKey) window.scrollTo(0,0); lastKey=key; return;
   }
   var body=r.view==='obra'?vObra(r):(r.view==='etapa'?vEtapa(r):(r.view==='prestadores'?vPrest():(r.view==='agenda'?vAgenda():(r.view==='fornecedores'?vForn():(r.view==='dre'?vDRE():vPainel())))));

@@ -5,6 +5,11 @@
 - **Passos 1 a 3:** desenho (`docs/migracao-supabase/`), migrações `0001` (tabelas, perfis, RLS, exclusão lógica, auditoria) e `0002` (regras críticas e acesso do cliente), testadas em Postgres local (`npm run test:rls`).
 - **Passo 4:** app fala o esquema novo (`esquema: v2`): versão por linha com aviso de conflito, exclusão pela função do servidor, Realtime, tela de acesso não liberado; testado com Supabase simulado.
 
+## Fase 7 — Notificações, pós-obra, offline e guia (em andamento)
+
+- **Passo 1:** desenho em `docs/fase7/`.
+- **Passo 2 (7A.1):** motor de notificações no banco (`0003`), 7 eventos com teste de equivalência servidor × app, silêncio 20h–7h, resumo diário, central de avisos no app.
+
 ## Fase 5 — DRE, relatório ao cliente e avaliação (concluída)
 
 - **Passo 0:** navegação da obra agrupada (8 grupos com subabas), URLs antigas preservadas.
