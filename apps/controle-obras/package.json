@@ -1,0 +1,12 @@
+{
+  "name": "controle-obras-cariati",
+  "private": true,
+  "description": "Aplicativo de gestão de obras da Cariati (HTML único gerado a partir de src/)",
+  "scripts": {
+    "build": "python3 build.py",
+    "test": "python3 build.py --check && node --test tests/*.test.js"
+  },
+  "devDependencies": {
+    "jsdom": "^24.1.0"
+  }
+}

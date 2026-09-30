@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Controle de Obras Cariati</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+{{STYLE}}</style>
+</head>
+<body>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<div id="app"><div class="wrap"><p class="muted">Carregando…</p></div></div>
+<dialog id="dlg" aria-modal="true"></dialog>
+<div id="toast" role="status" aria-live="polite"></div>
+<noscript><div class="wrap">Este aplicativo precisa de JavaScript.</div></noscript>
+<script>
+(function(){
+'use strict';
+var PROTO = {{PROTO}};
+{{SCRIPT}}})();
+
+</script>
+</body>
+</html>
