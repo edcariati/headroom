@@ -373,3 +373,20 @@ table.mapa .nome-lanche { background: none; border: 0; font: inherit; color: var
   padding: 2px 8px; border-radius: 999px; white-space: nowrap;
 }
 .lanche .selo-vegano { margin-top: 2px; }
+
+/* Botão grande "Ver o cardápio" */
+.botao-cardapio {
+  display: block;
+  margin: 22px 0 8px;
+  padding: 22px 16px;
+  text-align: center;
+  font-family: var(--display);
+  font-size: clamp(30px, 9vw, 46px);
+  line-height: 1.1;
+  color: var(--cafe-900);
+  background: var(--laranja);
+  border-radius: 18px;
+  box-shadow: 0 6px 0 var(--laranja-escuro), var(--sombra);
+  text-decoration: none;
+}
+.botao-cardapio:active { transform: translateY(3px); box-shadow: 0 3px 0 var(--laranja-escuro); }
