@@ -430,7 +430,7 @@ function tContratos(o){
     +'<section class="card"><div class="card-h"><div><h2>Danos e quebras</h2></div><button class="btn primary sm" data-act="dano-novo" data-oid="'+oid+'" data-write>+ Dano</button></div>'+dHtml+'</section></div></div>';
 }
 function contratoForm(oid,c){
-  var novo=!c;
+  var novo=!c, avisou=false;
   openForm({title:novo?'Novo contrato de prestador':'Editar contrato', wide:true,
     fields:[{name:'prestadorId',label:'Prestador',type:'select',required:true,options:prestOptions('Selecione…'),value:c&&c.prestadorId},
       {name:'escopo',label:'Escopo',type:'textarea',required:true,rows:3,value:c&&c.escopo},
@@ -447,7 +447,9 @@ function contratoForm(oid,c){
       if(!(v.valor>=0)||v.valor==null) return 'Informe o valor.';
       if(!v.inicio||!v.fim) return 'Informe o início e o fim.';
       if(v.fim<v.inicio) return 'O fim não pode ser antes do início.';
-      await Store.set('contratosPrest', c?c.id:nid(), Object.assign({}, c||{}, {obraId:oid, prestadorId:v.prestadorId, escopo:v.escopo.trim(), valor:v.valor, retencao:v.retencao, inicio:v.inicio, fim:v.fim, criterio:v.criterio||'', regraDano:v.regraDano||'', status:v.status||'ativo', anexos:v.anexos||[]}));
+      if(novo&&!avisou){ var mn=prestNotaMedia(v.prestadorId); if(mn!=null&&mn<6){ avisou=true; return 'Aviso: '+prestNome(v.prestadorId)+' tem nota média '+String(mn).replace('.',',')+' (abaixo de 6) nas avaliações anteriores. Salve de novo para contratar mesmo assim.'; } }
+      await Store.set('contratosPrest', c?c.id:nid(), Object.assign({}, c||{}, {obraId:oid, prestadorId:v.prestadorId, escopo:v.escopo.trim(), valor:v.valor, retencao:v.retencao, inicio:v.inicio, fim:v.fim, criterio:v.criterio||'', regraDano:v.regraDano||'', status:v.status||'ativo', encerradoEm:(v.status==='encerrado')?((c&&c.encerradoEm)||hoje()):'', anexos:v.anexos||[]}));
+      if(v.status==='encerrado'&&!(c&&c.status==='encerrado')) toast('Contrato encerrado. Abra a avaliação do prestador na aba Avaliações.');
     }});
 }
 function termoForm(oid,t){

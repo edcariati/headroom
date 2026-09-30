@@ -14,7 +14,7 @@ test('fase 5 · passo 0 · grupos da obra e subabas', async () => {
 });
 
 test('fase 5 · passo 0 · URLs antigas abrem a aba certa e destacam o grupo e a subaba', async () => {
-  const casos = [['cronograma', 'Planejamento', 'Cronograma'], ['ocorrencias', 'Execução e qualidade', 'Ocorrências'], ['compras', 'Suprimentos', 'Compras'], ['contratos', 'Prestadores', ''], ['medicao', 'Custo e financeiro', 'Medição'], ['fisfin', 'Custo e financeiro', 'Físico-financeiro'], ['documentos', 'Gestão', 'Documentos'], ['entrega', 'Execução e qualidade', 'Pré-entrega']];
+  const casos = [['cronograma', 'Planejamento', 'Cronograma'], ['ocorrencias', 'Execução e qualidade', 'Ocorrências'], ['compras', 'Suprimentos', 'Compras'], ['contratos', 'Prestadores', 'Contratos e frentes'], ['medicao', 'Custo e financeiro', 'Medição'], ['fisfin', 'Custo e financeiro', 'Físico-financeiro'], ['documentos', 'Gestão', 'Documentos'], ['entrega', 'Execução e qualidade', 'Pré-entrega']];
   const e = await abrir({ seed: { obras: { o1: obraAdm() } }, hash: '#/obra/o1/resumo' });
   for (const [aba, grupo, sub] of casos) {
     await e.go('#/obra/o1/' + aba);
@@ -541,4 +541,138 @@ test('fase 5 · passo 4 · texto do relatório é escapado', async () => {
   assert.equal(e.doc.querySelector('img[src="x"]'), null);
   assert.equal(e.win.__xss, undefined);
   assert.match(e.app(), /<img src=x/);
+});
+
+/* ---------------- passo 5: avaliação de prestadores ---------------- */
+const ocP = (g, extra) => oc(Object.assign({ prestadorId: 'p1', gravidade: g }, extra || {}));
+const baseAv = (extra) => Object.assign({ obras: { o1: obraAdm() }, prestadores: { p1: { nome: 'Alvenaria Souza', seguro: dia(90), treinamento: dia(90) }, p2: { nome: 'Sem Dados Ltda' } } }, extra || {});
+const pacotes10 = () => { const o = {}; for (let i = 0; i < 10; i++) o['k' + i] = { obraId: 'o1', semana: dia(-7), descricao: 'Pacote ' + i, prestadorId: 'p1', concluido: i < 8, causa: i < 8 ? '' : 'producao' }; return o; };
+
+test('fase 5 · passo 5 · pontualidade: 8 pacotes concluídos de 10 sugerem 8,0', async () => {
+  const e = await abrir({ seed: baseAv({ pacotes: pacotes10() }) });
+  assert.equal(e.x.avSugestoes('o1', 'p1').pontualidade, 8);
+  assert.equal(e.x.avSugestoes('o1', 'p2').pontualidade, null);         // sem dados, sem sugestão
+});
+
+test('fase 5 · passo 5 · conformidade: 1 crítica + 2 importantes + 1 simples = 5,3 pontos → 4,7', async () => {
+  const e = await abrir({ seed: baseAv({ ocorrencias: { a: ocP('critica'), b: ocP('importante'), c: ocP('importante'), d: ocP('simples') } }) });
+  const s = e.x.avSugestoes('o1', 'p1');
+  assert.equal(s.conformidade, 4.7);
+  assert.equal(s.reincidencia, 10);                                       // nenhuma reabertura
+});
+
+test('fase 5 · passo 5 · danos: R$ 500 em contrato de R$ 50.000 (limite de 2% = R$ 1.000) → 5,0', async () => {
+  const e = await abrir({ seed: baseAv({ contratosPrest: { ct1: { obraId: 'o1', prestadorId: 'p1', escopo: 'x', valor: 50000, inicio: dia(-10), fim: dia(30), status: 'ativo' } }, danos: { d1: { obraId: 'o1', descricao: 'Vidro', custo: 500, causadorId: 'p1', status: 'aberta' } } }) });
+  assert.equal(e.x.avSugestoes('o1', 'p1').danos, 5);
+  const muito = await abrir({ seed: baseAv({ contratosPrest: { ct1: { obraId: 'o1', prestadorId: 'p1', escopo: 'x', valor: 50000, inicio: dia(-10), fim: dia(30), status: 'ativo' } }, danos: { d1: { obraId: 'o1', descricao: 'Parede', custo: 5000, causadorId: 'p1', status: 'aberta' } } }) });
+  assert.equal(muito.x.avSugestoes('o1', 'p1').danos, 0);                // passou do limite: nota zero, nunca negativa
+});
+
+test('fase 5 · passo 5 · reincidência: 2 ocorrências reabertas em 8 → 7,5', async () => {
+  const ocs = {}; for (let i = 0; i < 8; i++) ocs['x' + i] = ocP('simples', { reabertas: i < 2 ? 1 : 0 });
+  const e = await abrir({ seed: baseAv({ ocorrencias: ocs }) });
+  assert.equal(e.x.avSugestoes('o1', 'p1').reincidencia, 7.5);
+});
+
+test('fase 5 · passo 5 · limpeza e documentação; segurança nunca é sugerida', async () => {
+  const docs = {}; [mesAtras(0), mesAtras(1)].forEach((m) => ['inss', 'fgts', 'folha', 'certidoes'].forEach((k) => { docs['o1_p1_' + m + '_' + k] = { obraId: 'o1', prestadorId: 'p1', mes: m, tipo: k, status: 'conferido' }; }));
+  const seed = baseAv({ termos: { t1: { obraId: 'o1', frente: 'A', saiId: 'p1', data: dia(-5), estado: 'limpa' }, t2: { obraId: 'o1', frente: 'B', saiId: 'p1', data: dia(-4), estado: 'limpa' }, t3: { obraId: 'o1', frente: 'C', saiId: 'p1', data: dia(-3), estado: 'pendencias', pendencias: 'x' } },
+    contratosPrest: { ct1: { obraId: 'o1', prestadorId: 'p1', escopo: 'x', valor: 1000, inicio: mesAtras(3) + '-01', fim: dia(90), status: 'ativo' } }, docsPrest: docs });
+  const e = await abrir({ seed });
+  const s = e.x.avSugestoes('o1', 'p1');
+  assert.equal(s.limpeza, 6.7);                     // 2 de 3 termos limpos
+  assert.equal(s.documentacao, 5);                  // 2 dos 4 meses do contrato (3 atrás até o atual) em dia
+  assert.equal(s.seguranca, null);
+});
+
+test('fase 5 · passo 5 · nota final é a média ponderada só dos critérios preenchidos', async () => {
+  const e = await abrir();
+  assert.equal(e.x.avNotaFinal({ pontualidade: 8, conformidade: 6, limpeza: null, danos: 10 }, {}), 8);           // (8+6+10)/3
+  assert.equal(e.x.avNotaFinal({ pontualidade: 10, conformidade: 5 }, { pontualidade: 3, conformidade: 1 }), 8.8);  // (30+5)/4
+  assert.equal(e.x.avNotaFinal({}, {}), null);
+});
+
+test('fase 5 · passo 5 · diferença acima de 2 pontos da sugestão exige justificativa', async () => {
+  const e = await abrir({ seed: baseAv({ pacotes: pacotes10() }), hash: '#/obra/o1/avaliacoes' });
+  const contrato = { obraId: 'o1', prestadorId: 'p1', escopo: 'x', valor: 1000, inicio: dia(-10), fim: dia(30), status: 'ativo' };
+  await e.recarrega('contratosPrest', 'ct1', contrato);
+  await e.click('[data-act="av-nova"][data-p="p1"]');
+  assert.equal(e.doc.querySelector('[name="n_pontualidade"]').value, '8');           // já vem com a sugestão
+  await e.submit({ n_pontualidade: '10.5' });
+  assert.match(e.erroForm(), /de 0 a 10/);
+  await e.submit({ n_pontualidade: '5', recontrataria: 'sim' });                     // 3 pontos abaixo da sugestão (8)
+  assert.match(e.erroForm(), /Pontualidade: a nota difere 3 pontos da sugestão \(8\)\. Escreva a justificativa/);
+  assert.equal(e.linhas('avaliacoes').length, 0);
+  await e.submit({ j_pontualidade: 'Atrasou a entrega da fachada por falta de material próprio.' });
+  const a = e.linhas('avaliacoes')[0];
+  assert.equal(a.criterios.pontualidade, 5);
+  assert.equal(a.sugeridos.pontualidade, 8);
+  assert.match(a.justificativas.pontualidade, /Atrasou/);
+  assert.equal(a.recontrataria, 'sim');
+  assert.equal(a.notaFinal, avMedia(a));
+});
+const avMedia = (a) => { const v = Object.values(a.criterios).filter((x) => x != null); return Math.round(v.reduce((s, x) => s + x, 0) / v.length * 10) / 10; };
+
+test('fase 5 · passo 5 · segurança é preenchida à mão e uma nota dentro de 2 pontos passa sem justificativa', async () => {
+  const e = await abrir({ seed: baseAv({ pacotes: pacotes10() }), hash: '#/obra/o1/avaliacoes' });
+  await e.recarrega('contratosPrest', 'ct1', { obraId: 'o1', prestadorId: 'p1', escopo: 'x', valor: 1000, inicio: dia(-10), fim: dia(30), status: 'ativo' });
+  await e.click('[data-act="av-nova"][data-p="p1"]');
+  await e.submit({ n_pontualidade: '6.5', n_seguranca: '9', recontrataria: 'com_ressalvas', comentario: 'Bom, mas atrasa.' });
+  const a = e.linhas('avaliacoes')[0];
+  assert.equal(a.criterios.seguranca, 9);
+  assert.equal(a.sugeridos.seguranca, null);
+  assert.equal(a.recontrataria, 'com_ressalvas');
+  assert.match(e.app(), /Recontrataria: Com ressalvas/);
+  await e.click('[data-act="av-nova"][data-p="p1"]');
+  const vazios = { recontrataria: 'sim' }; ['pontualidade', 'conformidade', 'limpeza', 'danos', 'seguranca', 'documentacao', 'reincidencia'].forEach((k) => { vazios['n_' + k] = ''; });
+  await e.submit(vazios);
+  assert.match(e.erroForm(), /ao menos um critério/);
+});
+
+test('fase 5 · passo 5 · ranking na página Prestadores: nota média, obras avaliadas, última e recontrataria', async () => {
+  const av = (id, obraId, nota, data, rec) => ({ obraId, prestadorId: 'p1', data, criterios: { pontualidade: nota }, sugeridos: {}, justificativas: {}, pesos: {}, notaFinal: nota, comentario: '', recontrataria: rec });
+  const e = await abrir({ seed: baseAv({ avaliacoes: { a1: av('a1', 'o1', 8, dia(-30), 'sim'), a2: av('a2', 'o2', 5, dia(-2), 'com_ressalvas') } }), hash: '#/prestadores' });
+  assert.equal(e.x.prestNotaMedia('p1'), 6.5);
+  assert.match(e.app(), /Alvenaria Souza.*Nota 6,5.*2 obras avaliadas.*recontrataria: Com ressalvas/);
+  assert.match(e.app(), /Sem ssem|Sem avaliação/);
+});
+
+test('fase 5 · passo 5 · ao contratar prestador com nota média abaixo de 6 há um aviso que não bloqueia', async () => {
+  const seed = baseAv({ avaliacoes: { a1: { obraId: 'o2', prestadorId: 'p1', data: dia(-9), criterios: { pontualidade: 4 }, sugeridos: {}, justificativas: {}, pesos: {}, notaFinal: 4, recontrataria: 'nao' } }, orcamentos: {} });
+  const e = await abrir({ seed, hash: '#/obra/o1/contratos' });
+  await e.click('[data-act="ct-novo"]');
+  const campos = { prestadorId: 'p1', escopo: 'Alvenaria', valor: '10000', retencao: '5', inicio: dia(0), fim: dia(30), criterio: '', regraDano: '', status: 'ativo' };
+  await e.submit(campos);
+  assert.match(e.erroForm(), /Aviso: Alvenaria Souza tem nota média 4 \(abaixo de 6\)/);
+  assert.equal(e.linhas('contratosPrest').length, 0);
+  await e.submit({});
+  assert.equal(e.linhas('contratosPrest').length, 1);                      // salvar de novo confirma
+  const bom = await abrir({ seed: baseAv(), hash: '#/obra/o1/contratos' });
+  await bom.click('[data-act="ct-novo"]');
+  await bom.submit(campos);
+  assert.equal(bom.linhas('contratosPrest').length, 1);                     // sem avaliação ruim, sem aviso
+});
+
+test('fase 5 · passo 5 · encerrar contrato registra a data, sugere avaliar e a avaliação pendente aparece', async () => {
+  const seed = baseAv({ contratosPrest: { ct1: { obraId: 'o1', prestadorId: 'p1', escopo: 'Alvenaria', valor: 1000, inicio: dia(-40), fim: dia(-2), status: 'ativo' } } });
+  const e = await abrir({ seed, hash: '#/obra/o1/contratos' });
+  await e.click('[data-act="ct-editar"]');
+  await e.submit({ status: 'encerrado' });
+  const c = e.linhas('contratosPrest')[0];
+  assert.equal(c.status, 'encerrado');
+  assert.equal(c.encerradoEm, dia(0));
+  assert.equal(e.x.avPendentes('o1').length, 1);
+  await e.go('#/obra/o1/avaliacoes');
+  assert.match(e.app(), /Avaliação pendente.*Alvenaria Souza.*contrato encerrado/);
+  assert.equal(atual(e, 'nav.grupos'), 'Prestadores');
+});
+
+test('fase 5 · passo 5 · texto da avaliação é escapado', async () => {
+  const xss = '<img src=x onerror="window.__xss=12">';
+  const seed = baseAv({ prestadores: { p1: { nome: xss } }, contratosPrest: { ct1: { obraId: 'o1', prestadorId: 'p1', escopo: 'x', valor: 1, inicio: dia(-1), fim: dia(1), status: 'ativo' } }, avaliacoes: { a1: { obraId: 'o1', prestadorId: 'p1', data: dia(-1), criterios: { pontualidade: 7 }, sugeridos: {}, justificativas: {}, pesos: {}, notaFinal: 7, comentario: xss, recontrataria: 'sim' } } });
+  const e = await abrir({ seed, hash: '#/obra/o1/avaliacoes' });
+  assert.equal(e.doc.querySelector('img[src="x"]'), null);
+  await e.go('#/prestadores');
+  assert.equal(e.doc.querySelector('img[src="x"]'), null);
+  assert.equal(e.win.__xss, undefined);
 });

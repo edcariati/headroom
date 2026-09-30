@@ -1850,7 +1850,7 @@ function tContratos(o){
     +'<section class="card"><div class="card-h"><div><h2>Danos e quebras</h2></div><button class="btn primary sm" data-act="dano-novo" data-oid="'+oid+'" data-write>+ Dano</button></div>'+dHtml+'</section></div></div>';
 }
 function contratoForm(oid,c){
-  var novo=!c;
+  var novo=!c, avisou=false;
   openForm({title:novo?'Novo contrato de prestador':'Editar contrato', wide:true,
     fields:[{name:'prestadorId',label:'Prestador',type:'select',required:true,options:prestOptions('Selecione…'),value:c&&c.prestadorId},
       {name:'escopo',label:'Escopo',type:'textarea',required:true,rows:3,value:c&&c.escopo},
@@ -1867,7 +1867,9 @@ function contratoForm(oid,c){
       if(!(v.valor>=0)||v.valor==null) return 'Informe o valor.';
       if(!v.inicio||!v.fim) return 'Informe o início e o fim.';
       if(v.fim<v.inicio) return 'O fim não pode ser antes do início.';
-      await Store.set('contratosPrest', c?c.id:nid(), Object.assign({}, c||{}, {obraId:oid, prestadorId:v.prestadorId, escopo:v.escopo.trim(), valor:v.valor, retencao:v.retencao, inicio:v.inicio, fim:v.fim, criterio:v.criterio||'', regraDano:v.regraDano||'', status:v.status||'ativo', anexos:v.anexos||[]}));
+      if(novo&&!avisou){ var mn=prestNotaMedia(v.prestadorId); if(mn!=null&&mn<6){ avisou=true; return 'Aviso: '+prestNome(v.prestadorId)+' tem nota média '+String(mn).replace('.',',')+' (abaixo de 6) nas avaliações anteriores. Salve de novo para contratar mesmo assim.'; } }
+      await Store.set('contratosPrest', c?c.id:nid(), Object.assign({}, c||{}, {obraId:oid, prestadorId:v.prestadorId, escopo:v.escopo.trim(), valor:v.valor, retencao:v.retencao, inicio:v.inicio, fim:v.fim, criterio:v.criterio||'', regraDano:v.regraDano||'', status:v.status||'ativo', encerradoEm:(v.status==='encerrado')?((c&&c.encerradoEm)||hoje()):'', anexos:v.anexos||[]}));
+      if(v.status==='encerrado'&&!(c&&c.status==='encerrado')) toast('Contrato encerrado. Abra a avaliação do prestador na aba Avaliações.');
     }});
 }
 function termoForm(oid,t){
@@ -3070,7 +3072,7 @@ var NAV_GRUPOS=[
 ];
 var NAV_ROTULO={resumo:'Resumo', etapas:'Etapas', cronograma:'Cronograma', balanco:'Balanço', semana:'Semana e PPC', diario:'Diário', ocorrencias:'Ocorrências', entrega:'Pré-entrega', projeto:'RFI e materiais', compras:'Compras', estoque:'Estoque', locacoes:'Locações', contratos:'Contratos e frentes', avaliacoes:'Avaliações', orcamento:'Orçamento', medicao:'Medição', financeiro:'Financeiro', fisfin:'Físico-financeiro', dre:'DRE', agenda:'Agenda', reunioes:'Reuniões', documentos:'Documentos', relatorio:'Relatório mensal', encerramento:'Encerramento e P0'};
 function abaMapa(){
-  return {resumo:tResumo, etapas:tEtapas, cronograma:tCron, balanco:tBalanco, semana:tSemana, diario:tDiario, ocorrencias:tOcorr, entrega:tEntrega, projeto:tProjeto, compras:tCompras, estoque:tEstoque, locacoes:tLocacoes, contratos:tContratos, orcamento:tOrcamento, medicao:tMedicao, financeiro:tFinanceiro, fisfin:tFisFin, dre:tDRE, relatorio:tRelatorio, agenda:tAgenda, reunioes:tReunioes, documentos:tDocumentos};
+  return {resumo:tResumo, etapas:tEtapas, cronograma:tCron, balanco:tBalanco, semana:tSemana, diario:tDiario, ocorrencias:tOcorr, entrega:tEntrega, projeto:tProjeto, compras:tCompras, estoque:tEstoque, locacoes:tLocacoes, contratos:tContratos, avaliacoes:tAvaliacoes, orcamento:tOrcamento, medicao:tMedicao, financeiro:tFinanceiro, fisfin:tFisFin, dre:tDRE, relatorio:tRelatorio, agenda:tAgenda, reunioes:tReunioes, documentos:tDocumentos};
 }
 function obraNav(o,tab){
   var mapa=abaMapa(), base='#/obra/'+o.id+'/', grupo=NAV_GRUPOS.filter(function(g){ return g[2].indexOf(tab)>=0; })[0]||NAV_GRUPOS[0];
@@ -3530,6 +3532,90 @@ Object.assign(A5,{
 document.addEventListener('change', function(e){ var el=e.target.closest('[data-chg="rel-mes"]'); if(el&&el.value){ ui.relMes=el.value; ui.relSel=''; render(); } });
 
 COBX.relHtml=relHtml; COBX.relHtmlDocumento=relHtmlDocumento; COBX.relVigente=relVigente;
+
+/* ================= AVALIAÇÃO DE PRESTADORES ================= */
+var AV_CRIT=[['pontualidade','Pontualidade'],['conformidade','Conformidade'],['limpeza','Limpeza'],['danos','Danos'],['seguranca','Segurança'],['documentacao','Documentação'],['reincidencia','Reincidência']];
+var RECONTRATA={sim:'Sim', com_ressalvas:'Com ressalvas', nao:'Não'};
+function r1(x){ return Math.round((x+(x<0?-1:1)*1e-9)*10)/10; }
+function avContratosDe(oid,pid){ return byObra('contratosPrest',oid).filter(function(c){ return c.prestadorId===pid; }); }
+function avSugestoes(oid,pid,ate){
+  var s={pontualidade:null, conformidade:null, limpeza:null, danos:null, seguranca:null, documentacao:null, reincidencia:null};
+  var pacs=byObra('pacotes',oid).filter(function(p){ return p.prestadorId===pid && (p.concluido===true||p.concluido===false); });
+  if(pacs.length) s.pontualidade=r1(10*pacs.filter(function(p){ return p.concluido===true; }).length/pacs.length);
+  var ocs=byObra('ocorrencias',oid).filter(function(x){ return x.prestadorId===pid; });
+  if(ocs.length){
+    var pts=ocs.reduce(function(t,x){ return t+(x.gravidade==='critica'?3:(x.gravidade==='importante'?1:0.3)); },0);
+    s.conformidade=r1(10*(1-Math.min(1,pts/10)));
+    s.reincidencia=r1(10*(1-ocs.filter(function(x){ return (x.reabertas||0)>0; }).length/ocs.length));
+  }
+  var termos=byObra('termos',oid).filter(function(t){ return t.saiId===pid; });
+  if(termos.length) s.limpeza=r1(10*termos.filter(function(t){ return t.estado==='limpa'; }).length/termos.length);
+  var cts=avContratosDe(oid,pid), valor=cts.reduce(function(t,c){ return t+(Number(c.valor)||0); },0);
+  if(valor>0){ var custo=byObra('danos',oid).filter(function(d){ return d.causadorId===pid; }).reduce(function(t,d){ return t+(Number(d.custo)||0); },0); s.danos=r1(10*(1-Math.min(1,custo/(0.02*valor)))); }
+  var meses=[]; cts.forEach(function(c){ if(!c.inicio||!c.fim) return; var fim=c.fim.slice(0,7), lim=(ate||hoje()).slice(0,7); if(lim<fim) fim=lim; mesesEntre(c.inicio.slice(0,7),fim).forEach(function(m){ if(meses.indexOf(m)<0) meses.push(m); }); });
+  if(meses.length) s.documentacao=r1(10*meses.filter(function(m){ return prestEmDia(oid,pid,m); }).length/meses.length);
+  return s;
+}
+function avNotaFinal(criterios,pesos){
+  var soma=0, pt=0; AV_CRIT.forEach(function(c){ var n=criterios[c[0]]; if(n==null||n==='') return; var p=pesos&&pesos[c[0]]!=null?Number(pesos[c[0]]):1; if(!(p>0)) return; soma+=Number(n)*p; pt+=p; });
+  return pt>0?r1(soma/pt):null;
+}
+COBX.avSugestoes=avSugestoes; COBX.avNotaFinal=avNotaFinal;
+function avDoPrestador(pid){ return L('avaliacoes').filter(function(a){ return a.prestadorId===pid; }); }
+function prestNotaMedia(pid){ var l=avDoPrestador(pid).filter(function(a){ return a.notaFinal!=null; }); return l.length?r1(l.reduce(function(s,a){ return s+a.notaFinal; },0)/l.length):null; }
+function avPendentes(oid){ return byObra('contratosPrest',oid).filter(function(c){ return c.status==='encerrado' && !byObra('avaliacoes',oid).some(function(a){ return a.prestadorId===c.prestadorId; }); }); }
+COBX.prestNotaMedia=prestNotaMedia; COBX.avPendentes=avPendentes;
+function avCelula(pid){
+  var l=avDoPrestador(pid).sort(function(a,b){ return a.data<b.data?1:-1; }); if(!l.length) return '<span class="muted small">Sem avaliação</span>';
+  var m=prestNotaMedia(pid), obras={}; l.forEach(function(a){ obras[a.obraId]=1; });
+  return '<span class="chip '+(m>=7?'ok':(m>=6?'warn':'crit'))+'">Nota '+String(m).replace('.',',')+'</span><div class="tiny muted">'+plural(Object.keys(obras).length,'obra avaliada','obras avaliadas')+' · última em '+fmt(l[0].data)+(l[0].recontrataria?' · recontrataria: '+RECONTRATA[l[0].recontrataria]:'')+'</div>';
+}
+function avForm(oid,pid,a){
+  var o=G('obras',oid), p=G('prestadores',pid), cts=avContratosDe(oid,pid), sug=a?a.sugeridos:avSugestoes(oid,pid), cur=a?a.criterios:sug;
+  var f=[[{name:'data',label:'Data da avaliação',type:'date',required:true,value:a?a.data:hoje()},{name:'contratoId',label:'Contrato',type:'select',options:selOpts(cts.map(function(c){ return [c.id,short(c.escopo,50)]; }),'—'),value:a&&a.contratoId}]];
+  AV_CRIT.forEach(function(c){
+    var k=c[0], s=sug[k];
+    f.push([{name:'n_'+k,label:c[1]+' (0 a 10)',type:'number',min:0,max:10,step:'0.1',value:cur[k]==null?'':cur[k],hint:s==null?(k==='seguranca'?'Sem sugestão automática: o avaliador preenche.':'Sem dados para sugerir.'):'Sugerido: '+String(s).replace('.',',')+'. Diferença acima de 2 pontos exige justificativa.'},{name:'p_'+k,label:'Peso',type:'number',min:0,step:'0.1',value:a&&a.pesos&&a.pesos[k]!=null?a.pesos[k]:1}]);
+    f.push({name:'j_'+k,label:'Justificativa de '+c[1].toLowerCase(),type:'textarea',rows:1,value:a&&a.justificativas?a.justificativas[k]:''});
+  });
+  f.push({name:'comentario',label:'Comentário geral',type:'textarea',rows:2,value:a&&a.comentario});
+  f.push({name:'recontrataria',label:'Recontrataria?',type:'radio',required:true,options:Object.keys(RECONTRATA).map(function(k){ return [k,RECONTRATA[k]]; }),value:a&&a.recontrataria});
+  openForm({title:(a?'Editar avaliação: ':'Avaliar: ')+(p?p.nome:'prestador'), wide:true, intro:'Notas de 0 a 10. As sugestões vêm dos dados da obra (provisórias) e você pode alterar qualquer nota.', fields:f,
+    extra:a?'<button type="button" class="btn danger" data-act="av-excluir" data-id="'+a.id+'" style="margin-right:auto">Excluir</button>':'',
+    onSubmit:async function(v){
+      if(!v.data) return 'Informe a data.';
+      var crit={}, pes={}, just={}, tem=false;
+      for(var i=0;i<AV_CRIT.length;i++){
+        var k=AV_CRIT[i][0], n=v['n_'+k], pe=v['p_'+k], j=(v['j_'+k]||'').trim();
+        if(n!=null&&n!==''){
+          if(!(n>=0&&n<=10)) return AV_CRIT[i][1]+': a nota vai de 0 a 10.';
+          if(sug[k]!=null&&Math.abs(n-sug[k])>2&&!j) return AV_CRIT[i][1]+': a nota difere '+String(r1(Math.abs(n-sug[k]))).replace('.',',')+' pontos da sugestão ('+String(sug[k]).replace('.',',')+'). Escreva a justificativa.';
+          crit[k]=n; tem=true;
+        } else crit[k]=null;
+        pes[k]=pe==null?1:pe; if(j) just[k]=j;
+      }
+      if(!tem) return 'Dê nota a ao menos um critério.';
+      if(!v.recontrataria) return 'Diga se recontrataria o prestador.';
+      var rec=Object.assign({}, a||{}, {obraId:oid, prestadorId:pid, contratoId:v.contratoId||'', data:v.data, criterios:crit, sugeridos:sug, justificativas:just, pesos:pes, notaFinal:avNotaFinal(crit,pes), comentario:(v.comentario||'').trim(), recontrataria:v.recontrataria, avaliadoPor:(a&&a.avaliadoPor)||Store.uid||null});
+      delete rec.id; await Store.set('avaliacoes', a?a.id:nid(), rec);
+    }});
+}
+function tAvaliacoes(o){
+  var oid=o.id, avs=byObra('avaliacoes',oid).sort(function(a,b){ return a.data<b.data?1:-1; }), pend=avPendentes(oid), pids={};
+  byObra('contratosPrest',oid).forEach(function(c){ pids[c.prestadorId]=c; });
+  var head='<div class="sec-h"><div><h2>Avaliações de prestadores</h2><p class="muted small">Sete critérios, ao fim de cada serviço. As sugestões usam os dados da obra e você pode alterá-las (com justificativa se a diferença passar de 2 pontos).</p></div></div>';
+  var pendHtml=pend.length?'<div class="callout" style="margin-top:14px"><strong>Avaliação pendente</strong><ul>'+pend.map(function(c){ return '<li>'+esc(prestNome(c.prestadorId)||'Prestador')+' — contrato encerrado <button class="btn sm" data-act="av-nova" data-oid="'+oid+'" data-p="'+c.prestadorId+'" data-write>Avaliar agora</button></li>'; }).join('')+'</ul></div>':'';
+  var quem='<section class="card sec"><div class="card-h"><h2>Prestadores desta obra</h2></div>'+(Object.keys(pids).length?'<div class="tbl-scroll"><table class="tbl"><tbody>'+Object.keys(pids).map(function(pid){ return '<tr><td><strong>'+esc(prestNome(pid)||'Prestador removido')+'</strong><div class="tiny muted">'+(pids[pid].status==='encerrado'?'Contrato encerrado':'Contrato ativo')+'</div></td><td>'+avCelula(pid)+'</td><td><button class="btn sm primary" data-act="av-nova" data-oid="'+oid+'" data-p="'+pid+'" data-write>Avaliar</button></td></tr>'; }).join('')+'</tbody></table></div>':'<p class="muted pad">Nenhum contrato de prestador nesta obra. Cadastre em “Contratos e frentes”.</p>')+'</section>';
+  var lista='<section class="card sec"><div class="card-h"><h2>Avaliações registradas</h2></div>'+(avs.length?avs.map(function(a){
+    return '<div class="ficha" style="grid-template-columns:1fr auto"><div><strong>'+esc(prestNome(a.prestadorId)||'Prestador')+'</strong> <span class="chip '+(a.notaFinal>=7?'ok':(a.notaFinal>=6?'warn':'crit'))+'">Nota '+String(a.notaFinal).replace('.',',')+'</span> <span class="chip">Recontrataria: '+RECONTRATA[a.recontrataria]+'</span><div class="small muted">'+fmt(a.data)+' · '+AV_CRIT.filter(function(c){ return a.criterios[c[0]]!=null; }).map(function(c){ return c[1]+' '+String(a.criterios[c[0]]).replace('.',','); }).join(' · ')+'</div>'+(a.comentario?'<div class="small" style="white-space:pre-wrap">'+esc(a.comentario)+'</div>':'')+'</div><button class="btn sm ghost" data-act="av-editar" data-id="'+a.id+'" data-write>Editar</button></div>';
+  }).join(''):'<p class="muted pad">Nenhuma avaliação ainda.</p>')+'</section>';
+  return head+pendHtml+quem+lista;
+}
+Object.assign(A5,{
+  'av-nova':function(d){ avForm(d.oid,d.p); },
+  'av-editar':function(d){ var a=G('avaliacoes',d.id); avForm(a.obraId,a.prestadorId,a); },
+  'av-excluir':async function(d){ var ok=await confirmDlg('Excluir avaliação?','<p>A nota deixa de contar no ranking do prestador.</p>','Excluir',true); if(ok){ await Store.del('avaliacoes',d.id); closeDlg(); } }
+});
 /* ================= VISÕES ================= */
 var ui={semana:{}, ocFiltro:'todas', det:{}, ganttScroll:0, agMes:hoje().slice(0,7), agDia:hoje(), agArea:'todas', docMes:{}, orcBusca:'', orcEtapa:'', orcTipo:'', finFiltro:'abertas'};
 var lastKey=null;
@@ -3805,9 +3891,9 @@ function vPrest(){
   var ps=L('prestadores').sort(function(a,b){return (a.nome||'').localeCompare(b.nome||'');});
   var head='<div class="row spread"><div><h1>Prestadores</h1><p class="muted small" style="margin-top:4px">Seguro ou treinamento vencido impede lançar o prestador no efetivo do diário.</p></div><button class="btn primary" data-act="prest-novo" data-write>+ Novo prestador</button></div>';
   if(!ps.length) return '<div class="wrap">'+head+'<div class="card empty" style="margin-top:18px"><h3>Nenhum prestador cadastrado</h3><p>Cadastre os prestadores com as validades de seguro e treinamento.</p></div></div>';
-  return '<div class="wrap">'+head+'<div class="card tbl-scroll sec" style="margin-top:18px"><table class="tbl"><thead><tr><th>Prestador</th><th>Especialidade</th><th>Seguro</th><th>Treinamento</th><th></th></tr></thead><tbody>'+ps.map(function(p){
+  return '<div class="wrap">'+head+'<div class="card tbl-scroll sec" style="margin-top:18px"><table class="tbl"><thead><tr><th>Prestador</th><th>Especialidade</th><th>Seguro</th><th>Treinamento</th><th>Avaliação</th><th></th></tr></thead><tbody>'+ps.map(function(p){
     var s=validade(p.seguro), t=validade(p.treinamento);
-    return '<tr><td><strong>'+esc(p.nome)+'</strong><div class="tiny muted">'+esc([p.doc,p.contato].filter(Boolean).join(' · '))+'</div></td><td>'+esc(p.especialidade||'—')+'</td><td><span class="chip '+s.k+'">'+esc(s.t)+'</span></td><td><span class="chip '+t.k+'">'+esc(t.t)+'</span></td><td style="white-space:nowrap"><button class="btn sm" data-act="prest-editar" data-id="'+p.id+'" data-write>Editar</button> <button class="btn sm ghost" data-act="prest-excluir" data-id="'+p.id+'" data-write aria-label="Excluir prestador">×</button></td></tr>';
+    return '<tr><td><strong>'+esc(p.nome)+'</strong><div class="tiny muted">'+esc([p.doc,p.contato].filter(Boolean).join(' · '))+'</div></td><td>'+esc(p.especialidade||'—')+'</td><td><span class="chip '+s.k+'">'+esc(s.t)+'</span></td><td><span class="chip '+t.k+'">'+esc(t.t)+'</span></td><td>'+avCelula(p.id)+'</td><td style="white-space:nowrap"><button class="btn sm" data-act="prest-editar" data-id="'+p.id+'" data-write>Editar</button> <button class="btn sm ghost" data-act="prest-excluir" data-id="'+p.id+'" data-write aria-label="Excluir prestador">×</button></td></tr>';
   }).join('')+'</tbody></table></div>'+treinamentosHtml()+'</div>';
 }
 

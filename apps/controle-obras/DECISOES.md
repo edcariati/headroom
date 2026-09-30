@@ -207,3 +207,15 @@ e oferece **“Baixar relatório em HTML”**, arquivo único com o estilo embut
 Fotos no HTML baixado são links para o armazenamento; com o Supabase configurado abrem normalmente.
 
 **D-5.4.6 — Fotos.** Até 12, escolhidas entre as do diário do mês.
+
+### Passo 5 — Avaliação de prestadores
+
+**D-5.5.1 — Sugestões (todas provisórias e editáveis).** Pontualidade = 10 × pacotes concluídos ÷ pacotes marcados do prestador (pacote sem marcação não conta). Conformidade = 10 × (1 − mín(1, pontos ÷ 10)), pontos = 3 por crítica + 1 por importante + 0,3 por simples atribuídas ao prestador na obra (abertas ou fechadas).
+Limpeza = termos de frente em que o prestador **sai** entregues “limpa e sem dano” ÷ termos em que ele sai. Danos = 10 × (1 − mín(1, custo dos danos causados ÷ 2% do valor dos contratos dele na obra)). Documentação = meses do contrato (do início até o fim ou o mês atual) com os quatro documentos conferidos ÷ meses do contrato.
+Reincidência = 10 × (1 − ocorrências que já foram reabertas ÷ ocorrências do prestador). **Segurança nunca é sugerida.** Sem dados suficientes o critério fica sem sugestão (não vira zero). Sugestões arredondadas a 1 casa decimal.
+
+**D-5.5.2 — Nota.** O avaliador altera qualquer nota (0 a 10); diferença **acima de 2 pontos** da sugestão exige justificativa. Nota final = média ponderada (pesos editáveis, padrão iguais) só dos critérios preenchidos, com 1 casa. A avaliação guarda também as sugestões do momento, para auditoria.
+
+**D-5.5.3 — Ranking e aviso.** A página Prestadores mostra nota média, número de obras avaliadas, última avaliação e “recontrataria”. Ao **criar** contrato com prestador de nota média abaixo de 6, o formulário mostra um aviso na primeira tentativa de salvar; salvar de novo confirma (não bloqueia).
+
+**D-5.5.4 — Encerramento do contrato.** Encerrar o contrato registra `encerradoEm`, sugere abrir a avaliação e o prestador entra em “avaliação pendente” na aba Avaliações da obra (grupo Prestadores).
