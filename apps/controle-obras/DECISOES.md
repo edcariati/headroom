@@ -285,3 +285,13 @@ O Edson respondeu “pode fazer”. Interpretei como aprovação do desenho em `
 - **D-6.2.4** Versão (`versao`) e auditoria (antes/depois, quem, quando) por gatilho; auditoria só o dono lê.
 - **D-6.2.5** Validação: `npm run test:rls` sobe um Postgres local descartável, aplica `supabase/migrations/0001_base.sql` e roda `supabase/tests/teste_rls.sql`. **Nada foi aplicado no Supabase** (sem projeto/URL/chave `anon` ainda).
 - Ainda falta: RPCs das regras críticas (aprovar medição, assinar aditivo, congelar relatório, encerrar obra), política do cliente, e ligar o app (login, carregamento por obra, Realtime) — depende do projeto `cariati-obras-dev`.
+
+## Fase 6 — Passo 3 (regras críticas no servidor)
+
+O Edson aprovou o passo 2. `supabase/migrations/0002_regras.sql` (testada em Postgres local; nada aplicado no Supabase):
+- **D-6.3.1** Relatório emitido não muda `snapshot`, mês, data de emissão nem volta a rascunho (prazo de objeção e envio ainda podem mudar). Correção = retificação (novo registro).
+- **D-6.3.2** Versões de orçamento e seus itens são imutáveis (preços de referência `ref_*` podem mudar).
+- **D-6.3.3** Conta paga só volta pelo dono; medição só é aprovada por dono ou financeiro, não nasce aprovada e, aprovada, não tem itens alterados; aditivo assinado é imutável e só dono/gestor/financeiro assinam.
+- **D-6.3.4** Só o dono encerra ou reabre obra.
+- **D-6.3.5** Cliente lê **somente relatórios emitidos da própria obra** e valida/objeta pela função `validar_relatorio` (objeção exige motivo).
+- **Limite honesto:** o servidor ainda **não recalcula** as 5 travas da medição nem o CPI/SPI; ele só controla quem aprova e o congelamento. Recalcular no servidor exige portar `medTravas` e o EVM para SQL: fica como passo próprio, a confirmar com o Edson.

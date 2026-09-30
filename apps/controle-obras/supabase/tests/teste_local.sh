@@ -14,5 +14,8 @@ create function auth.uid() returns uuid language sql stable as $$ select nullif(
 create role anon nologin; create role authenticated nologin;
 SQL
 $P -d t -f "$(dirname "$0")/../migrations/0001_base.sql"
-$P -d t -f "$(dirname "$0")/teste_rls.sql"
+$P -d t -f "$(dirname "$0")/../migrations/0002_regras.sql"
+$P -d t -c "set role authenticated" >/dev/null
+cat "$(dirname "$0")/teste_rls.sql" "$(dirname "$0")/teste_regras.sql" > "$D/todos.sql"
+$P -d t -f "$D/todos.sql"
 echo "RLS OK"
