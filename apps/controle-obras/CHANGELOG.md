@@ -1,5 +1,10 @@
 # Changelog
 
+## Fase 5 — DRE, relatório ao cliente e avaliação (em andamento)
+
+- **Passo 0:** navegação da obra agrupada (8 grupos com subabas), URLs antigas preservadas.
+- **Passo 1:** empresas do grupo, empresa na obra, contrato do cliente e receita prevista por competência. Página DRE (menu do topo).
+
 ## Fase 4 — Custo, medição e financeiro (concluída)
 
 - **Passo 0:** código dividido em `src/` (`style.css`, `protocolo.json`, `core.js`, `p2.js`, `p3.js`, `p4.js`, `views.js`, `nuvem.js`, `boot.js`)

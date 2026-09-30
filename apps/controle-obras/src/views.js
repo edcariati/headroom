@@ -11,6 +11,7 @@ function parseRoute(){
   if(p[0]==='prestadores') return {view:'prestadores'};
   if(p[0]==='agenda') return {view:'agenda'};
   if(p[0]==='fornecedores') return {view:'fornecedores'};
+  if(p[0]==='dre') return {view:'dre'};
   if(p[0]==='nuvem') return {view:'nuvem'};
   if(p[0]==='historico') return {view:'historico'};
   return {view:'painel'};
@@ -19,7 +20,7 @@ function topbar(r){
   var cur=function(v){ return r.view===v?' aria-current="page"':''; };
   var obraAtiva=(r.view==='obra'||r.view==='etapa');
   return '<header class="top"><div class="top-in"><a class="brand" href="#/painel">Cariati<span>·Obras</span></a>'
-    +'<nav class="nav" aria-label="Principal"><a href="#/painel"'+(r.view==='painel'||obraAtiva?' aria-current="page"':'')+'>Obras</a><a href="#/agenda"'+cur('agenda')+'>Agenda</a><a href="#/prestadores"'+cur('prestadores')+'>Prestadores</a><a href="#/fornecedores"'+cur('fornecedores')+'>Fornecedores</a>'+(Store.backend==='supabase'?'<a href="#/historico"'+cur('historico')+'>Histórico</a>':'')+'<a href="#/nuvem"'+cur('nuvem')+'>Nuvem</a></nav>'
+    +'<nav class="nav" aria-label="Principal"><a href="#/painel"'+(r.view==='painel'||obraAtiva?' aria-current="page"':'')+'>Obras</a><a href="#/agenda"'+cur('agenda')+'>Agenda</a><a href="#/prestadores"'+cur('prestadores')+'>Prestadores</a><a href="#/fornecedores"'+cur('fornecedores')+'>Fornecedores</a><a href="#/dre"'+cur('dre')+'>DRE</a>'+(Store.backend==='supabase'?'<a href="#/historico"'+cur('historico')+'>Histórico</a>':'')+'<a href="#/nuvem"'+cur('nuvem')+'>Nuvem</a></nav>'
     +'<div class="tools"><button class="btn ghost sm" data-act="exportar" title="Baixar uma cópia dos dados">Exportar</button><button class="btn ghost sm" data-act="tema" title="Alternar tema claro e escuro" aria-label="Alternar tema">◐</button></div></div></header>';
 }
 function banners(){
@@ -290,7 +291,7 @@ function render(){
     app.innerHTML=topbar(r)+banners()+(r.view==='nuvem'?vNuvem():vHistorico());
     if(key!==lastKey) window.scrollTo(0,0); lastKey=key; return;
   }
-  var body=r.view==='obra'?vObra(r):(r.view==='etapa'?vEtapa(r):(r.view==='prestadores'?vPrest():(r.view==='agenda'?vAgenda():(r.view==='fornecedores'?vForn():vPainel()))));
+  var body=r.view==='obra'?vObra(r):(r.view==='etapa'?vEtapa(r):(r.view==='prestadores'?vPrest():(r.view==='agenda'?vAgenda():(r.view==='fornecedores'?vForn():(r.view==='dre'?vDRE():vPainel())))));
   document.body.classList.toggle('ro', !Store.writable);
   app.innerHTML=topbar(r)+banners()+body;
   if(key===lastKey){ window.scrollTo(0,y); var g2=document.querySelector('.gantt-scroll'); if(g2) g2.scrollLeft=ui.ganttScroll; } else { window.scrollTo(0,0); ui.ganttScroll=0; }
@@ -306,7 +307,7 @@ function prestOptions(blank){
 function etapaOptions(blank){ return selOpts(ETAPAS.map(function(e){ return [String(e.n), e.n+'. '+e.nome]; }), blank); }
 
 function obraForm(o){
-  var novo=!o;
+  var novo=!o; ensureEmpresas();
   openForm({
     title:novo?'Nova obra':'Editar obra', submit:novo?'Cadastrar obra':'Salvar',
     fields:[
@@ -317,12 +318,13 @@ function obraForm(o){
       [{name:'area',label:'Área (m²)',type:'number',step:'0.01',min:0,value:o&&o.area},{name:'inicio',label:'Início da obra',type:'date',value:o&&o.inicio}],
       [{name:'metaPPC',label:'Meta de PPC (%)',type:'number',min:0,max:100,value:o&&o.metaPPC!=null?o.metaPPC:80,hint:'Valor provisório, a definir pela Cariati.'},{name:'diasEscalar',label:'Dias de atraso para escalar',type:'number',min:1,value:o&&o.diasEscalar!=null?o.diasEscalar:7,hint:'Apontamento vencido há mais dias vai à diretoria.'}],
       [{name:'alcada',label:'Alçada de compra e locação (R$)',type:'number',min:0,step:'0.01',value:o&&o.alcada,hint:'Acima disso, a compra exige aprovação do cliente. A definir pela Cariati.'},{name:'margemPreco',label:'Margem aceita sobre o orçado (%)',type:'number',min:0,step:'0.1',value:o&&o.margemPreco!=null?o.margemPreco:5,hint:'Valor provisório.'}],
+      {name:'empresaId',label:'Empresa do grupo (para o DRE)',type:'select',options:selOpts(empresasAtivas().map(function(e){ return [e.id,e.nome]; }),'Sem empresa'),value:o&&o.empresaId,hint:'Cadastre ou edite as empresas na página DRE.'},
       [{name:'tolerAvanco',label:'Tolerância entre avanço e medição (pontos %)',type:'number',min:0,step:'0.1',value:o&&o.tolerAvanco!=null?o.tolerAvanco:5,hint:'Valor provisório, a definir pela Cariati.'},{name:'abcA',label:'Curva ABC: classe A até (%)',type:'number',min:1,max:100,step:'1',value:o&&o.abcA!=null?o.abcA:80,hint:'Valor provisório.'},{name:'abcB',label:'Curva ABC: classe B até (%)',type:'number',min:1,max:100,step:'1',value:o&&o.abcB!=null?o.abcB:95,hint:'Valor provisório.'}]
     ],
     extra:novo?'':'<button type="button" class="btn danger" data-act="obra-excluir" data-oid="'+o.id+'" style="margin-right:auto">Excluir obra</button>',
     onSubmit:async function(v){
       if(!(v.nome||'').trim()) return 'Informe o nome da obra.';
-      var data=Object.assign({}, o||{}, {nome:v.nome.trim(), codigo:v.codigo||'', cliente:v.cliente||'', endereco:v.endereco||'', tipologia:v.tipologia, modalidade:v.modalidade, area:v.area, inicio:v.inicio||'', metaPPC:v.metaPPC==null?80:v.metaPPC, diasEscalar:v.diasEscalar==null?7:v.diasEscalar, alcada:v.alcada, margemPreco:v.margemPreco==null?5:v.margemPreco, tolerAvanco:v.tolerAvanco==null?5:v.tolerAvanco, abcA:v.abcA==null?80:v.abcA, abcB:v.abcB==null?95:v.abcB});
+      var data=Object.assign({}, o||{}, {nome:v.nome.trim(), codigo:v.codigo||'', cliente:v.cliente||'', endereco:v.endereco||'', tipologia:v.tipologia, modalidade:v.modalidade, area:v.area, inicio:v.inicio||'', metaPPC:v.metaPPC==null?80:v.metaPPC, diasEscalar:v.diasEscalar==null?7:v.diasEscalar, alcada:v.alcada, margemPreco:v.margemPreco==null?5:v.margemPreco, empresaId:v.empresaId||'', tolerAvanco:v.tolerAvanco==null?5:v.tolerAvanco, abcA:v.abcA==null?80:v.abcA, abcB:v.abcB==null?95:v.abcB});
       if(novo) data.criadoEm=new Date().toISOString();
       var id=novo?nid():o.id; await Store.set('obras', id, data);
       if(novo) location.hash='#/obra/'+id+'/resumo';

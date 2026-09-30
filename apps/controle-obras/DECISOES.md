@@ -152,3 +152,13 @@ Limite prático: o documento de preços cresce ~30 bytes por código; um orçame
 **D-5.0.1 — Grupos e subabas.** A obra passa a ter 8 grupos (Visão geral, Planejamento, Execução e qualidade, Suprimentos, Prestadores, Custo e financeiro, Gestão, Encerramento), como na proposta da especificação, com as subabas do grupo em uma segunda barra.
 Cada grupo abre na primeira subaba. Um grupo só aparece quando ao menos uma aba dele já existe, e a segunda barra só aparece se o grupo tem mais de uma aba (as abas novas entram nos passos seguintes).
 As URLs `#/obra/ID/aba` de antes continuam iguais; aba desconhecida abre o Resumo. A barra de grupos e a de subabas quebram em linhas no celular em vez de rolar de lado, para nada ficar escondido.
+
+### Passo 1 — Empresas, empresa na obra e contrato do cliente
+
+**D-5.1.1 — Empresas.** As duas empresas do grupo (Cariati Arquitetura Ltda e Cariati Construtora Ltda) são criadas sob demanda, na primeira vez que alguém abre a página DRE, o cadastro de obra ou a aba DRE (e só se a pessoa pode editar). São editáveis: nome, CNPJ, alíquota, critério de rateio e situação; dá para acrescentar outras e inativar.
+A **alíquota fica vazia** (valor provisório): sem ela o app não sugere imposto. Empresa inativa some da lista de escolha na obra, mas seus lançamentos continuam.
+
+**D-5.1.2 — Um contrato de cliente por obra** (id `cc_<obra>`). Guarda só o que vem do contrato assinado. Receita prevista por competência: valor fixo mensal entre o mês de início e o de fim; parcelas nas competências informadas;
+percentual do custo × apropriado do mês (só Administração; na Gestão o app recusa).
+
+**D-5.1.3 — Rateio manual.** Digitado como “Nome da obra; percentual”, uma obra por linha, só obras da própria empresa, somando 100%. Fica guardado na empresa.
