@@ -665,8 +665,8 @@ function tFinanceiro(o){
   if(!adm){
     var ds=desembolsoCliente(oid);
     var head='<div class="sec-h"><div><h2>Desembolso previsto do cliente</h2><p class="muted small">Neste contrato o cliente paga os prestadores. Aqui ficam as medições aprovadas e a aprovar, por mês.</p></div></div>';
-    if(!ds.length) return head+'<div class="card empty"><h3>Nenhuma medição ainda</h3><p>Quando houver medições, o desembolso previsto aparece aqui.</p></div>';
-    return head+'<section class="card pad">'+svgGrafico({titulo:'Desembolso previsto do cliente por mês', labels:ds.map(function(x){ return mesCurto(x.mes); }), barras:[{nome:'Medições aprovadas',cor:'var(--steel)',v:ds.map(function(x){ return x.aprovadas; })},{nome:'A aprovar',cor:'var(--amber-bar)',v:ds.map(function(x){ return x.aAprovar; })}], fmt:kfmt})+'</section>'
+    if(!ds.length) return head+custoPainelHtml(o)+'<div class="card empty sec"><h3>Nenhuma medição ainda</h3><p>Quando houver medições, o desembolso previsto aparece aqui.</p></div>';
+    return head+custoPainelHtml(o)+'<section class="card sec pad">'+svgGrafico({titulo:'Desembolso previsto do cliente por mês', labels:ds.map(function(x){ return mesCurto(x.mes); }), barras:[{nome:'Medições aprovadas',cor:'var(--steel)',v:ds.map(function(x){ return x.aprovadas; })},{nome:'A aprovar',cor:'var(--amber-bar)',v:ds.map(function(x){ return x.aAprovar; })}], fmt:kfmt})+'</section>'
       +'<div class="card tbl-scroll sec"><table class="tbl"><thead><tr><th>Mês</th><th class="num">Aprovadas</th><th class="num">A aprovar</th><th class="num">Total</th></tr></thead><tbody>'+ds.map(function(x){ return '<tr><td>'+mesNome(x.mes)+'</td><td class="num">'+brl(x.aprovadas)+'</td><td class="num">'+brl(x.aAprovar)+'</td><td class="num"><strong>'+brl(r2(x.aprovadas+x.aAprovar))+'</strong></td></tr>'; }).join('')+'</tbody></table></div>';
   }
   var contas=contasDaObra(oid), f=ui.finFiltro||'abertas', fl={todas:contas, abertas:contas.filter(function(c){ return c.status==='aberta'; }), vencidas:contas.filter(contaVencida), avencer:contas.filter(function(c){ return contaAVencer(c,7); }), pagas:contas.filter(function(c){ return c.status==='paga'; }), canceladas:contas.filter(function(c){ return c.status==='cancelada'; })}[f]||contas;
@@ -694,7 +694,7 @@ function tFinanceiro(o){
       +(fx.semData.n?'<p class="small muted pad">'+plural(fx.semData.n,'conta sem vencimento','contas sem vencimento')+' ('+brl(fx.semData.valor)+') não entra no fluxo até o vencimento ser informado.</p>':'')+'</section>';
   }
   return '<div class="sec-h"><div><h2>Financeiro</h2><p class="muted small">Contas a pagar geradas por medições, pedidos de compra e locações devolvidas, aportes do cliente e fluxo de caixa.</p></div><div class="row"><button class="btn" data-act="aporte-novo" data-oid="'+oid+'" data-write>+ Aporte</button><button class="btn primary" data-act="conta-nova" data-oid="'+oid+'" data-write>+ Conta avulsa</button></div></div>'
-    +'<div style="margin-top:14px">'+cards+'</div><section class="card sec"><div class="card-h"><h2>Contas a pagar</h2></div><div class="pad" style="padding-bottom:0">'+filtros+'</div>'+tab+'</section>'
+    +'<div style="margin-top:14px">'+cards+'</div>'+custoPainelHtml(o)+'<section class="card sec"><div class="card-h"><h2>Contas a pagar</h2></div><div class="pad" style="padding-bottom:0">'+filtros+'</div>'+tab+'</section>'
     +'<section class="card sec"><div class="card-h"><h2>Aportes do cliente</h2></div>'+apHtml+'</section>'+fxHtml;
 }
 function contaNovaForm(oid){
@@ -758,3 +758,64 @@ Object.assign(A4,{
   'aporte-receber':function(d){ var a=G('aportes',d.id); aporteForm(a.obraId,a,true); },
   'aporte-excluir':async function(d){ var ok=await confirmDlg('Excluir aporte?','<p>O registro será removido do fluxo de caixa.</p>','Excluir',true); if(ok){ await Store.del('aportes',d.id); closeDlg(); } }
 });
+
+/* ================= COMPROMETIDO, APROPRIADO E PAGO ================= */
+// Cada valor passa por um caminho só: comprometido (ainda a executar) → apropriado (executado) → pago.
+// Assim nada é contado duas vezes; "exposição" = comprometido + apropriado.
+function repartir(valor, pesos){
+  var ks=Object.keys(pesos).filter(function(k){ return pesos[k]>0; }), tot=ks.reduce(function(s,k){ return s+pesos[k]; },0), out={};
+  if(!ks.length||!(valor>0)){ if(valor) out[0]=r2(valor); return out; }
+  var soma=0, maior=ks[0];
+  ks.forEach(function(k){ out[k]=r2(valor*pesos[k]/tot); soma=r2(soma+out[k]); if(pesos[k]>pesos[maior]) maior=k; });
+  out[maior]=r2(out[maior]+valor-soma);
+  return out;
+}
+function custoEtapa(oid){
+  var o=G('obras',oid), adm=modAdm(o), rev=orcRevisado(oid), E={};
+  var at=function(n){ n=Number(n)||0; return E[n]||(E[n]={etapa:n, orcado:0, comprometido:0, apropriado:0, pago:0}); };
+  Object.keys(rev.porEtapa).forEach(function(n){ at(n).orcado=rev.porEtapa[n]; });
+  var add=function(n,campo,v){ var x=at(n); x[campo]=r2(x[campo]+v); };
+  if(adm){
+    byObra('compras',oid).forEach(function(c){
+      if(!c.pedido) return; var v=r2(c.pedido.total), n=c.etapa||0;
+      if(c.status==='pedido'||c.status==='entregue') add(n,'comprometido',v);
+      else if(c.status==='conferido'||c.status==='pago'){ add(n,'apropriado',v); if(c.status==='pago') add(n,'pago',v); }
+    });
+    byObra('locacoes',oid).forEach(function(l){
+      var n=l.etapa||0;
+      if(l.status==='prevista'||l.status==='ativa') add(n,'comprometido',locTotalPrev(l));
+      else if(l.status==='devolvida'){
+        add(n,'apropriado',locValorReal(l));
+        var cp=G('contasPagar',contaId('locacao',l.id)); if(cp&&cp.status==='paga') add(n,'pago',cp.valor);
+      }
+    });
+  }
+  var meds=byObra('medicoes',oid), medidoPor={};
+  meds.forEach(function(m){
+    if(m.status!=='aprovada'&&m.status!=='paga') return;
+    var porEt={}, bruto=0; (m.itens||[]).forEach(function(i){ var v=r2((Number(i.qtdMedida)||0)*i.precoUnitario); porEt[i.etapa||0]=r2((porEt[i.etapa||0]||0)+v); bruto=r2(bruto+v); });
+    Object.keys(porEt).forEach(function(n){ add(n,'apropriado',porEt[n]); });
+    medidoPor[m.contratoId]=r2((medidoPor[m.contratoId]||0)+bruto);
+    if(m.status==='paga'){ var part=repartir(m.valorLiquido!=null?m.valorLiquido:bruto, porEt); Object.keys(part).forEach(function(n){ add(n,'pago',part[n]); }); }
+  });
+  byObra('contratosPrest',oid).forEach(function(c){
+    if(c.status==='encerrado') return;
+    var saldo=r2(Math.max(0,(Number(c.valor)||0)-(medidoPor[c.id]||0))); if(!saldo) return;
+    var pesos={}; medItensDoPrestador(oid,c.prestadorId).forEach(function(i){ pesos[i.etapa||0]=(pesos[i.etapa||0]||0)+i.total; });
+    var part=repartir(saldo,pesos); Object.keys(part).forEach(function(n){ add(n,'comprometido',part[n]); });
+  });
+  var lista=Object.keys(E).map(Number).sort(function(a,b){ return (a||99)-(b||99); }).map(function(n){ var x=E[n]; x.exposicao=r2(x.comprometido+x.apropriado); x.acima=x.orcado>0&&x.exposicao>x.orcado+0.005; x.semOrcamento=x.orcado<=0&&x.exposicao>0; return x; });
+  var tot={orcado:0, comprometido:0, apropriado:0, pago:0};
+  lista.forEach(function(x){ ['orcado','comprometido','apropriado','pago'].forEach(function(k){ tot[k]=r2(tot[k]+x[k]); }); }); tot.exposicao=r2(tot.comprometido+tot.apropriado);
+  return {etapas:lista, total:tot};
+}
+COBX.custoEtapa=custoEtapa; COBX.repartir=repartir;
+function custoPainelHtml(o){
+  var c=custoEtapa(o.id), adm=modAdm(o);
+  if(!c.etapas.length) return '';
+  var pc=function(x,base){ return base>0?Math.round(x/base*100)+'%':'—'; };
+  return '<section class="card sec"><div class="card-h"><div><h2>Orçado × comprometido × apropriado × pago</h2><p class="muted small">Cada valor passa por um caminho só, sem contar duas vezes: <strong>comprometido</strong> = pedidos ainda não conferidos, locações em curso e saldo dos contratos ainda não medido; <strong>apropriado</strong> = compras conferidas, medições aprovadas e locações devolvidas; <strong>pago</strong> = o que já saiu.'+(adm?'':' Neste contrato só entram contratos e medições (compras e locações são do cliente).')+'</p></div></div>'
+    +'<div class="tbl-scroll"><table class="tbl"><thead><tr><th>Etapa</th><th class="num">Orçado</th><th class="num">Comprometido</th><th class="num">Apropriado</th><th class="num">Pago</th><th class="num">Exposição</th><th class="num">% do orçado</th></tr></thead><tbody>'
+    +c.etapas.map(function(x){ return '<tr'+(x.acima?' style="background:var(--crit-soft)"':'')+'><td>'+(x.etapa?x.etapa+'. '+esc(etapaInfo(x.etapa).nome):'Sem etapa')+(x.acima?' <span class="chip crit">Acima do orçado</span>':'')+(x.semOrcamento?' <span class="chip warn">Sem orçamento</span>':'')+'</td><td class="num">'+brl(x.orcado)+'</td><td class="num">'+brl(x.comprometido)+'</td><td class="num">'+brl(x.apropriado)+'</td><td class="num">'+brl(x.pago)+'</td><td class="num"><strong>'+brl(x.exposicao)+'</strong></td><td class="num">'+pc(x.exposicao,x.orcado)+'</td></tr>'; }).join('')
+    +'<tr style="font-weight:600"><td>Total</td><td class="num">'+brl(c.total.orcado)+'</td><td class="num">'+brl(c.total.comprometido)+'</td><td class="num">'+brl(c.total.apropriado)+'</td><td class="num">'+brl(c.total.pago)+'</td><td class="num">'+brl(c.total.exposicao)+'</td><td class="num">'+pc(c.total.exposicao,c.total.orcado)+'</td></tr></tbody></table></div></section>';
+}

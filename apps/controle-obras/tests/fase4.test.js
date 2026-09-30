@@ -565,3 +565,92 @@ test('fase 4 · passo 4 · texto de conta e aporte é escapado', async () => {
   assert.equal(e.doc.querySelector('img[src="x"]'), null);
   assert.equal(e.win.__xss, undefined);
 });
+
+/* ---------------- passo 5: comprometido, apropriado e pago ---------------- */
+const compraP = (o) => Object.assign({ obraId: 'o1', item: 'Item', un: 'un', qtd: 1, etapa: 7, status: 'pedido', pedido: { data: dia(-3), fornecedorId: 'f1', total: 1000, entregaPrevista: dia(2) }, cotacoes: [], criadoEm: new Date().toISOString() }, o || {});
+const linha = (c, n) => c.etapas.find((x) => x.etapa === n);
+
+test('fase 4 · passo 5 · contrato + medição não contam duas vezes', async () => {
+  const seed = seedMed({ medicoes: { m1: med({ status: 'aprovada', valorLiquido: 2280, valorBruto: 2400 }) } });
+  const e = await abrir({ seed });
+  const c = e.x.custoEtapa('o1');
+  const x = linha(c, 7);
+  assert.equal(x.orcado, 10000);
+  assert.equal(x.apropriado, 2400);                  // medição aprovada (bruto)
+  assert.equal(x.comprometido, 10000 - 2400);        // saldo do contrato ainda não medido
+  assert.equal(x.exposicao, 10000);                  // = valor do contrato, nem um centavo a mais
+  assert.equal(x.pago, 0);
+  assert.equal(x.acima, false);
+});
+
+test('fase 4 · passo 5 · medição em análise ainda não é apropriada; paga entra pelo líquido', async () => {
+  const analise = await abrir({ seed: seedMed({ medicoes: { m1: med() } }) });
+  assert.equal(linha(analise.x.custoEtapa('o1'), 7).apropriado, 0);
+  assert.equal(linha(analise.x.custoEtapa('o1'), 7).comprometido, 10000);
+  const paga = await abrir({ seed: seedMed({ medicoes: { m1: med({ status: 'paga', valorLiquido: 2280, valorBruto: 2400 }) } }) });
+  const x = linha(paga.x.custoEtapa('o1'), 7);
+  assert.equal(x.apropriado, 2400);
+  assert.equal(x.pago, 2280);
+});
+
+test('fase 4 · passo 5 · compras: pedido é comprometido, conferida é apropriada, paga é paga', async () => {
+  const seed = seedMed({ compras: {
+    c1: compraP({ status: 'pedido', pedido: { data: dia(-3), fornecedorId: 'f1', total: 1000, entregaPrevista: dia(2) } }),
+    c2: compraP({ status: 'entregue', pedido: { data: dia(-3), fornecedorId: 'f1', total: 200, entregaPrevista: dia(2) } }),
+    c3: compraP({ status: 'conferido', pedido: { data: dia(-3), fornecedorId: 'f1', total: 300, entregaPrevista: dia(2) } }),
+    c4: compraP({ status: 'pago', pedido: { data: dia(-3), fornecedorId: 'f1', total: 400, entregaPrevista: dia(2) } }),
+    c5: compraP({ status: 'aprovacao', pedido: undefined })
+  } });
+  const e = await abrir({ seed });
+  const x = linha(e.x.custoEtapa('o1'), 7);
+  assert.equal(x.comprometido, 1000 + 200 + 10000);   // pedidos ainda não conferidos + saldo do contrato
+  assert.equal(x.apropriado, 300 + 400);
+  assert.equal(x.pago, 400);
+});
+
+test('fase 4 · passo 5 · locações: prevista/ativa comprometem, devolvida apropria o real e a conta paga vira pago', async () => {
+  const loc = (id, st, extra) => Object.assign({ obraId: 'o1', equipamento: id, inicio: dia(-3), fimPrevisto: dia(6), valorDia: 100, etapa: 7, status: st, apontamentos: {} }, extra || {});
+  const seed = seedMed({ locacoes: { l1: loc('A', 'prevista'), l2: loc('B', 'ativa'), l3: loc('C', 'devolvida', { devolucao: { data: dia(0) } }) }, contasPagar: { cp_locacao_l3: conta({ origem: 'locacao', origemId: 'l3', valor: 400, status: 'paga', pagoEm: dia(0) }) } });
+  const e = await abrir({ seed });
+  const x = linha(e.x.custoEtapa('o1'), 7);
+  assert.equal(x.comprometido, 1000 + 1000 + 10000);   // 10 dias × 100 cada (previsto) + contrato
+  assert.equal(x.apropriado, 400);                     // 4 dias × 100 (real)
+  assert.equal(x.pago, 400);
+});
+
+test('fase 4 · passo 5 · custo sem etapa aparece em "Sem etapa"; sem orçamento é sinalizado', async () => {
+  const seed = seedMed({ compras: { c1: compraP({ etapa: 0, status: 'conferido', pedido: { data: dia(-3), fornecedorId: 'f1', total: 250, entregaPrevista: dia(2) } }), c2: compraP({ etapa: 12, status: 'pedido', pedido: { data: dia(-3), fornecedorId: 'f1', total: 900, entregaPrevista: dia(2) } }) } });
+  const e = await abrir({ seed, hash: '#/obra/o1/financeiro' });
+  const c = e.x.custoEtapa('o1');
+  assert.equal(linha(c, 0).apropriado, 250);
+  assert.equal(linha(c, 12).semOrcamento, true);
+  assert.match(e.app(), /Sem etapa/);
+  assert.match(e.app(), /Sem orçamento/);
+});
+
+test('fase 4 · passo 5 · exposição acima do orçado da etapa é sinalizada', async () => {
+  const seed = seedMed({ compras: { c1: compraP({ status: 'pedido', pedido: { data: dia(-3), fornecedorId: 'f1', total: 3000, entregaPrevista: dia(2) } }) }, contratosPrest: {} });
+  const e = await abrir({ seed, hash: '#/obra/o1/financeiro' });
+  const c = e.x.custoEtapa('o1');
+  assert.equal(linha(c, 7).exposicao, 3000);
+  assert.equal(linha(c, 7).acima, false);
+  const acima = await abrir({ seed: seedMed({ compras: { c1: compraP({ status: 'pedido', pedido: { data: dia(-3), fornecedorId: 'f1', total: 3000, entregaPrevista: dia(2) } }) } }), hash: '#/obra/o1/financeiro' });
+  assert.equal(linha(acima.x.custoEtapa('o1'), 7).acima, true);      // 3000 + saldo do contrato 10000 > 10000
+  assert.match(acima.app(), /Acima do orçado/);
+});
+
+test('fase 4 · passo 5 · Gestão só conta contratos e medições', async () => {
+  const seed = seedMed({ compras: { c1: compraP({ status: 'pedido', pedido: { data: dia(-3), fornecedorId: 'f1', total: 3000, entregaPrevista: dia(2) } }) }, medicoes: { m1: med({ status: 'aprovada', valorLiquido: 2400, valorBruto: 2400 }) } }, { gestao: true });
+  const e = await abrir({ seed });
+  const x = linha(e.x.custoEtapa('o1'), 7);
+  assert.equal(x.comprometido, 7600);
+  assert.equal(x.apropriado, 2400);
+});
+
+test('fase 4 · passo 5 · repartir fecha o valor exato e o saldo sem itens vai para "Sem etapa"', async () => {
+  const e = await abrir();
+  const p = e.x.repartir(100, { 5: 1, 7: 1, 9: 1 });
+  assert.equal(Math.round((p[5] + p[7] + p[9]) * 100) / 100, 100);
+  const semItens = await abrir({ seed: seedMed({ contratosPrest: { ct2: { obraId: 'o1', prestadorId: 'p2', escopo: 'x', valor: 5000, status: 'ativo', inicio: dia(-1), fim: dia(30) } }, prestadores: { p1: { nome: 'A' }, p2: { nome: 'B' } } }) });
+  assert.equal(linha(semItens.x.custoEtapa('o1'), 0).comprometido, 5000);
+});

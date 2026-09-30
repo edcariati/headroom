@@ -92,3 +92,19 @@ Locação: valor real (do início até a devolução), não o previsto.
 **D4.4 — Gestão.** A aba Financeiro mostra só o desembolso previsto do cliente por mês (medições aprovadas e a aprovar, pelo mês do fim do período). Não há contas a pagar na Gestão.
 
 **D4.5 — Gráficos.** SVG puro, sem biblioteca, com as cores das variáveis do tema (`var(--steel)` etc.), então funcionam nos temas claro e escuro. O mesmo gerador serve às curvas S do passo 6.
+
+### Passo 5 — Comprometido, apropriado e pago
+
+**D5.1 — Um caminho só (sem dupla contagem).** Em vez de somar o mesmo dinheiro em duas colunas, cada valor está numa só situação:
+**comprometido** = pedidos emitidos e ainda não conferidos + locações prevista/ativa (pelo previsto) + saldo de contrato ainda não medido;
+**apropriado** = compras conferidas ou pagas + medições aprovadas ou pagas (bruto) + locações devolvidas (pelo real);
+**pago** = compras pagas + medições pagas (líquido) + locações com conta paga. A **exposição** (comprometido + apropriado) é o que se compara com o orçado.
+*Por quê:* a especificação já pedia isso para contrato + medição; estendemos o mesmo raciocínio a compras e locações para a tabela fechar (contrato de 10.000 com 2.400 medidos = 2.400 apropriado + 7.600 comprometido = 10.000).
+O alerta “comprometido acima do orçado” usa a **exposição**.
+
+**D5.2 — Saldo de contrato por etapa.** O contrato não tem etapa. O saldo ainda não medido é repartido entre as etapas dos itens do prestador no orçamento revisado, proporcional ao valor de cada item;
+prestador sem itens orçados cai em “Sem etapa”. Contrato encerrado não compromete mais nada.
+
+**D5.3 — Medição paga por etapa.** O líquido pago é repartido entre as etapas na proporção do bruto medido, com a sobra de centavos no maior trecho, para o total bater exatamente.
+
+**D5.4 — Gestão.** Só contratos e medições entram (compras e locações são do cliente e não têm valor no app).
