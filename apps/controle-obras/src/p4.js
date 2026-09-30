@@ -652,7 +652,7 @@ function svgGrafico(cfg){
   var passo=Math.ceil(n/Math.max(1,Math.floor(iw/46)));
   cfg.labels.forEach(function(lb,i){ if(i%passo===0) g+='<text x="'+(L0+gw*i+gw/2)+'" y="'+(H-12)+'" text-anchor="middle" class="lob-t">'+esc(lb)+'</text>'; });
   var leg='<div class="legenda" style="margin-top:6px">'+(cfg.barras||[]).concat(cfg.linhas||[]).map(function(s){ return '<span><i style="background:'+s.cor+';border-color:'+s.cor+'"></i>'+esc(s.nome)+'</span>'; }).join('')+'</div>';
-  return '<div style="overflow-x:auto"><svg class="lob" viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" role="img" aria-label="'+esc(cfg.titulo||'Gráfico')+'">'+g+'</svg></div>'+leg;
+  return '<div style="overflow-x:auto"><svg class="lob" viewBox="0 0 '+W+' '+H+'" style="width:100%;max-width:860px;min-width:'+Math.min(W,520)+'px;height:auto" role="img" aria-label="'+esc(cfg.titulo||'Gráfico')+'">'+g+'</svg></div>'+leg;
 }
 function kfmt(v){ var a=Math.abs(v); return (v<0?'−':'')+(a>=1000000?(Math.round(a/1e5)/10).toString().replace('.',',')+' mi':(a>=1000?(Math.round(a/100)/10).toString().replace('.',',')+' mil':String(Math.round(a)))); }
 function mesCurto(m){ var N=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']; return N[Number(m.slice(5))-1]+'/'+m.slice(2,4); }
