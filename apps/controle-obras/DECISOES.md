@@ -135,3 +135,12 @@ CPI/SPI < 1 (crítico se < 0,9); orçamento sem cronograma; exposição acima do
 **D7.3 — Agenda (área Financeiro).** Vencimentos de contas abertas, aportes previstos ainda não recebidos e o **último dia útil do mês** (segunda a sexta; feriados não são considerados) quando há medição em rascunho, para o mês atual e o seguinte.
 
 **D7.4 — Exclusão em cascata.** Excluir a obra apaga também `orcamentos`, `orcItens`, `aditivos`, `medicoes`, `contasPagar` e `aportes` dela, sem tocar nos de outras obras.
+
+### Passo 8 — Curva ABC e preço de referência
+
+**D8.1 — Classe ABC.** Só materiais do orçamento revisado, do maior para o menor. A classe vem do quanto já foi acumulado **antes** do item: A enquanto esse acumulado é menor que a faixa A (padrão 80%), B até a faixa B (95%), C depois. Quem cruza o corte fica na classe de baixo,
+e um item que começa exatamente em 80% já é B. Faixas editáveis em “Editar obra” (valores provisórios).
+
+**D8.2 — Preço de referência.** Vem de um CSV `codigo;preco` que o Edson fornece (ex.: tabela SINAPI). O app não acessa API externa. Os preços ficam num documento próprio (`orcItens`, id `ref_<obra>`), separado do orçamento, para não alterar a versão 1, que é imutável.
+Item cujo preço unitário passa de **referência × (1 + margem da obra)** ganha o selo “Acima” e um alerta. O alerta compara o **orçamento**; compras não têm código de item do orçamento, então não são comparadas.
+Limite prático: o documento de preços cresce ~30 bytes por código; um orçamento de milhares de itens continua muito abaixo dos 256 KB.

@@ -851,3 +851,56 @@ test('fase 4 · passo 7 · campos novos da obra são editáveis e guardados', as
   assert.equal(o.abcA, 70);
   assert.equal(o.abcB, 90);
 });
+
+/* ---------------- passo 8: curva ABC e preço de referência ---------------- */
+function seedABC(extraObra, precos) {
+  const it = (cod, total, tipo) => ({ codigo: cod, etapa: 5, descricao: 'Item ' + cod, unidade: 'un', quantidade: 1, precoUnitario: total, tipo: tipo || 'material', prestador: '', prestadorId: '', total });
+  const itens = [it('M1', 5000), it('M2', 3000), it('M3', 1000), it('M4', 500), it('M5', 300), it('M6', 200), it('S1', 7000, 'empreitada')];
+  return { obras: { o1: obraAdm(extraObra || {}) }, orcamentos: { b1: { obraId: 'o1', versao: 1, data: dia(-5), motivo: 'Orçamento base', total: 17000, nItens: 7, lotes: 1, porEtapa: { 5: 17000 }, porTipo: { material: 10000, empreitada: 7000 } } }, orcItens: Object.assign({ b1_0: { obraId: 'o1', orcId: 'b1', lote: 0, itens } }, precos || {}) };
+}
+
+test('fase 4 · passo 8 · curva ABC classifica só materiais pelas faixas', async () => {
+  const e = await abrir({ seed: seedABC() });
+  const c = e.x.curvaABC('o1', e.x.G('obras', 'o1'));
+  assert.equal(c.total, 10000);                                  // empreitada fica de fora
+  assert.equal(c.itens.map((i) => i.codigo + i.classe).join(' '), 'M1A M2A M3B M4B M5C M6C');
+  assert.equal(c.resumo.A.n, 2); assert.equal(c.resumo.A.v, 8000);
+  assert.equal(c.resumo.B.n, 2); assert.equal(c.resumo.B.v, 1500);
+  assert.equal(c.resumo.C.n, 2); assert.equal(c.resumo.C.v, 500);
+  const e2 = await abrir({ seed: seedABC({ abcA: 50, abcB: 90 }) });
+  assert.equal(e2.x.curvaABC('o1', e2.x.G('obras', 'o1')).itens.map((i) => i.classe).join(''), 'ABBCCC');  // 2º item começa em 50% → B; 4º começa em 90% → C
+});
+
+test('fase 4 · passo 8 · a curva ABC aparece na aba Orçamento', async () => {
+  const e = await abrir({ seed: seedABC(), hash: '#/obra/o1/orcamento' });
+  assert.match(e.app(), /Curva ABC dos materiais/);
+  assert.match(e.app(), /Classe A.*R\$\s*8\.000,00.*2 itens/);
+});
+
+test('fase 4 · passo 8 · CSV de referência: leitura, casamento e erros', async () => {
+  const e = await abrir({ seed: seedABC() });
+  const rel = e.x.refParse('codigo;preco\nM1;4.200,50\nM2;2900\nZZ;10\nM3;abc', 'o1');
+  assert.equal(rel.ok, false);
+  assert.match(rel.erros[0], /Linha 5.*M3/);
+  const ok = e.x.refParse('codigo;preco\nM1;4.200,50\nM2;2900\nZZ;10', 'o1');
+  assert.equal(ok.ok, true);
+  assert.equal(ok.refs.M1, 4200.5);
+  assert.equal(ok.achados, 2);
+  assert.equal(ok.naoAchados.join(), 'ZZ');
+});
+
+test('fase 4 · passo 8 · importa preços de referência e sinaliza item acima de referência + margem', async () => {
+  const e = await abrir({ seed: seedABC({ margemPreco: 5 }), hash: '#/obra/o1/orcamento' });
+  await e.click('[data-act="ref-importar"]');
+  e.doc.querySelector('#ref_csv').value = 'codigo;preco\nM1;4500\nM2;3000\nM3;900';
+  await e.click('[data-ref="validar"]');
+  assert.match(e.dlg(), /3 preços casam/);
+  await e.click('[data-ref="confirmar"]');
+  const ac = e.x.orcAcimaRef('o1', e.x.G('obras', 'o1')).map((i) => i.codigo);
+  assert.equal(ac.join(), 'M1,M3');                         // M1: 5000 > 4500×1,05; M2: 3000 = ref; M3: 1000 > 900×1,05
+  assert.match(e.app(), /Acima/);
+  await e.go('#/obra/o1/resumo');
+  assert.match(e.app(), /2 itens do orçamento acima do preço de referência mais a margem de 5%/);
+  assert.equal(e.linhas('orcItens').filter((x) => x.orcId === 'ref').length, 1);
+  assert.equal(e.x.orcItensDe(e.x.orcVigente('o1')).length, 7);      // o orçamento base não foi tocado
+});

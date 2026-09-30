@@ -1,6 +1,6 @@
 # Changelog
 
-## Fase 4 — Custo, medição e financeiro (em andamento)
+## Fase 4 — Custo, medição e financeiro (concluída)
 
 - **Passo 0:** código dividido em `src/` (`style.css`, `protocolo.json`, `core.js`, `p2.js`, `p3.js`, `p4.js`, `views.js`, `nuvem.js`, `boot.js`)
   e `build.py`, que gera o `index.html` único idêntico ao anterior. Bateria de testes das fases 1 a 3 com jsdom (`npm test`).
@@ -12,6 +12,7 @@
 - **Passo 5:** painel orçado × comprometido × apropriado × pago por etapa, com “Sem etapa”, “Sem orçamento” e “Acima do orçado”.
 - **Passo 6:** aba Físico-financeiro com BAC, PV, EV, AC, CPI, SPI, EAC, três curvas S em SVG e quadro físico × financeiro. Aprovação de medição com CPI/SPI abaixo de 1 exige análise.
 - **Passo 7:** indicadores de custo e prazo no resumo, alertas e agenda financeiros, cascata de exclusão das coleções novas.
+- **Passo 8:** curva ABC dos materiais e preços de referência (CSV) com alerta de item acima da referência + margem.
 
 ## Fase 3 — Suprimentos
 Fornecedores, compras, estoque, locações, contratos de prestador, termos de frente e danos.

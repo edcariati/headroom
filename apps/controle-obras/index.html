@@ -2208,7 +2208,7 @@ function adtRecusarForm(id){
 /* ---------- aba Orçamento ---------- */
 function tOrcamento(o){
   var oid=o.id, v=orcVigente(oid), versoes=orcVersoes(oid), rev=orcRevisado(oid);
-  var head='<div class="sec-h"><div><h2>Orçamento</h2><p class="muted small">Orçamento detalhado: toda linha tem quantidade, unidade e preço unitário. A versão 1 (base) nunca é alterada; aditivos assinados entram no orçamento revisado.</p></div><div class="row"><button class="btn" data-act="orc-modelo">Baixar modelo CSV</button><button class="btn primary" data-act="orc-importar" data-oid="'+oid+'" data-write>'+(v?'Importar nova versão':'Importar orçamento')+'</button></div></div>';
+  var head='<div class="sec-h"><div><h2>Orçamento</h2><p class="muted small">Orçamento detalhado: toda linha tem quantidade, unidade e preço unitário. A versão 1 (base) nunca é alterada; aditivos assinados entram no orçamento revisado.</p></div><div class="row"><button class="btn" data-act="orc-modelo">Baixar modelo CSV</button><button class="btn" data-act="ref-importar" data-oid="'+oid+'" data-write>Preços de referência</button><button class="btn primary" data-act="orc-importar" data-oid="'+oid+'" data-write>'+(v?'Importar nova versão':'Importar orçamento')+'</button></div></div>';
   if(!v) return head+'<div class="card empty" style="margin-top:14px"><h3>Nenhum orçamento importado</h3><p>Baixe o modelo CSV, preencha (ou exporte do seu sistema de orçamentos no mesmo formato) e importe. O app valida linha por linha antes de aceitar.</p></div>'+aditivosHtml(o);
   var cards='<div class="grid cols3" style="margin-top:14px"><div class="card pad"><div class="small muted">Orçamento base (v'+versoes[0].versao+')</div><div class="num" style="font-size:24px;font-weight:600">'+brl(versoes[0].total)+'</div></div>'
     +(versoes.length>1?'<div class="card pad"><div class="small muted">Versão vigente (v'+v.versao+')</div><div class="num" style="font-size:24px;font-weight:600">'+brl(v.total)+'</div></div>':'')
@@ -2222,20 +2222,21 @@ function tOrcamento(o){
   var tabTp='<section class="card"><div class="card-h"><h2>Por tipo de custo</h2></div><div class="tbl-scroll"><table class="tbl"><thead><tr><th>Tipo</th><th class="num">Valor</th><th class="num">%</th></tr></thead><tbody>'+Object.keys(TIPOS_ITEM).filter(function(k){ return rev.porTipo[k]; }).map(function(k){
     return '<tr><td>'+TIPOS_ITEM[k]+'</td><td class="num">'+brl(rev.porTipo[k])+'</td><td class="num">'+(rev.total?Math.round(rev.porTipo[k]/rev.total*1000)/10:0).toString().replace('.',',')+'%</td></tr>';
   }).join('')+'</tbody></table></div></section>';
+  var refs=orcRefs(oid);
   var busca=(ui.orcBusca||'').toLowerCase(), fe=ui.orcEtapa||'', ft=ui.orcTipo||'';
   var lista=rev.itens.filter(function(i){ return (!fe||String(i.etapa)===fe) && (!ft||i.tipo===ft) && (!busca||(i.codigo+' '+i.descricao).toLowerCase().indexOf(busca)>=0); });
   var itens='<section class="card sec"><div class="card-h"><h2>Itens do orçamento revisado</h2><span class="chip">'+lista.length+' de '+rev.itens.length+'</span></div>'
     +'<div class="pad row" style="gap:8px"><input data-chg="orc-filtro" data-k="orcBusca" value="'+esc(ui.orcBusca||'')+'" placeholder="Buscar por código ou descrição" aria-label="Buscar item" style="flex:1;min-width:200px;padding:8px 10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--ink)">'
     +'<select data-chg="orc-filtro" data-k="orcEtapa" aria-label="Filtrar por etapa" style="padding:8px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--ink)"><option value="">Todas as etapas</option>'+etapas.map(function(e){ return '<option value="'+e+'"'+(fe===String(e)?' selected':'')+'>'+(e?e+'. '+esc(etapaInfo(e).nome):'Sem etapa')+'</option>'; }).join('')+'</select>'
     +'<select data-chg="orc-filtro" data-k="orcTipo" aria-label="Filtrar por tipo" style="padding:8px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--ink)"><option value="">Todos os tipos</option>'+Object.keys(TIPOS_ITEM).map(function(k){ return '<option value="'+k+'"'+(ft===k?' selected':'')+'>'+TIPOS_ITEM[k]+'</option>'; }).join('')+'</select></div>'
-    +'<div class="tbl-scroll"><table class="tbl"><thead><tr><th>Código</th><th>Descrição</th><th>Etapa</th><th>Un</th><th class="num">Qtd</th><th class="num">Preço unit.</th><th class="num">Total</th><th>Prestador</th></tr></thead><tbody>'
-    +lista.slice(0,300).map(function(i){ return '<tr><td>'+esc(i.codigo)+(i.origem==='aditivo'?' <span class="chip warn">Aditivo</span>':'')+'</td><td>'+esc(i.descricao)+'<div class="tiny muted">'+TIPOS_ITEM[i.tipo]+'</div></td><td>'+(i.etapa||'—')+'</td><td>'+esc(i.unidade)+'</td><td class="num">'+String(i.quantidade).replace('.',',')+'</td><td class="num">'+brl(i.precoUnitario)+'</td><td class="num">'+brl(i.total)+'</td><td>'+esc(prestNome(i.prestadorId)||i.prestador||'—')+'</td></tr>'; }).join('')
+    +'<div class="tbl-scroll"><table class="tbl"><thead><tr><th>Código</th><th>Descrição</th><th>Etapa</th><th>Un</th><th class="num">Qtd</th><th class="num">Preço unit.</th><th class="num">Ref.</th><th class="num">Total</th><th>Prestador</th></tr></thead><tbody>'
+    +lista.slice(0,300).map(function(i){ return '<tr><td>'+esc(i.codigo)+(i.origem==='aditivo'?' <span class="chip warn">Aditivo</span>':'')+'</td><td>'+esc(i.descricao)+'<div class="tiny muted">'+TIPOS_ITEM[i.tipo]+'</div></td><td>'+(i.etapa||'—')+'</td><td>'+esc(i.unidade)+'</td><td class="num">'+String(i.quantidade).replace('.',',')+'</td><td class="num">'+brl(i.precoUnitario)+'</td><td class="num">'+(refs[i.codigo]>0?brl(refs[i.codigo])+(i.precoUnitario>refs[i.codigo]*(1+(o.margemPreco==null?5:o.margemPreco)/100)+1e-9?' <span class="chip warn">Acima</span>':''):'—')+'</td><td class="num">'+brl(i.total)+'</td><td>'+esc(prestNome(i.prestadorId)||i.prestador||'—')+'</td></tr>'; }).join('')
     +'</tbody></table></div>'+(lista.length>300?'<p class="small muted pad">Mostrando os 300 primeiros. Use a busca ou os filtros.</p>':'')+'</section>';
   var vers='<section class="card sec"><div class="card-h"><h2>Versões do orçamento</h2></div>'+versoes.slice().reverse().map(function(x,k,arr){
     var ant=versoes.filter(function(y){ return y.versao===x.versao-1; })[0];
     return '<div class="ficha" style="grid-template-columns:1fr auto"><div><strong>Versão '+x.versao+'</strong> '+(x.versao===v.versao?'<span class="chip ok">Vigente</span>':'')+(x.versao===1?'<span class="chip steel">Base, imutável</span>':'')+'<div class="small">'+brl(x.total)+' · '+plural(x.nItens,'item','itens')+' · '+fmt(x.data)+(x.origem?' · origem: '+esc(x.origem):'')+'</div><div class="tiny muted">'+esc(x.motivo||'')+'</div></div><div>'+(ant?'<button class="btn sm" data-act="orc-comparar" data-id="'+x.id+'">Comparar com a v'+ant.versao+'</button>':'')+'</div></div>';
   }).join('')+'</section>';
-  return head+cards+'<div class="grid cols2 sec">'+tabEt+tabTp+'</div>'+itens+vers+aditivosHtml(o);
+  return head+cards+'<div class="grid cols2 sec">'+tabEt+tabTp+'</div>'+itens+abcHtml(o)+vers+aditivosHtml(o);
 }
 function orcRelHtml(rel){
   var h='';
@@ -2956,6 +2957,7 @@ function alertasP4(o){
     if(modAdm(o)&&e.cpi!=null&&e.cpi<1) aviso.push('CPI '+String(Math.round(e.cpi*100)/100).replace('.',','));
     if(e.spi!=null&&e.spi<1) aviso.push('SPI '+String(Math.round(e.spi*100)/100).replace('.',','));
     if(aviso.length) A.push({k:(e.cpi!=null&&e.cpi<0.9)||(e.spi!=null&&e.spi<0.9)?'crit':'warn', t:aviso.join(' e ')+' abaixo de 1: avisar o cliente e registrar a causa do desvio.', to:base+'fisfin'});
+    var ar=orcAcimaRef(oid,o); if(ar.length) A.push({k:'warn', t:plural(ar.length,'item do orçamento acima','itens do orçamento acima')+' do preço de referência mais a margem de '+(o.margemPreco==null?5:o.margemPreco)+'%.', to:base+'orcamento'});
     if(e.semCronograma.length) A.push({k:'warn', t:'Orçamento sem cronograma nas etapas '+e.semCronograma.join(', ')+'.', to:base+'cronograma'});
     var c=custoEtapa(oid), acima=c.etapas.filter(function(x){ return x.acima; }), semOrc=c.etapas.filter(function(x){ return x.semOrcamento; });
     if(acima.length) A.push({k:'warn', t:'Comprometido e apropriado acima do orçado na(s) etapa(s) '+acima.map(function(x){ return x.etapa||'sem etapa'; }).join(', ')+'.', to:base+'financeiro'});
@@ -2974,6 +2976,72 @@ function eventosP4(o,add,b){
   }
 }
 COBX.ultimoDiaUtil=ultimoDiaUtil; COBX.alertasP4=alertasP4;
+
+/* ================= CURVA ABC E PREÇO DE REFERÊNCIA ================= */
+function curvaABC(oid,o){
+  var A=o.abcA==null?80:o.abcA, B=o.abcB==null?95:o.abcB;
+  var mats=orcRevisado(oid).itens.filter(function(i){ return i.tipo==='material'&&i.total>0; }).sort(function(a,b){ return b.total-a.total; });
+  var tot=mats.reduce(function(s,i){ return s+i.total; },0), acum=0, itens=[], resumo={A:{n:0,v:0},B:{n:0,v:0},C:{n:0,v:0}};
+  mats.forEach(function(i){
+    var antes=tot>0?acum/tot*100:0; acum+=i.total;
+    var cl=antes<A-1e-9?'A':(antes<B-1e-9?'B':'C');   // classe pela posição em que o item começa: quem cruza o corte fica na classe de baixo
+    resumo[cl].n++; resumo[cl].v=r2(resumo[cl].v+i.total);
+    itens.push(Object.assign({}, i, {pct:tot>0?i.total/tot*100:0, acumPct:tot>0?acum/tot*100:0, classe:cl}));
+  });
+  return {itens:itens, total:r2(tot), resumo:resumo, A:A, B:B};
+}
+COBX.curvaABC=curvaABC;
+function orcRefs(oid){ var d=G('orcItens','ref_'+oid); return (d&&d.refs)||{}; }
+function orcAcimaRef(oid,o){
+  var refs=orcRefs(oid), mg=o.margemPreco==null?5:o.margemPreco;
+  return orcRevisado(oid).itens.filter(function(i){ var r=refs[i.codigo]; return r>0 && i.precoUnitario>r*(1+mg/100)+1e-9; });
+}
+COBX.orcAcimaRef=orcAcimaRef;
+function refParse(texto,oid){
+  var rows=csvParse(texto), rel={erros:[], refs:{}, naoAchados:[], achados:0};
+  if(rows.length<2){ rel.erros.push('O arquivo precisa ter o cabeçalho (codigo;preco) e ao menos uma linha.'); rel.ok=false; return rel; }
+  var h=rows[0].map(chave), ic=h.indexOf('codigo'), ip=-1; ['preco','preco_ref','preco_referencia','valor','preco_unitario'].forEach(function(a){ if(ip<0) ip=h.indexOf(a); });
+  if(ic<0||ip<0){ rel.erros.push('O cabeçalho precisa das colunas codigo e preco.'); rel.ok=false; return rel; }
+  var existe={}; orcRevisado(oid).itens.forEach(function(i){ existe[i.codigo]=1; });
+  for(var i=1;i<rows.length;i++){
+    var cod=String(rows[i][ic]||'').trim(), p=numBR(rows[i][ip]); if(!cod) continue;
+    if(!(p>0)){ rel.erros.push('Linha '+(i+1)+': preço inválido para o código '+cod+'.'); continue; }
+    rel.refs[cod]=r2(p); if(existe[cod]) rel.achados++; else rel.naoAchados.push(cod);
+  }
+  rel.ok=rel.erros.length===0 && Object.keys(rel.refs).length>0;
+  return rel;
+}
+COBX.refParse=refParse;
+function refImportDlg(oid){
+  var html='<form id="refform"><div class="dlg-h"><h2>Preços de referência</h2><button type="button" class="btn ghost ico" data-close aria-label="Fechar">✕</button></div><div class="dlg-b">'
+    +'<p class="muted small" style="margin-bottom:12px">CSV com <strong>codigo;preco</strong>: o preço unitário de referência de cada código do orçamento (por exemplo, da tabela SINAPI que você tem). O app não busca preços na internet. Itens do orçamento acima do preço de referência mais a margem da obra ('+(G('obras',oid).margemPreco==null?5:G('obras',oid).margemPreco)+'%) são sinalizados.</p>'
+    +'<div class="fld"><label for="ref_arq">Arquivo CSV</label><input id="ref_arq" type="file" accept=".csv,text/csv,text/plain"></div><div class="fld"><label for="ref_csv">Ou cole o conteúdo</label><textarea id="ref_csv" rows="6" spellcheck="false"></textarea></div><div id="ref_rel"></div></div>'
+    +'<div class="dlg-f"><button type="button" class="btn" data-close>Cancelar</button><button type="button" class="btn" data-ref="validar">Validar</button><button type="button" class="btn primary" data-ref="confirmar" disabled>Confirmar</button></div></form>';
+  var d=openDlg(html,true), form=$('#refform',d), ta=$('#ref_csv',d), conf=form.querySelector('[data-ref="confirmar"]'), rel=null;
+  var validar=function(){
+    var h=''; rel=refParse(ta.value,oid);
+    if(rel.erros.length) h+='<div class="callout crit" style="margin-top:12px"><strong>Erros</strong><ul>'+rel.erros.slice(0,30).map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul></div>';
+    if(rel.ok) h+='<div class="callout ok" style="margin-top:12px"><strong>'+plural(rel.achados,'preço casa','preços casam')+' com itens do orçamento.</strong>'+(rel.naoAchados.length?'<p class="small">Códigos que não estão no orçamento (serão guardados, mas não aparecem em nenhum item): '+esc(rel.naoAchados.slice(0,20).join(', '))+(rel.naoAchados.length>20?'…':'')+'</p>':'')+'</div>';
+    $('#ref_rel',d).innerHTML=h; conf.disabled=!rel.ok;
+  };
+  $('#ref_arq',d).addEventListener('change', function(e){ var f=e.target.files&&e.target.files[0]; if(!f) return; var fr=new FileReader(); fr.onload=function(){ ta.value=String(fr.result||''); validar(); }; fr.readAsText(f,'UTF-8'); });
+  form.addEventListener('click', async function(e){
+    var b=e.target.closest('[data-ref]'); if(!b) return;
+    if(b.dataset.ref==='validar'){ validar(); return; }
+    if(!rel||!rel.ok) return; conf.disabled=true;
+    var merged=Object.assign({}, orcRefs(oid), rel.refs);
+    try{ await Store.set('orcItens','ref_'+oid,{obraId:oid, orcId:'ref', lote:-1, refs:merged, atualizadoEm:hoje()}); closeDlg(); toast('Preços de referência atualizados.'); }
+    catch(ex){ conf.disabled=false; toast('Não foi possível salvar os preços.', true); }
+  });
+}
+function abcHtml(o){
+  var c=curvaABC(o.id,o); if(!c.itens.length) return '';
+  var cores={A:'crit',B:'warn',C:''};
+  return '<section class="card sec"><div class="card-h"><div><h2>Curva ABC dos materiais</h2><p class="muted small">Materiais em ordem de peso no custo. Classe A até '+c.A+'% do valor acumulado, B até '+c.B+'%, C o restante (faixas editáveis na obra). Quem cruza o corte fica na classe de baixo.</p></div></div>'
+    +'<div class="pad grid cols3">'+['A','B','C'].map(function(k){ return '<div class="card pad"><span class="chip '+cores[k]+'">Classe '+k+'</span><div class="num" style="font-size:22px;font-weight:600;margin-top:6px">'+brl(c.resumo[k].v)+'</div><div class="tiny muted">'+plural(c.resumo[k].n,'item','itens')+' · '+(c.total>0?Math.round(c.resumo[k].v/c.total*1000)/10:0).toString().replace('.',',')+'% do valor</div></div>'; }).join('')+'</div>'
+    +'<div class="tbl-scroll"><table class="tbl"><thead><tr><th>Classe</th><th>Código</th><th>Material</th><th class="num">Valor</th><th class="num">% do total</th><th class="num">% acumulado</th></tr></thead><tbody>'+c.itens.slice(0,60).map(function(i){ return '<tr><td><span class="chip '+cores[i.classe]+'">'+i.classe+'</span></td><td>'+esc(i.codigo)+'</td><td>'+esc(short(i.descricao,60))+'</td><td class="num">'+brl(i.total)+'</td><td class="num">'+(Math.round(i.pct*10)/10).toString().replace('.',',')+'%</td><td class="num">'+(Math.round(i.acumPct*10)/10).toString().replace('.',',')+'%</td></tr>'; }).join('')+'</tbody></table></div>'+(c.itens.length>60?'<p class="small muted pad">Mostrando os 60 maiores de '+c.itens.length+'.</p>':'')+'</section>';
+}
+Object.assign(A4,{ 'ref-importar':function(d){ refImportDlg(d.oid); } });
 /* ================= VISÕES ================= */
 var ui={semana:{}, ocFiltro:'todas', det:{}, ganttScroll:0, agMes:hoje().slice(0,7), agDia:hoje(), agArea:'todas', docMes:{}, orcBusca:'', orcEtapa:'', orcTipo:'', finFiltro:'abertas'};
 var lastKey=null;
