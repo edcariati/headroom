@@ -45,6 +45,10 @@ function supaFalso(opts) {
         const alvo = linhas(); alvo.forEach((r) => { Object.assign(r, clone(q.payload)); r.versao += 1; });
         return { data: q.retorna ? alvo.map((r) => ({ versao: r.versao })) : null, error: null };
       }
+      if (q.op === 'upsert') {
+        const o = q.payload, k = String(o.id || o.user_id), ex = tab(t).get(k);
+        tab(t).set(k, Object.assign(ex || {}, clone(o))); return { data: null, error: null };
+      }
       return { data: null, error: { message: 'operação não suportada no falso' } };
     }
     return b;

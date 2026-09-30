@@ -14,6 +14,6 @@ create schema auth; create table auth.users(id uuid primary key);
 create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.uid', true),'')::uuid $$;
 create role anon nologin; create role authenticated nologin;
 SQL
-for m in 0001_base 0002_regras 0003_notificacoes; do $P -f "$AQUI/../migrations/$m.sql" >/dev/null; done
+for m in "$AQUI"/../migrations/*.sql; do $P -f "$m" >/dev/null; done
 $P -f "$1" >/dev/null
 $P -c "select tipo||'|'||obra_id||'|'||registro_id from public.eventos_notificaveis('$2') order by 1"

@@ -9,6 +9,7 @@
 
 - **Passo 1:** desenho em `docs/fase7/`.
 - **Passo 2 (7A.1):** motor de notificações no banco (`0003`), 7 eventos com teste de equivalência servidor × app, silêncio 20h–7h, resumo diário, central de avisos no app.
+- **Passo 3 (7A.2):** +5 eventos (ação, RFI, material, aditivo parado), resumo semanal da diretoria, mensagem pronta ao prestador por WhatsApp (link) com registro no histórico, preferências de aviso.
 
 ## Fase 5 — DRE, relatório ao cliente e avaliação (concluída)
 

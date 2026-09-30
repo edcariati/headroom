@@ -245,7 +245,7 @@ function tReunioes(o){
   var atas=byObra('atas',oid).sort(function(a,b){ return a.data<b.data?1:-1; });
   var acHtml=abertas.length?'<div class="tbl-scroll"><table class="tbl"><thead><tr><th>Ação</th><th>Responsável</th><th>Prazo</th><th></th></tr></thead><tbody>'+abertas.map(function(a){
     var v=acaoVencida(a), atr=v?diffDays(a.prazo,hoje()):0, ult=(a.interacoes||[]).slice(-1)[0];
-    return '<tr><td>'+esc(a.descricao)+(ult?'<div class="tiny muted">Último contato: '+fmt(ult.data)+' ('+esc(ult.canal)+') — '+esc(short(ult.texto,60))+'</div>':'')+'</td><td>'+esc(a.responsavel||'—')+'</td><td><span class="chip '+(v?(atr>dias?'crit':'warn'):'')+'">'+(v?'Venceu há '+overduePlural(atr):fmtC(a.prazo))+'</span></td><td style="white-space:nowrap"><button class="btn sm" data-act="acao-ok" data-id="'+a.id+'" data-write>Concluir</button> <button class="btn sm" data-act="acao-contato" data-id="'+a.id+'" data-write>Contato</button> <button class="btn sm ghost" data-act="acao-editar" data-id="'+a.id+'" data-write>Editar</button></td></tr>';
+    return '<tr><td>'+esc(a.descricao)+(ult?'<div class="tiny muted">Último contato: '+fmt(ult.data)+' ('+esc(ult.canal)+') — '+esc(short(ult.texto,60))+'</div>':'')+'</td><td>'+esc(a.responsavel||'—')+'</td><td><span class="chip '+(v?(atr>dias?'crit':'warn'):'')+'">'+(v?'Venceu há '+overduePlural(atr):fmtC(a.prazo))+'</span></td><td style="white-space:nowrap"><button class="btn sm" data-act="acao-ok" data-id="'+a.id+'" data-write>Concluir</button> <button class="btn sm" data-act="acao-whats" data-id="'+a.id+'" data-write>WhatsApp</button> <button class="btn sm" data-act="acao-contato" data-id="'+a.id+'" data-write>Contato</button> <button class="btn sm ghost" data-act="acao-editar" data-id="'+a.id+'" data-write>Editar</button></td></tr>';
   }).join('')+'</tbody></table></div>':'<p class="muted" style="padding:16px">Nenhuma ação aberta.'+(feitas?' '+plural(feitas,'ação concluída','ações concluídas')+'.':'')+'</p>';
   var ataHtml=atas.length?atas.map(function(t){
     var r=RITOS.filter(function(x){return x.k===t.rito;})[0]||RITOS[4], acT=acs.filter(function(a){return a.ataId===t.id;}), ab=acT.filter(function(a){return a.status==='aberta';}).length;
@@ -589,6 +589,7 @@ var A2={
   'acao-editar':function(d){ var a=G('acoes',d.id); acaoForm(a.obraId,a); },
   'acao-ok':function(d){ Store.patch('acoes', d.id, {status:'concluida', concluidaEm:hoje()}); toast('Ação concluída.'); },
   'acao-contato':function(d){ contatoForm(d.id,'acoes'); },
+  'acao-whats':function(d){ waForm('acoes',d.id); },
   'acao-excluir':async function(d){ var ok=await confirmDlg('Excluir ação?','<p>O histórico de contatos também será apagado.</p>','Excluir',true); if(ok) await Store.del('acoes',d.id); },
   'doc-legal':function(d){ docLegalForm(d.oid,d.k); },
   'doc-legal-limpar':async function(d){ var ok=await confirmDlg('Remover o registro?','<p>Número e anexos serão apagados.</p>','Remover',true); if(ok){ await Store.del('docsLegais', d.oid+'_'+d.k); } },

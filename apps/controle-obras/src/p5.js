@@ -789,6 +789,10 @@ function eventosNotificaveis(){
       if(x.gravidade==='critica') out.push(['oc_critica',oid,x.id]);
       if(vencidaOc(x)){ out.push(['oc_vencida',oid,x.id]); if(atrasoOc(x)>dias) out.push(['oc_escalada',oid,x.id]); }
     });
+    byObra('acoes',oid).filter(acaoVencida).forEach(function(a){ out.push(['acao_vencida',oid,a.id]); if(diffDays(a.prazo,hj)>dias) out.push(['acao_escalada',oid,a.id]); });
+    byObra('rfis',oid).filter(rfiVencido).forEach(function(r){ out.push(['rfi_vencido',oid,r.id]); });
+    byObra('materiais',oid).filter(matVencido).forEach(function(m){ out.push(['material_vencido',oid,m.id]); });
+    byObra('aditivos',oid).forEach(function(a){ if(a.status==='aguardando_cliente' && a.enviadoEm && diffDays(a.enviadoEm.slice(0,10),hj)>dias) out.push(['aditivo_parado',oid,a.id]); });
     if(modAdm(o)){
       byObra('contasPagar',oid).forEach(function(c){
         if(contaVencida(c)) out.push(['conta_vencida',oid,c.id]);

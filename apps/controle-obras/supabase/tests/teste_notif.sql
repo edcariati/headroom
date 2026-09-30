@@ -69,6 +69,29 @@ select tt.exige(not tt.tenta($$insert into public.notificacoes(user_id,tipo,titu
 select tt.exige(not tt.tenta($$select count(*) from public.notificacao_entregas$$), 'entregas só o servidor');
 select tt.exige(tt.conta('notificacao_regras')=0, 'gestor não vê regras');
 select tt.como(3); select tt.exige(tt.conta('notificacoes')=0, 'campo não vê notificações alheias');
-select tt.como(1); select tt.exige(tt.conta('notificacao_regras')=7, 'dono vê as regras');
+select tt.como(1); select tt.exige(tt.conta('notificacao_regras')=12, 'dono vê as regras');
 select tt.exige(tt.tenta($$update public.notificacao_regras set ativo=false where tipo='conta_a_vencer'$$), 'dono edita regra');
 reset role;
+
+-- 7A.2: eventos extras e resumo semanal (datas simuladas; 2026-10-05 é segunda-feira)
+reset role;
+select tt.como(1);
+insert into public.acoes(id,obra_id,dados) values
+ ('ac1','n1','{"status":"aberta","prazo":"2026-09-29"}'),
+ ('ac2','n1','{"status":"aberta","prazo":"2026-09-10"}'),
+ ('ac3','n1','{"status":"concluida","prazo":"2026-09-01"}');
+insert into public.rfis(id,obra_id,dados) values ('r1','n1','{"status":"aberto","prazo":"2026-09-20"}'),('r2','n1','{"status":"respondido","prazo":"2026-09-20"}');
+insert into public.materiais(id,obra_id,dados) values ('mt1','n1','{"resultado":"pendente","prazo":"2026-09-25"}'),('mt2','n1','{"resultado":"aprovado","prazo":"2026-09-25"}');
+insert into public.aditivos(id,obra_id,dados) values ('ad1','n1','{"status":"aguardando_cliente","enviadoEm":"2026-09-20T12:00:00Z"}'),('ad2','n1','{"status":"aguardando_cliente","enviadoEm":"2026-09-28T12:00:00Z"}');
+select tt.exige((select count(*) from public.eventos_notificaveis('2026-09-30') where tipo='acao_vencida')=2, 'ações vencidas: ac1 e ac2');
+select tt.exige((select count(*) from public.eventos_notificaveis('2026-09-30') where tipo='acao_escalada' and registro_id='ac2')=1, 'só ac2 escala');
+select tt.exige((select count(*) from public.eventos_notificaveis('2026-09-30') where registro_id in ('r2','mt2','ad2','ac3'))=0, 'respondido, aprovado, recente e concluída não geram evento');
+select tt.exige((select count(*) from public.eventos_notificaveis('2026-09-30') where registro_id in ('r1','mt1','ad1'))=3, 'RFI, material e aditivo parado geram evento');
+select tt.exige(public.gerar_notificacoes('2026-09-30 16:00:00-03')>0, 'motor cria os avisos novos');
+select tt.exige((select count(*) from public.notificacoes where user_id='00000000-0000-0000-0000-000000000002' and tipo in ('acao_vencida','rfi_vencido','material_vencido'))=4, 'engenharia: 2 ações + RFI + material');
+select tt.exige((select count(*) from public.notificacoes where user_id='00000000-0000-0000-0000-000000000004' and tipo in ('acao_vencida','rfi_vencido','aditivo_parado'))=0, 'financeiro não recebe ação, RFI nem aditivo');
+select tt.exige((select count(*) from public.notificacoes where user_id='00000000-0000-0000-0000-000000000001' and tipo in ('acao_escalada','aditivo_parado'))=2, 'diretoria: ação escalada e aditivo parado');
+select tt.exige(public.resumo_semanal('2026-10-01 07:00:00-03')=0, 'quinta não tem resumo semanal');
+select tt.exige(public.resumo_semanal('2026-10-05 07:00:00-03')=1, 'segunda: só a diretoria recebe o resumo semanal');
+select tt.exige(public.resumo_semanal('2026-10-05 08:00:00-03')=0, 'resumo semanal não duplica');
+select tt.exige((select corpo from public.notificacoes where tipo='resumo_semanal') like '%Casa N1%' and (select corpo from public.notificacoes where tipo='resumo_semanal') !~ 'R\$', 'resumo semanal por obra, sem valores');

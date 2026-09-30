@@ -156,6 +156,13 @@ var ANuvem={
 };
 document.addEventListener('submit', async function(e){
   var f=e.target;
+  if(f.id==='fpref'){
+    e.preventDefault();
+    var el=f.elements, np={canais:el.email.checked?['app','email']:['app'], silencio_ini:el.ini.value||'20:00', silencio_fim:el.fim.value||'07:00', resumo_diario:el.resumo.checked};
+    try{ sbErr(await Supa.cli.from('notificacao_preferencias').upsert(Object.assign({user_id:Supa.uid()}, np))); Notif.pref=np; toast('Preferências salvas.'); }
+    catch(x){ toast('Não foi possível salvar as preferências.', true); }
+    return;
+  }
   if(f.id==='flogin'){
     e.preventDefault();
     var err=$('#lg_err'), btn=f.querySelector('[type=submit]'); err.classList.add('hide'); btn.disabled=true;
@@ -184,13 +191,15 @@ document.addEventListener('change', function(e){
 
 
 /* ---------- central de avisos (notificações dentro do app; esquema v2) ---------- */
-var Notif={ rows:[], ok:false, erro:'',
+var Notif={ rows:[], ok:false, erro:'', pref:{canais:['app','email'], silencio_ini:'20:00', silencio_fim:'07:00', resumo_diario:true},
   ativo:function(){ return Store.backend==='supabase' && Supa.v2(); },
   naoLidas:function(){ return this.rows.filter(function(n){ return !n.lida_em; }).length; },
   carregar:async function(){
     try{
       var r=sbErr(await Supa.cli.from('notificacoes').select('id,tipo,titulo,corpo,link,critico,criada_em,lida_em').order('criada_em',{ascending:false}).limit(100));
       this.rows=r.data||[]; this.ok=true; this.erro='';
+      var pr=sbErr(await Supa.cli.from('notificacao_preferencias').select('canais,silencio_ini,silencio_fim,resumo_diario').eq('user_id', Supa.uid())), x=pr.data&&pr.data[0];
+      if(x) this.pref={canais:x.canais||['app','email'], silencio_ini:String(x.silencio_ini||'20:00').slice(0,5), silencio_fim:String(x.silencio_fim||'07:00').slice(0,5), resumo_diario:x.resumo_diario!==false};
     }catch(e){ this.erro=e.message||'erro'; }
     scheduleRender();
   },
@@ -215,14 +224,23 @@ function sinoAvisos(r){
   return '<a class="btn ghost sm" href="#/avisos"'+(r&&r.view==='avisos'?' aria-current="page"':'')+' title="Avisos" aria-label="Avisos'+(n?', '+n+' não lidos':'')+'">🔔'+(n?' <span class="chip crit" style="margin-left:2px">'+n+'</span>':'')+'</a>';
 }
 function quandoAviso(iso){ var d=new Date(iso); return isNaN(d)?'':pad(d.getDate())+'/'+pad(d.getMonth()+1)+' '+pad(d.getHours())+':'+pad(d.getMinutes()); }
+function prefsAvisos(){
+  var p=Notif.pref;
+  return '<section class="card sec pad"><h3 style="margin-bottom:8px">Preferências de aviso</h3><form id="fpref">'
+    +'<label class="row" style="gap:8px;margin-bottom:8px"><input type="checkbox" name="email"'+(p.canais.indexOf('email')>=0?' checked':'')+'> Receber avisos por e-mail</label>'
+    +'<label class="row" style="gap:8px;margin-bottom:8px"><input type="checkbox" name="resumo"'+(p.resumo_diario?' checked':'')+'> Receber o resumo do dia (dias úteis, 7h)</label>'
+    +'<div class="row" style="gap:12px;margin-bottom:8px"><div class="fld" style="margin:0"><label>Silêncio a partir de</label><input type="time" name="ini" value="'+esc(p.silencio_ini)+'"></div><div class="fld" style="margin:0"><label>até</label><input type="time" name="fim" value="'+esc(p.silencio_fim)+'"></div></div>'
+    +'<p class="muted small" style="margin-bottom:10px">Durante o silêncio, e-mails comuns esperam o fim do período. Avisos críticos não podem ser desligados: sempre aparecem aqui e saem por e-mail na hora.</p>'
+    +'<button class="btn primary" type="submit">Salvar preferências</button></form></section>';
+}
 function vAvisos(){
   if(!Notif.ativo()) return '<div class="wrap"><div class="card empty"><h3>Avisos disponíveis na nuvem</h3><p>Conecte o aplicativo ao Supabase para receber avisos das obras. <a href="#/nuvem">Conectar</a></p></div></div>';
   var h='<div class="wrap"><div class="sec-h"><div><h1>Avisos</h1><p class="muted" style="margin-top:4px">O que precisa da sua atenção nas obras. Cada aviso aparece uma vez.</p></div>'
     +(Notif.naoLidas()?'<button class="btn" data-act="avisos-todos">Marcar tudo como lido</button>':'')+'</div>';
   if(Notif.erro) h+='<div class="callout crit sec">Não foi possível carregar os avisos: '+esc(Notif.erro)+'</div>';
   if(!Notif.ok && !Notif.erro) return h+'<div class="card sec"><p class="empty">Carregando avisos…</p></div></div>';
-  if(!Notif.rows.length) return h+'<div class="card sec empty"><h3>Nenhum aviso por enquanto</h3><p>Quando algo vencer ou ficar crítico, aparece aqui.</p></div></div>';
-  return h+'<section class="card sec"><ul class="hist">'+Notif.rows.map(function(n){
+  if(!Notif.rows.length) return h+prefsAvisos()+'<div class="card sec empty"><h3>Nenhum aviso por enquanto</h3><p>Quando algo vencer ou ficar crítico, aparece aqui.</p></div></div>';
+  return h+prefsAvisos()+'<section class="card sec"><ul class="hist">'+Notif.rows.map(function(n){
     return '<li><div class="q">'+quandoAviso(n.criada_em)+'</div><div><div class="row" style="gap:6px">'+(n.critico?'<span class="chip crit">Crítico</span>':'')+(n.lida_em?'':'<span class="chip steel">Novo</span>')+'</div>'
       +'<div style="margin-top:4px;font-weight:'+(n.lida_em?'400':'600')+'">'+esc(n.titulo)+'</div>'+(n.corpo?'<div class="d">'+esc(n.corpo)+'</div>':'')+'</div>'
       +'<div class="row">'+(n.link?'<a class="btn sm" href="'+esc(n.link)+'" data-act="aviso-abrir" data-id="'+n.id+'">Abrir</a>':'')+(n.lida_em?'':'<button class="btn sm ghost" data-act="aviso-lido" data-id="'+n.id+'">Lido</button>')+'</div></li>';

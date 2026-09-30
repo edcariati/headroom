@@ -57,6 +57,26 @@ const seed = () => ({
     p3: { obraId: 'a1', dataPrevista: dia(0) },
     p4: { obraId: 'g1', dataPrevista: dia(-5) }
   },
+  acoes: {
+    q1: { obraId: 'a1', status: 'aberta', prazo: dia(-1) },
+    q2: { obraId: 'a1', status: 'aberta', prazo: dia(-8) },
+    q3: { obraId: 'a1', status: 'concluida', prazo: dia(-8) },
+    q4: { obraId: 'a1', status: 'aberta', prazo: dia(0) }
+  },
+  rfis: {
+    f1: { obraId: 'a1', status: 'aberto', prazo: dia(-1) },
+    f2: { obraId: 'a1', status: 'respondido', prazo: dia(-1) },
+    f3: { obraId: 'a1', status: 'aberto', prazo: dia(0) }
+  },
+  materiais: {
+    t1: { obraId: 'a1', resultado: 'pendente', prazo: dia(-1) },
+    t2: { obraId: 'a1', resultado: 'aprovado', prazo: dia(-1) }
+  },
+  aditivos: {
+    d1: { obraId: 'a1', status: 'aguardando_cliente', enviadoEm: dia(-8) + 'T10:00:00Z' },
+    d2: { obraId: 'a1', status: 'aguardando_cliente', enviadoEm: dia(-7) + 'T10:00:00Z' },
+    d3: { obraId: 'a1', status: 'assinado', enviadoEm: dia(-30) + 'T10:00:00Z' }
+  },
   medicoes: {
     m1: { obraId: 'a1', status: 'em_analise', analiseDesde: dia(-7) + 'T10:00:00Z' },   // 7 dias: não
     m2: { obraId: 'a1', status: 'em_analise', analiseDesde: dia(-8) + 'T10:00:00Z' },   // 8 dias: sim
@@ -77,7 +97,7 @@ test('equivalência · eventos do servidor (SQL) = eventos do app, nos mesmos da
   assert.equal(r.status, 0, 'consulta SQL falhou: ' + r.stderr);
   const sql = r.stdout.split('\n').map((x) => x.trim()).filter(Boolean).sort();
 
-  assert.ok(app.length >= 15, 'o cenário precisa ter eventos de verdade (' + app.length + ')');
+  assert.ok(app.length >= 24, 'o cenário precisa ter eventos de verdade (' + app.length + ')');
   assert.deepEqual(sql, app);
 });
 

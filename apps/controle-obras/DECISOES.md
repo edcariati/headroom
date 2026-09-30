@@ -320,3 +320,13 @@ O Edson respondeu “pode” ao desenho de `docs/fase7/`; adotei as recomendaç�
 - **D-7.2.7 Resumo diário:** dias úteis, só contagens por tipo, não é criado se o usuário não tem pendências; quem desliga em preferências não recebe. O resumo semanal da diretoria fica para o passo 3.
 - **D-7.2.8 Central de avisos no app:** sino com contador, página `#/avisos`, marcar como lido (o usuário só consegue alterar `lida_em`), tempo real. Só aparece na nuvem v2.
 - **Não feito / depende do Edson:** função de borda que envia o e-mail (depende do provedor e do domínio), `pg_cron` (só existe no projeto real; o comando está comentado no fim da migração 0003) e push web.
+
+## Fase 7 — Passo 3 (7A.2: mais eventos, resumo semanal, WhatsApp por link, preferências)
+
+- **D-7.3.1 Eventos novos (migração 0004, com espelho no app e no teste de equivalência):** ação de reunião vencida e escalada (> `diasEscalar`, vai à diretoria), RFI vencido, decisão de material vencida, aditivo aguardando o cliente há mais de `diasEscalar` dias. Com isso são **12 dos ~25** eventos do Anexo B; os restantes (documentos/treinamentos, CNO, PPC, CPI/SPI, relatório, garantia, visita, chamado, satisfação, item crítico de compra, equipamento parado) entram junto dos blocos a que pertencem.
+- **D-7.3.2 Resumo semanal:** segunda-feira, só para o dono, com contagem de pendências por obra (sem valores). Não sai se não há pendência.
+- **D-7.3.3 Mensagem ao prestador por `wa.me`:** botão “Enviar pelo WhatsApp” nas ocorrências e “WhatsApp” nas ações; o app monta o texto (editável, sem valores em R$), normaliza o telefone (DDD obrigatório, +55 automático), abre o WhatsApp e **registra o contato no histórico** (`interacoes`, canal WhatsApp). Decidi **não criar a tabela `contatos_prestador`** prevista no desenho: o histórico já existe em cada registro e funciona também sem nuvem. **Limite honesto:** o app registra que a mensagem foi *aberta* no WhatsApp; ele não tem como saber se a pessoa tocou em enviar.
+- **D-7.3.4 Preferências de aviso** (página Avisos): e-mail liga/desliga, resumo diário, horário de silêncio pessoal. Aviso crítico não desliga (fica na central e sai por e-mail).
+- **D-7.3.5 Cobrança em degraus:** cada degrau é um evento próprio (vencida → escalada), com chave própria; nunca um aviso por dia.
+- **Ação com `responsavelUserId`:** ainda não feito (as ações vão para a engenharia da obra, como previsto no desenho). Entra quando houver seletor de usuários com a nuvem real (os nomes de outros usuários ainda não são legíveis pela RLS atual).
+- **Segue pendente (depende do Edson):** provedor de e-mail, `pg_cron`, projeto Supabase de desenvolvimento.

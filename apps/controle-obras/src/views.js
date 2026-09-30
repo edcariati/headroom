@@ -522,10 +522,36 @@ function openOc(id){
     +'<div class="row" style="margin-bottom:10px"><span class="chip '+(o.gravidade==='critica'?'crit':(o.gravidade==='importante'?'warn':''))+'">'+GRAV[o.gravidade]+'</span><span class="chip">'+esc(OC_STATUS[o.status])+'</span>'+(o.etapa?'<span class="chip">Etapa '+o.etapa+'</span>':'')+(v?'<span class="chip crit">Venceu há '+plural(atrasoOc(o),'dia','dias')+'</span>':'')+'</div>'
     +'<p style="white-space:pre-wrap">'+esc(o.descricao)+'</p>'+thumbs(o.fotos)
     +'<dl class="small" style="display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:14px 0"><dt class="muted">Tipo</dt><dd style="margin:0">'+esc(t.n)+'<div class="tiny muted">Aditivo: '+esc(t.adt)+'</div></dd><dt class="muted">Local</dt><dd style="margin:0">'+esc(o.local||'—')+'</dd><dt class="muted">Responsável</dt><dd style="margin:0">'+esc(prestNome(o.prestadorId)||'A definir')+'</dd><dt class="muted">Prazo</dt><dd style="margin:0">'+fmt(o.prazo)+'</dd><dt class="muted">Aberta em</dt><dd style="margin:0">'+fmt(o.criadoEm)+' por '+esc(Names.get(o.por))+'</dd>'+(o.status==='fechada'?'<dt class="muted">Evidência do fechamento</dt><dd style="margin:0">'+esc(o.evidencia||'—')+thumbs(o.fotosFechamento)+'</dd>':'')+'</dl>'
-    +'<div class="sec-h" style="margin-top:18px"><h3>Contatos e cobranças</h3><button class="btn sm" data-act="oc-contato" data-id="'+o.id+'" data-write>+ Registrar contato</button></div>'
+    +'<div class="sec-h" style="margin-top:18px"><h3>Contatos e cobranças</h3><button class="btn sm" data-act="oc-whats" data-id="'+o.id+'" data-write>Enviar pelo WhatsApp</button> <button class="btn sm" data-act="oc-contato" data-id="'+o.id+'" data-write>+ Registrar contato</button></div>'
     +(ints?'<ul style="list-style:none;padding:0;margin:10px 0 0">'+ints+'</ul>':'<p class="muted small" style="margin-top:8px">Nenhum contato registrado. Cobrar o responsável antes do prazo e anotar aqui.</p>')
     +'</div><div class="dlg-f"><button class="btn danger" data-act="oc-excluir" data-id="'+o.id+'" data-write style="margin-right:auto">Excluir</button>'+(o.tipo!=='apontamento'?'<button class="btn" data-act="adt-de-oc" data-id="'+o.id+'" data-write>Gerar aditivo</button>':'')+'<button class="btn" data-act="oc-editar" data-id="'+o.id+'" data-write>Editar</button>'+acoes+'</div>', true);
 }
+/* ---------- mensagem pronta ao prestador (WhatsApp por link wa.me; sem API, sem custo) ---------- */
+function waFone(s){ var d=String(s||'').replace(/\D/g,''); if(d.length>=12&&d.indexOf('55')===0) return d.length<=13?d:''; if(d.length===10||d.length===11) return '55'+d; return ''; }
+function waLink(fone,texto){ return 'https://wa.me/'+fone+'?text='+encodeURIComponent(texto); }
+function waTexto(col,o){
+  var ob=G('obras',o.obraId)||{}, nome=(col==='ocorrencias'?prestNome(o.prestadorId):o.responsavel)||'', prazo=o.prazo?fmt(o.prazo):'';
+  var assunto=col==='ocorrencias'?'o apontamento “'+short(o.descricao||o.tipo||'',120)+'”'+(o.local?' ('+o.local+')':''):'a pendência “'+short(o.descricao||'',120)+'”';
+  var venc=o.prazo&&o.prazo<hoje();
+  return 'Olá'+(nome?', '+nome:'')+'! Aqui é da Cariati, obra '+(ob.nome||'')+'.\n\nSobre '+assunto+(prazo?(venc?', que estava previsto para '+prazo+' e ainda está em aberto':', com prazo em '+prazo):'')+'.\n\nPode me confirmar quando será resolvido? Obrigado!';
+}
+function waForm(col,id){
+  var o=G(col,id); if(!o) return;
+  var p=col==='ocorrencias'&&o.prestadorId?G('prestadores',o.prestadorId):null;
+  openForm({title:'Enviar pelo WhatsApp', intro:'O aplicativo abre o WhatsApp com a mensagem pronta; você confere e toca em enviar. O contato fica registrado no histórico. Mensagens não levam valores em R$.',
+    fields:[{name:'fone',label:'WhatsApp de quem vai receber',value:(p&&p.contato)||'',ph:'(15) 99999-9999',required:true},{name:'texto',label:'Mensagem (pode editar)',type:'textarea',value:waTexto(col,o),required:true}],
+    submit:'Abrir o WhatsApp',
+    onSubmit:async function(v){
+      var f=waFone(v.fone); if(!f) return 'Telefone inválido. Informe DDD e número, por exemplo (15) 99999-9999.';
+      var txt=(v.texto||'').trim(); if(!txt) return 'Escreva a mensagem.';
+      var cur=G(col,id)||o, ints=(cur.interacoes||[]).concat([{data:hoje(), canal:'WhatsApp', com:(p&&p.nome)||cur.responsavel||'', texto:'Mensagem aberta no WhatsApp: '+short(txt,300), novoPrazo:'', por:Store.uid||null}]).slice(-50);
+      await Store.set(col, id, Object.assign({}, cur, {interacoes:ints}));
+      try{ window.open(waLink(f,txt),'_blank','noopener'); }catch(e){}
+      toast('WhatsApp aberto. O contato ficou registrado no histórico.');
+      if(col==='ocorrencias'){ setTimeout(function(){ openOc(id); },50); return false; }
+    }});
+}
+COBX.waForm=waForm; COBX.waFone=waFone; COBX.waLink=waLink; COBX.waTexto=waTexto;
 function contatoForm(id,col){
   col=col||'ocorrencias'; var o=G(col,id);
   openForm({title:'Registrar contato', intro:'Fica no histórico da ocorrência e serve de prova para reter medição e avaliar o prestador.',
@@ -610,6 +636,7 @@ var A={
   'oc-editar':function(d){ var o=G('ocorrencias',d.id); ocForm(o.obraId,o); },
   'oc-mover':function(d){ moverOc(d.id, d.to); },
   'oc-contato':function(d){ contatoForm(d.id); },
+  'oc-whats':function(d){ waForm('ocorrencias',d.id); },
   'oc-excluir':async function(d){ var ok=await confirmDlg('Excluir ocorrência?','<p>O histórico de contatos também será apagado. Prefira fechar a ocorrência, se ela foi resolvida.</p>','Excluir',true); if(ok){ await Store.del('ocorrencias',d.id); closeDlg(); } },
   'oc-filtro':function(d){ ui.ocFiltro=d.f; render(); },
   'prest-novo':function(){ prestForm(); },
