@@ -269,3 +269,9 @@ Obra encerrada ganha selo, e criar algo novo nela pede confirmação (uma vez po
 **D-5.7.3 — Agenda.** Emissão do relatório (dia 5), prazo de objeção do cliente e fim do contrato do cliente.
 
 **D-5.7.4 — Exclusão em cascata.** Apaga as coleções com `obraId` da obra; preserva empresas, despesas gerais (sem obra) e a configuração global (`config/p0_mapa`, `p0_ref`).
+
+## Fase 5 — Passo 8 (benchmark) e menu no celular
+
+**D-5.8.1 — Referência entre obras encerradas.** Na aba Encerramento: R$/m² real por etapa (mínimo, mediana, média, máximo e nº de obras) de **outras** obras encerradas da **mesma tipologia**, com área informada. Só entram etapas com custo apropriado. Sem obra comparável, o app avisa. A tipologia igual é decisão minha (provisória): dá para ampliar para todas as tipologias se o Edson preferir.
+
+**D-5.8.2 — Menu do topo no celular.** Os itens passam a quebrar linha em vez de rolar para o lado, para o DRE e a Nuvem não ficarem escondidos.

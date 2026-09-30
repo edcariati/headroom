@@ -10,6 +10,7 @@
 - **Passo 5:** avaliação de prestadores (7 critérios, sugestões automáticas, justificativa acima de 2 pontos, nota ponderada), ranking na página Prestadores, aviso ao contratar nota abaixo de 6 e avaliação pendente ao encerrar contrato.
 - **Passo 6:** encerramento da obra (checklist de 9 itens com justificativa), lições aprendidas e ajuste do P0 (manter × ajustar, R$/m², incidência, referência CSV, curva real, exportação calibrada). Selo e aviso em obra encerrada.
 - **Passo 7:** indicadores (margem, nota média, relatório), alertas e agenda da fase 5; cascata de exclusão preserva empresas, despesas gerais e configuração global; documentação em `docs/`.
+- **Passo 8:** referência R$/m² por etapa entre obras encerradas da mesma tipologia; menu do topo quebra linha no celular.
 
 ## Fase 4 — Custo, medição e financeiro (concluída)
 
@@ -23,6 +24,7 @@
 - **Passo 5:** painel orçado × comprometido × apropriado × pago por etapa, com “Sem etapa”, “Sem orçamento” e “Acima do orçado”.
 - **Passo 6:** aba Físico-financeiro com BAC, PV, EV, AC, CPI, SPI, EAC, três curvas S em SVG e quadro físico × financeiro. Aprovação de medição com CPI/SPI abaixo de 1 exige análise.
 - **Passo 7:** indicadores de custo e prazo no resumo, alertas e agenda financeiros, cascata de exclusão das coleções novas.
+- **Passo 8:** referência R$/m² por etapa entre obras encerradas da mesma tipologia; menu do topo quebra linha no celular.
 - **Passo 8:** curva ABC dos materiais e preços de referência (CSV) com alerta de item acima da referência + margem.
 
 ## Fase 3 — Suprimentos

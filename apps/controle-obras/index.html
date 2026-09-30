@@ -268,7 +268,9 @@ dialog::backdrop{background:rgba(10,18,22,.55)}
 
 @media (max-width:640px){
   h1{font-size:25px}
-  .top-in{gap:8px;padding:8px 12px}
+  .top-in{gap:8px;padding:8px 12px;flex-wrap:wrap}
+  .top .tools{order:2}
+  .top .nav{order:3;width:100%;overflow-x:visible;flex-wrap:wrap}
   .brand{font-size:16px}
   .wrap{padding:16px 12px 56px}
   .gantt{--lw:150px}
@@ -3749,6 +3751,22 @@ function p0AjusteForm(oid,etapa){
 }
 
 /* ---------- aba Encerramento e P0 ---------- */
+function benchmarkP0(o){
+  var por={}, obras=L('obras').filter(function(x){ return x.id!==o.id&&encerrada(x)&&(Number(x.area)||0)>0&&(x.tipologia||'')===(o.tipologia||''); });
+  obras.forEach(function(x){ p0Calc(x).linhas.forEach(function(l){ if(l.m2Real>0) (por[l.etapa]=por[l.etapa]||[]).push(l.m2Real); }); });
+  var linhas=Object.keys(por).map(Number).sort(function(a,b){ return a-b; }).map(function(n){
+    var v=por[n].slice().sort(function(a,b){ return a-b; }), k=v.length, med=k%2?v[(k-1)/2]:(v[k/2-1]+v[k/2])/2;
+    return {etapa:n, n:k, min:v[0], max:v[k-1], media:r2(v.reduce(function(s,x){ return s+x; },0)/k), mediana:r2(med)};
+  });
+  return {obras:obras.length, linhas:linhas};
+}
+COBX.benchmarkP0=benchmarkP0;
+function benchHtml(o){
+  var b=benchmarkP0(o), t=esc(o.tipologia||'sem tipologia');
+  var corpo=b.linhas.length?'<div class="tbl-scroll"><table class="tbl"><thead><tr><th>Etapa</th><th class="num">Obras</th><th class="num">Mínimo</th><th class="num">Mediana</th><th class="num">Média</th><th class="num">Máximo</th></tr></thead><tbody>'+b.linhas.map(function(l){ return '<tr><td>'+l.etapa+' · '+esc((ETAPAS.filter(function(e){ return e.n===l.etapa; })[0]||{}).nome||'')+'</td><td class="num">'+l.n+'</td><td class="num">'+brl(l.min)+'</td><td class="num">'+brl(l.mediana)+'</td><td class="num">'+brl(l.media)+'</td><td class="num">'+brl(l.max)+'</td></tr>'; }).join('')+'</tbody></table></div>'
+    :'<p class="muted pad">Ainda não há outras obras encerradas da tipologia “'+t+'” com área informada.</p>';
+  return '<section class="card sec"><div class="card-h"><div><h2>Referência entre obras encerradas</h2><p class="muted small">R$/m² real por etapa em outras obras encerradas de '+t+' ('+b.obras+' obra'+(b.obras===1?'':'s')+'). Só etapas com custo apropriado entram.</p></div></div>'+corpo+'</section>';
+}
 function tEncerramento(o){
   var oid=o.id, enc=encerrada(o), it=checklistEncerramento(o), pend=it.filter(function(x){ return !x.ok; }), ls=byObra('licoes',oid).sort(function(a,b){ return a.data<b.data?1:-1; });
   var stat=enc?'<div class="callout ok"><strong>Obra encerrada em '+fmt(o.encerradaEm)+'.</strong> <button class="btn sm" data-act="obra-reabrir" data-oid="'+oid+'" data-write>Reabrir obra</button></div>':'<div class="callout'+(pend.length?'':' ok')+'"><strong>'+(pend.length?plural(pend.length,'item pendente','itens pendentes')+' no checklist.':'Checklist completo: a obra pode ser encerrada.')+'</strong> Item pendente pode seguir com justificativa.</div>';
@@ -3762,7 +3780,7 @@ function tEncerramento(o){
       +'<div class="card-h" style="border-top:1px solid var(--line2)"><h3>Por disciplina</h3></div><div class="tbl-scroll"><table class="tbl"><thead><tr><th>Disciplina</th><th class="num">Orçado</th><th class="num">Real</th><th class="num">Desvio</th><th>Ação</th><th class="num">Incidência real</th><th>Faixa de referência</th></tr></thead><tbody>'+p.disciplinas.map(function(d){ return '<tr'+(d.fora?' style="background:var(--crit-soft)"':'')+'><td>'+esc(d.disciplina)+'</td><td class="num">'+brl(d.orcado)+'</td><td class="num">'+brl(d.real)+'</td><td class="num">'+brl(d.desvio)+'</td><td><span class="chip '+(d.acao==='ajustar'?'crit':'ok')+'">'+(d.acao==='ajustar'?'Ajustar':'Manter')+'</span></td><td class="num">'+fpc(d.incidencia)+'</td><td>'+(d.ref?String(d.ref.minimo).replace('.',',')+'% a '+String(d.ref.maximo).replace('.',',')+'%'+(d.fora?' <span class="chip crit">Fora da faixa</span>':' <span class="chip ok">Dentro</span>'):'—')+'</td></tr>'; }).join('')+'</tbody></table></div>'
       :'<p class="muted pad">Nenhuma etapa executada ou comprada ainda.</p>')+'</section>';
   var cr=curvaRealCusto(oid), curva=cr.length>1?'<section class="card sec pad"><h3 style="margin-bottom:8px">Curva real do custo (% acumulado por mês)</h3>'+svgGrafico({titulo:'Curva real de custo acumulado', labels:cr.map(function(x){ return mesCurto(x.mes); }), linhas:[{nome:'Custo apropriado acumulado',cor:'var(--steel)',v:cr.map(function(x){ return x.pct; })}], fmt:function(v){ return Math.round(v)+'%'; }})+'</section>':'';
-  return '<div class="sec-h"><div><h2>Encerramento e P0</h2><p class="muted small">Fechar a obra, guardar o que aprendemos e calibrar o preço inicial para as próximas.</p></div></div><div style="margin-top:14px">'+stat+'</div>'+check+licHtml+p0+curva;
+  return '<div class="sec-h"><div><h2>Encerramento e P0</h2><p class="muted small">Fechar a obra, guardar o que aprendemos e calibrar o preço inicial para as próximas.</p></div></div><div style="margin-top:14px">'+stat+'</div>'+check+licHtml+p0+benchHtml(o)+curva;
 }
 Object.assign(A5,{
   'obra-encerrar':function(d){ encerrarObra(d.oid); },

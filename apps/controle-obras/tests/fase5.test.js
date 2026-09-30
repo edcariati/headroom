@@ -915,7 +915,7 @@ test('fase 5 · passo 7 · todas as etapas liberadas há mais de 30 dias sem enc
   const etapas = {}; for (let n = 1; n <= 22; n++) etapas['o1_' + n] = { obraId: 'o1', n, status: 'liberada', liberadaEm: dia(-40), hist: [] };
   const e = await abrir({ seed: seedRel({ etapas }), hash: '#/obra/o1/resumo' });
   assert.match(e.app(), /Todas as etapas estão liberadas há mais de 30 dias e a obra não foi encerrada/);
-  const enc = await abrir({ seed: seedRel({ etapas, obras: { o1: Object.assign(obraAdm({ nome: 'X', empresaId: 'emp_cons' }), { situacao: 'encerrada', encerradaEm: dia(-5) }) } }), hash: '#/obra/o1/resumo' });
+  const enc = await abrir({ seed: seedRel({ etapas, obras: { o1: Object.assign(obraAdm({ nome: 'X', empresaId: 'emp_cons' }), { situacao: 'encerrada', situacao: 'encerrada', encerradaEm: dia(-5) }) } }), hash: '#/obra/o1/resumo' });
   assert.doesNotMatch(enc.app(), /Obra sem contrato do cliente|Todas as etapas estão liberadas/);
 });
 
@@ -947,4 +947,16 @@ test('fase 5 · passo 7 · excluir a obra apaga as coleções da fase 5 dela, se
   assert.ok(e.linhas('empresas').some((x) => x.id === 'emp1'));                    // empresa preservada
   assert.ok(e.linhas('lancamentos').some((x) => x.id === 'g'));                     // despesa geral preservada
   assert.ok(e.linhas('config').some((x) => x.id === 'p0_mapa'));                    // configuração global preservada
+});
+
+test('fase 5 · referência entre obras encerradas usa só a mesma tipologia e mostra mediana', async () => {
+  const e = await abrir({ seed: { obras: {
+    o1: obra({ nome: 'Atual', area: 100 }),
+    e1: obra({ nome: 'E1', area: 100, situacao: 'encerrada', encerradaEm: dia(-5) }),
+    e2: obra({ nome: 'E2', area: 100, situacao: 'encerrada', encerradaEm: dia(-5) }),
+    e3: obra({ nome: 'Sobrado', tipologia: 'Sobrado', area: 100, situacao: 'encerrada', encerradaEm: dia(-5) }) } }, hash: '#/obra/o1/encerramento' });
+  const b = e.x.benchmarkP0(Object.assign({}, e.linhas('obras').find((o) => o.id === 'o1')));
+  assert.equal(b.obras, 2);
+  assert.match(e.app(), /Referência entre obras encerradas/);
+  assert.match(e.app(), /2 obras/);
 });
