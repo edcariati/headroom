@@ -289,3 +289,108 @@ test('fase 5 · passo 2 · lançamento manual: validações e escape', async () 
   assert.equal(ls[0].origem, 'manual');
   assert.equal(e.win.__xss, undefined);
 });
+
+/* ---------------- passo 3: DRE por empresa e consolidado ---------------- */
+test('fase 5 · passo 3 · DRE da empresa: mesmo caso, com as despesas gerais por inteiro', async () => {
+  const e = await abrir({ seed: seedDRE() });
+  const E = e.x.dreEmpresa('emp1', M, M);
+  assert.equal(E.receita, 15000); assert.equal(E.impostos, 900); assert.equal(E.receitaLiquida, 14100);
+  assert.equal(E.custos, 4000);   assert.equal(E.resultadoBruto, 10100);
+  assert.equal(E.despesas, 1500); assert.equal(E.resultado, 8600);
+  assert.equal(arred(E.margem), 61);
+});
+
+test('fase 5 · passo 3 · a soma das obras fecha exatamente com o DRE da empresa', async () => {
+  const e = await abrir({ seed: seedDRE() });
+  const linhas = e.x.dreLinhasPorObra('emp1', M, M);
+  assert.equal(linhas.length, 2);
+  const soma = linhas.reduce((s, l) => s + l.d.resultado, 0);
+  assert.equal(Math.round(soma * 100) / 100, e.x.dreEmpresa('emp1', M, M).resultado);
+  ['receita', 'impostos', 'custos', 'despesas', 'resultado'].forEach((k) => {
+    assert.equal(Math.round(linhas.reduce((s, l) => s + l.d[k], 0) * 100) / 100, e.x.dreEmpresa('emp1', M, M)[k], k);
+  });
+});
+
+test('fase 5 · passo 3 · despesa geral de empresa sem obras aparece como "sem obra para ratear" e o total continua fechando', async () => {
+  const seed = { empresas: { emp1: { nome: 'Sem obras', ativa: true, criterioRateio: 'receita' } }, lancamentos: { g1: lanc({ obraId: '', categoria: 'despesa_geral', valor: 800 }) } };
+  const e = await abrir({ seed });
+  const linhas = e.x.dreLinhasPorObra('emp1', M, M);
+  assert.equal(linhas.length, 1);
+  assert.equal(linhas[0].nome, 'Despesas gerais sem obra para ratear');
+  assert.equal(linhas[0].d.resultado, -800);
+  assert.equal(e.x.dreEmpresa('emp1', M, M).resultado, -800);
+});
+
+test('fase 5 · passo 3 · consolidado = soma das empresas (inclusive obras sem empresa)', async () => {
+  const seed = seedDRE({
+    empresas: { emp1: { nome: 'Construtora', ativa: true, aliquotaImpostos: 6, criterioRateio: 'receita' }, emp2: { nome: 'Arquitetura', ativa: true, criterioRateio: 'igual' } },
+    obras: { oA: obraAdm({ nome: 'Obra A', empresaId: 'emp1' }), oB: obraAdm({ nome: 'Obra B', empresaId: 'emp1' }), oC: obraAdm({ nome: 'Projeto C', empresaId: 'emp2' }), oD: obra({ nome: 'Órfã' }) },
+    lancamentos: Object.assign({}, seedDRE().lancamentos, {
+      c1: lanc({ empresaId: 'emp2', obraId: 'oC', categoria: 'receita', valor: 3000 }), c2: lanc({ empresaId: 'emp2', obraId: 'oC', categoria: 'custo_direto', valor: 700 }), c3: lanc({ empresaId: 'emp2', obraId: '', categoria: 'despesa_geral', valor: 400 }),
+      d1: lanc({ empresaId: '', obraId: 'oD', categoria: 'receita', valor: 1000 })
+    })
+  });
+  const e = await abrir({ seed });
+  const cons = e.x.dreConsolidado(M, M);
+  const partes = ['emp1', 'emp2', ''].map((id) => e.x.dreEmpresa(id, M, M));
+  assert.equal(cons.receita, 15000 + 3000 + 1000);
+  assert.equal(cons.resultado, Math.round(partes.reduce((s, d) => s + d.resultado, 0) * 100) / 100);
+  assert.equal(cons.resultado, 8600 + (3000 - 700 - 400) + 1000);
+});
+
+test('fase 5 · passo 3 · a página DRE mostra o consolidado, o quadro por obra com total e os gráficos', async () => {
+  const e = await abrir({ seed: seedDRE(), hash: '#/dre' });
+  const t = e.app();
+  assert.match(t, /DRE consolidado/);
+  assert.match(t, /Obra A.*R\$\s*10\.000,00.*R\$\s*5\.400,00.*57,4%/);
+  assert.match(t, /Obra B.*R\$\s*3\.200,00.*68,1%/);
+  assert.match(t, /Total.*R\$\s*15\.000,00.*R\$\s*8\.600,00.*61%/);
+  assert.equal(e.doc.querySelectorAll('svg.lob').length, 1);
+  assert.match(t, /Ranking de margem por obra/);
+  assert.match(t, /Informação restrita à diretoria/);
+  const ranking = Array.from(e.doc.querySelectorAll('.hbar span:first-child')).map((s) => s.textContent);
+  assert.deepEqual(ranking, ['Obra B', 'Obra A']);      // maior margem primeiro
+});
+
+test('fase 5 · passo 3 · filtro por empresa e período', async () => {
+  const seed = seedDRE({ empresas: { emp1: { nome: 'Construtora', ativa: true, aliquotaImpostos: 6, criterioRateio: 'receita' }, emp2: { nome: 'Arquitetura', ativa: true, criterioRateio: 'igual' } }, lancamentos: Object.assign({}, seedDRE().lancamentos, { c1: lanc({ empresaId: 'emp2', obraId: '', categoria: 'despesa_geral', valor: 999 }) }) });
+  const e = await abrir({ seed, hash: '#/dre' });
+  const sel = e.doc.querySelector('[data-chg="dre-emp"]');
+  sel.value = 'emp1'; sel.dispatchEvent(new e.win.Event('change', { bubbles: true })); await e.tick();
+  assert.match(e.app(), /Construtora/);
+  assert.match(e.app(), /Neste quadro as despesas gerais da empresa entram por inteiro/);
+  assert.doesNotMatch(e.app(), /Projeto C/);
+  await e.click('[data-act="dreg-preset"][data-p="ano"]');
+  assert.match(e.doc.querySelector('[data-chg="dreg-per"][data-k="ini"]').value, /^\d{4}-01$/);
+});
+
+test('fase 5 · passo 3 · exportação CSV detalhada, uma linha por lançamento', async () => {
+  const seed = seedDRE({ lancamentos: Object.assign({}, seedDRE().lancamentos, { x1: lanc({ obraId: 'oA', categoria: 'custo_direto', valor: 1234.5, subcategoria: 'Deslocamento', descricao: 'Combustível; posto "Shell"' }), velho: lanc({ obraId: 'oA', competencia: mesAtras(8), categoria: 'receita', valor: 1 }) }) });
+  const e = await abrir({ seed });
+  const csv = e.x.csvLancamentos('__todas', M, M);
+  const linhas = csv.trim().split('\r\n');
+  assert.equal(linhas[0], 'empresa;obra;competencia;categoria;subcategoria;descricao;valor;origem');
+  assert.equal(linhas.length, 1 + 8);                                    // 7 do caso + o novo; o antigo fica fora do período
+  assert.ok(linhas.some((l) => l === 'Cariati Construtora Ltda;Obra A;' + M + ';Custo direto;Deslocamento;"Combustível; posto ""Shell""";1234,5;Manual'));
+  assert.ok(csv.indexOf(';1;') < 0);
+  const soEmp = e.x.csvLancamentos('emp_inexistente', M, M).trim().split('\r\n');
+  assert.equal(soEmp.length, 1);
+});
+
+test('fase 5 · passo 3 · despesa geral lançada pela página DRE', async () => {
+  const e = await abrir({ seed: seedDRE(), hash: '#/dre' });
+  await e.click('[data-act="despesa-nova"]');
+  await e.submit({ categoria: 'despesa_geral', competencia: M, empresaId: 'emp1', subcategoria: 'Contabilidade', valor: '600', descricao: 'Honorários do contador' });
+  const l = e.linhas('lancamentos').find((x) => x.descricao === 'Honorários do contador');
+  assert.equal(l.obraId, '');
+  assert.equal(l.empresaId, 'emp1');
+  assert.equal(e.x.dreEmpresa('emp1', M, M).despesas, 2100);
+  assert.equal(e.x.dreObra('oA', M, M).despesas, 1400);                   // 2.100 rateados por receita: 2/3 para a Obra A
+});
+
+test('fase 5 · passo 3 · texto do DRE é escapado', async () => {
+  const xss = '<img src=x onerror="window.__xss=10">';
+  const e = await abrir({ seed: seedDRE({ obras: { oA: obraAdm({ nome: xss, empresaId: 'emp1' }), oB: obraAdm({ nome: 'Obra B', empresaId: 'emp1' }) }, empresas: { emp1: { nome: xss, ativa: true, aliquotaImpostos: 6, criterioRateio: 'receita' } } }), hash: '#/dre' });
+  assert.equal(e.doc.querySelector('img[src="x"]'), null);
+  assert.equal(e.win.__xss, undefined);
+});

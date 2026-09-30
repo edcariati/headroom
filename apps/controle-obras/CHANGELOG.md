@@ -5,6 +5,7 @@
 - **Passo 0:** navegação da obra agrupada (8 grupos com subabas), URLs antigas preservadas.
 - **Passo 1:** empresas do grupo, empresa na obra, contrato do cliente e receita prevista por competência. Página DRE (menu do topo).
 - **Passo 2:** lançamentos, fechamento mensal com sugestões (receita e imposto), rateio de despesas gerais e DRE por obra com período, anterior e acumulado; repasse da Administração fora do resultado.
+- **Passo 3:** página DRE por empresa e consolidado, quadro por obra que fecha com a empresa, gráficos de 12 meses e ranking de margem, exportação CSV detalhada.
 
 ## Fase 4 — Custo, medição e financeiro (concluída)
 

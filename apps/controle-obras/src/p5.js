@@ -216,22 +216,23 @@ function lancForm(l, fixo){
   fixo=fixo||{};
   var obraFixa=fixo.obraId?G('obras',fixo.obraId):(l&&l.obraId?G('obras',l.obraId):null), empId=obraFixa?obraFixa.empresaId:(fixo.empresaId||(l&&l.empresaId)||'');
   if(obraFixa&&!obraFixa.empresaId){ blockDlg('Defina a empresa da obra',['O lançamento pertence a uma empresa. Edite a obra e escolha a empresa do grupo.'],'Obra sem empresa'); return; }
-  var obrasEmp=empId?obrasDaEmpresa(empId):[], cats=obraFixa?['receita','imposto','custo_direto']:Object.keys(LANC_CAT);
+  var obrasEmp=empId?obrasDaEmpresa(empId):[], cats=obraFixa?['receita','imposto','custo_direto']:(empId?Object.keys(LANC_CAT):['despesa_geral']), escolherEmp=!empId&&!obraFixa;
   openForm({title:l?'Editar lançamento':'Novo lançamento', wide:true, intro:esc(empresaNome(empId)||'Sem empresa')+(obraFixa?' — '+esc(obraFixa.nome):''),
     fields:[[{name:'categoria',label:'Categoria',type:'select',required:true,options:cats.map(function(k){ return [k,LANC_CAT[k]]; }),value:l?l.categoria:cats[0]},{name:'competencia',label:'Competência',type:'month',required:true,value:l?l.competencia:hoje().slice(0,7)}],
-      obraFixa?null:{name:'obraId',label:'Obra (vazio = despesa geral da empresa)',type:'select',options:selOpts(obrasEmp.map(function(o){ return [o.id,o.nome]; }),'Sem obra (despesa geral)'),value:l&&l.obraId},
+      escolherEmp?{name:'empresaId',label:'Empresa',type:'select',required:true,options:selOpts(empresasAtivas().map(function(e){ return [e.id,e.nome]; }),'Selecione…')}:null,
+      (obraFixa||escolherEmp)?null:{name:'obraId',label:'Obra (vazio = despesa geral da empresa)',type:'select',options:selOpts(obrasEmp.map(function(o){ return [o.id,o.nome]; }),'Sem obra (despesa geral)'),value:l&&l.obraId},
       {name:'subcategoria',label:'Subcategoria',value:l&&l.subcategoria,hint:'Sugestões: '+Object.keys(LANC_SUG).map(function(k){ return LANC_SUG[k].join(', '); }).join(' · ')},
       [{name:'valor',label:'Valor (R$, sempre positivo)',type:'number',min:0,step:'0.01',required:true,value:l&&l.valor},{name:'descricao',label:'Descrição',value:l&&l.descricao}],
       {name:'anexos',label:'Comprovante (foto ou PDF)',type:'anexos',value:(l&&l.anexos)||[]}].filter(Boolean),
     extra:l?'<button type="button" class="btn danger" data-act="lanc-excluir" data-id="'+l.id+'" style="margin-right:auto">Excluir</button>':'',
     onSubmit:async function(v){
-      if(!empId) return 'Escolha uma empresa: a obra precisa ter empresa.';
+      var emp_=empId||v.empresaId||''; if(!emp_) return 'Escolha a empresa.';
       if(!/^\d{4}-\d{2}$/.test(v.competencia||'')) return 'Informe a competência (mês e ano).';
       if(!(v.valor>0)) return 'Informe o valor, sempre positivo (o sinal vem da categoria).';
       var obraId=obraFixa?obraFixa.id:(v.obraId||'');
       if(v.categoria==='despesa_geral'&&obraId) return 'Despesa geral não tem obra: ela é rateada entre as obras da empresa.';
       if(v.categoria!=='despesa_geral'&&!obraId) return 'Receita, imposto e custo direto precisam de uma obra.';
-      var rec=Object.assign({origem:'manual', criadoEm:new Date().toISOString(), por:Store.uid||null}, l||{}, {empresaId:empId, obraId:obraId, competencia:v.competencia, categoria:v.categoria, subcategoria:(v.subcategoria||'').trim(), valor:r2(v.valor), descricao:(v.descricao||'').trim(), anexos:v.anexos||[]});
+      var rec=Object.assign({origem:'manual', criadoEm:new Date().toISOString(), por:Store.uid||null}, l||{}, {empresaId:emp_, obraId:obraId, competencia:v.competencia, categoria:v.categoria, subcategoria:(v.subcategoria||'').trim(), valor:r2(v.valor), descricao:(v.descricao||'').trim(), anexos:v.anexos||[]});
       delete rec.id; await Store.set('lancamentos', l?l.id:nid(), rec);
     }});
 }
@@ -282,4 +283,66 @@ document.addEventListener('change', function(e){
   var el=e.target.closest('[data-chg="dre-per"]'); if(el){ var p=Object.assign({}, drePeriodoObra()); p[el.dataset.k]=el.value; if(p.ini>p.fim){ if(el.dataset.k==='ini') p.fim=p.ini; else p.ini=p.fim; } ui.drePer=p; render(); return; }
   var s=e.target.closest('[data-chg="dre-sug"]'); if(s&&s.value){ ui.sugMes=s.value; render(); }
 });
-function vDRE(){ ensureEmpresas(); return '<div class="wrap"><h1>DRE</h1><p class="muted small" style="margin-top:4px">Resultado gerencial por obra e por empresa.</p>'+avisosDre()+empresasHtml()+'</div>'; }
+
+/* ================= DRE POR EMPRESA E CONSOLIDADO ================= */
+function dreEmpresa(eid,ini,fim){
+  var ls=lancDeEmpresa(eid).filter(function(l){ return l.competencia>=ini&&l.competencia<=fim; });
+  var r={receita:0,impostos:0,custos:0,despesas:0};
+  ls.forEach(function(l){ var v=Number(l.valor)||0; if(l.categoria==='receita') r.receita=r2(r.receita+v); else if(l.categoria==='imposto') r.impostos=r2(r.impostos+v); else if(l.categoria==='custo_direto') r.custos=r2(r.custos+v); else if(l.categoria==='despesa_geral') r.despesas=r2(r.despesas+v); });
+  return dreLinhas(r);
+}
+function somaDre(lista){
+  var r={receita:0,impostos:0,custos:0,despesas:0};
+  lista.forEach(function(d){ ['receita','impostos','custos','despesas'].forEach(function(k){ r[k]=r2(r[k]+d[k]); }); });
+  return dreLinhas(r);
+}
+function dreConsolidado(ini,fim){ return somaDre(idsEmpresas().map(function(id){ return dreEmpresa(id,ini,fim); })); }
+function idsEmpresas(){ var ids=L('empresas').map(function(e){ return e.id; }); if(L('obras').some(function(o){ return !o.empresaId; })||L('lancamentos').some(function(l){ return !l.empresaId; })) ids.push(''); return ids; }
+function dreDoEscopo(escopo,ini,fim){ return escopo==='__todas'?dreConsolidado(ini,fim):dreEmpresa(escopo==='__sem'?'':escopo,ini,fim); }
+// linhas "por obra" de uma empresa: as obras + o que não pertence a obra nenhuma (para o total fechar exatamente)
+function dreLinhasPorObra(eid,ini,fim){
+  var obras=obrasDaEmpresa(eid), linhas=obras.map(function(o){ return {nome:o.nome, oid:o.id, d:dreObra(o.id,ini,fim)}; });
+  var emp=dreEmpresa(eid,ini,fim), soma=somaDre(linhas.map(function(l){ return l.d; }));
+  var resto={receita:r2(emp.receita-soma.receita), impostos:r2(emp.impostos-soma.impostos), custos:r2(emp.custos-soma.custos), despesas:r2(emp.despesas-soma.despesas)};
+  if(resto.receita||resto.impostos||resto.custos||resto.despesas) linhas.push({nome:resto.despesas&&!resto.receita&&!resto.impostos&&!resto.custos?'Despesas gerais sem obra para ratear':'Lançamentos sem obra', oid:'', d:dreLinhas(resto)});
+  return linhas;
+}
+COBX.dreEmpresa=dreEmpresa; COBX.dreConsolidado=dreConsolidado; COBX.dreLinhasPorObra=dreLinhasPorObra;
+
+function csvLancamentos(escopo,ini,fim){
+  var ls=L('lancamentos').filter(function(l){ return l.competencia>=ini&&l.competencia<=fim&&(escopo==='__todas'||(l.empresaId||'')===(escopo==='__sem'?'':escopo)); }).sort(function(a,b){ return a.competencia<b.competencia?-1:(a.competencia>b.competencia?1:0); });
+  var linhas=[['empresa','obra','competencia','categoria','subcategoria','descricao','valor','origem']].concat(ls.map(function(l){ var o=l.obraId?G('obras',l.obraId):null; return [empresaNome(l.empresaId)||'Sem empresa', o?o.nome:'', l.competencia, LANC_CAT[l.categoria]||l.categoria, l.subcategoria||'', l.descricao||'', String(l.valor).replace('.',','), ORIGEM_LANC[l.origem||'manual']||l.origem]; }));
+  return linhas.map(function(l){ return csvLinha(l,';'); }).join('\r\n')+'\r\n';
+}
+COBX.csvLancamentos=csvLancamentos;
+
+function drePerGlobal(){ return ui.drePerG||perPadrao(); }
+function vDRE(){
+  ensureEmpresas();
+  var per=drePerGlobal(), ant=perAnterior(per), esc_=ui.dreEsc||'__todas', emps=L('empresas').sort(function(a,b){ return (a.nome||'').localeCompare(b.nome||''); });
+  var opts='<option value="__todas"'+(esc_==='__todas'?' selected':'')+'>Consolidado (todas as empresas)</option>'+emps.map(function(e){ return '<option value="'+esc(e.id)+'"'+(esc_===e.id?' selected':'')+'>'+esc(e.nome)+'</option>'; }).join('')+(idsEmpresas().indexOf('')>=0?'<option value="__sem"'+(esc_==='__sem'?' selected':'')+'>Sem empresa</option>':'');
+  var estilo='padding:6px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--ink)';
+  var filtros='<div class="row" style="gap:8px;margin:12px 0"><label class="small muted">Empresa <select data-chg="dre-emp" aria-label="Empresa" style="'+estilo+'">'+opts+'</select></label><button class="btn sm" data-act="dreg-preset" data-p="mes">Mês atual</button><button class="btn sm" data-act="dreg-preset" data-p="trimestre">Trimestre</button><button class="btn sm" data-act="dreg-preset" data-p="ano">Ano</button><label class="small muted">de <input type="month" data-chg="dreg-per" data-k="ini" value="'+per.ini+'" aria-label="Início do período" style="'+estilo+'"></label><label class="small muted">até <input type="month" data-chg="dreg-per" data-k="fim" value="'+per.fim+'" aria-label="Fim do período" style="'+estilo+'"></label><span class="grow"></span><button class="btn sm" data-act="dre-csv">Exportar CSV detalhado</button><button class="btn sm primary" data-act="despesa-nova" data-write>+ Despesa geral</button></div>';
+  var cols=[{t:perRotulo(per), d:dreDoEscopo(esc_,per.ini,per.fim)},{t:'Período anterior', d:dreDoEscopo(esc_,ant.ini,ant.fim)},{t:'Acumulado até '+mesCurto(per.fim), d:dreDoEscopo(esc_,'0000-01',per.fim)}];
+  var grupos=esc_==='__todas'?idsEmpresas():[esc_==='__sem'?'':esc_], linhasObra=[];
+  grupos.forEach(function(g){ dreLinhasPorObra(g,per.ini,per.fim).forEach(function(l){ linhasObra.push(Object.assign({emp:empresaNome(g)||'Sem empresa'}, l)); }); });
+  var tot=somaDre(linhasObra.map(function(l){ return l.d; })), fm=function(v){ return v==null?'—':(Math.round(v*1000)/10).toString().replace('.',',')+'%'; };
+  var tabObra='<section class="card sec"><div class="card-h"><div><h2>Por obra</h2><p class="muted small">Despesas gerais rateadas pelo critério de cada empresa. O total fecha com o DRE acima.</p></div></div><div class="tbl-scroll"><table class="tbl"><thead><tr><th>Obra</th>'+(esc_==='__todas'?'<th>Empresa</th>':'')+'<th class="num">Receita bruta</th><th class="num">Receita líquida</th><th class="num">Custos diretos</th><th class="num">Despesas rateadas</th><th class="num">Resultado</th><th class="num">Margem</th></tr></thead><tbody>'
+    +(linhasObra.length?linhasObra.map(function(l){ return '<tr><td>'+(l.oid?'<a href="#/obra/'+l.oid+'/dre">'+esc(l.nome)+'</a>':esc(l.nome))+'</td>'+(esc_==='__todas'?'<td>'+esc(l.emp)+'</td>':'')+'<td class="num">'+brl(l.d.receita)+'</td><td class="num">'+brl(l.d.receitaLiquida)+'</td><td class="num">'+brl(l.d.custos)+'</td><td class="num">'+brl(l.d.despesas)+'</td><td class="num"'+(l.d.resultado<0?' style="color:var(--crit)"':'')+'><strong>'+brl(l.d.resultado)+'</strong></td><td class="num">'+fm(l.d.margem)+'</td></tr>'; }).join('')+'<tr style="font-weight:600;background:var(--surface2)"><td>Total</td>'+(esc_==='__todas'?'<td></td>':'')+'<td class="num">'+brl(tot.receita)+'</td><td class="num">'+brl(tot.receitaLiquida)+'</td><td class="num">'+brl(tot.custos)+'</td><td class="num">'+brl(tot.despesas)+'</td><td class="num">'+brl(tot.resultado)+'</td><td class="num">'+fm(tot.margem)+'</td></tr>':'<tr><td colspan="8" class="muted" style="padding:16px">Nenhuma obra nesta seleção.</td></tr>')+'</tbody></table></div></section>';
+  var meses=mesesEntre(mesAdd(hoje().slice(0,7),-11),hoje().slice(0,7)), serie=meses.map(function(m){ return dreDoEscopo(esc_,m,m); });
+  var g1=svgGrafico({titulo:'Receita líquida e resultado por mês (últimos 12 meses)', labels:meses.map(mesCurto), barras:[{nome:'Receita líquida',cor:'var(--steel)',v:serie.map(function(d){ return d.receitaLiquida; })},{nome:'Resultado',cor:'var(--ok)',v:serie.map(function(d){ return d.resultado; })}], fmt:kfmt});
+  var rank=linhasObra.filter(function(l){ return l.oid&&l.d.margem!=null; }).sort(function(a,b){ return b.d.margem-a.d.margem; });
+  var g2=rank.length?'<div style="padding:8px 0">'+rank.map(function(l){ var pc=Math.max(0,Math.min(100,l.d.margem*100)); return '<div class="hbar" style="grid-template-columns:170px 1fr 60px"><span>'+esc(short(l.nome,22))+'</span><div class="t"><i style="width:'+pc+'%;background:'+(l.d.margem<0?'var(--crit)':'var(--steel)')+'"></i></div><span class="num">'+fm(l.d.margem)+'</span></div>'; }).join('')+'</div>':'<p class="muted small pad">Sem obras com receita no período.</p>';
+  return '<div class="wrap"><h1>DRE</h1><p class="muted small" style="margin-top:4px">Resultado gerencial por obra e por empresa.</p>'+avisosDre()+filtros
+    +'<section class="card"><div class="card-h"><h2>'+(esc_==='__todas'?'DRE consolidado':(esc_==='__sem'?'Sem empresa':esc(empresaNome(esc_))))+'</h2></div>'+dreTabelaHtml(cols)+(esc_!=='__todas'&&esc_!=='__sem'?'<p class="tiny muted pad">Neste quadro as despesas gerais da empresa entram por inteiro, sem rateio.</p>':'')+'</section>'
+    +tabObra+'<section class="card sec pad"><h3 style="margin-bottom:8px">Receita líquida e resultado por mês</h3>'+g1+'</section><section class="card sec"><div class="card-h"><h2>Ranking de margem por obra</h2></div>'+g2+'</section>'+empresasHtml()+'</div>';
+}
+Object.assign(A5,{
+  'dreg-preset':function(d){ var h=hoje().slice(0,7), y=h.slice(0,4); ui.drePerG=d.p==='mes'?{ini:h,fim:h}:(d.p==='trimestre'?{ini:mesAdd(h,-2),fim:h}:{ini:y+'-01',fim:y+'-12'}); render(); },
+  'dre-csv':function(){ var p=drePerGlobal(); baixar('dre-lancamentos-'+p.ini+'-a-'+p.fim+'.csv','﻿'+csvLancamentos(ui.dreEsc||'__todas',p.ini,p.fim),'text/csv').then(function(ok){ if(ok) toast('CSV dos lançamentos exportado.'); }); },
+  'despesa-nova':function(){ var e=ui.dreEsc; lancForm(null, e&&e!=='__todas'&&e!=='__sem'?{empresaId:e}:{}); }
+});
+document.addEventListener('change', function(e){
+  var s=e.target.closest('[data-chg="dre-emp"]'); if(s){ ui.dreEsc=s.value; render(); return; }
+  var el=e.target.closest('[data-chg="dreg-per"]'); if(el){ var p=Object.assign({}, drePerGlobal()); p[el.dataset.k]=el.value; if(p.ini>p.fim){ if(el.dataset.k==='ini') p.fim=p.ini; else p.ini=p.fim; } ui.drePerG=p; render(); }
+});

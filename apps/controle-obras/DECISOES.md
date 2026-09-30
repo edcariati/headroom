@@ -179,3 +179,13 @@ Os centavos de sobra vão para a obra de maior peso, então a soma das partes é
 **D-5.2.5 — Repasse (Administração).** Compras, medições (líquido) e locações **pagas no período**, mostradas num bloco separado, informativo, **fora do resultado**. Na Gestão o bloco não aparece.
 
 **D-5.2.6 — Avisos permanentes.** A tela do DRE mostra: “Informação restrita à diretoria; o app ainda não separa perfis” e o aviso de confirmação com o contador. **Risco registrado:** enquanto não houver perfis (fase 6), qualquer pessoa que abre o app vê o DRE.
+
+### Passo 3 — DRE por empresa e consolidado
+
+**D-5.3.1 — Fechamento garantido.** O quadro “por obra” tem o total calculado a partir das linhas e **sempre fecha** com o DRE da empresa: se sobrar algo que não é de obra nenhuma (despesa geral de empresa sem obras, ou lançamento sem obra), aparece uma linha própria
+(“Despesas gerais sem obra para ratear” ou “Lançamentos sem obra”). Obras sem empresa formam o grupo “Sem empresa” no consolidado. Consolidado = soma dos DREs de todas as empresas (mais “sem empresa”, se existir).
+
+**D-5.3.2 — Gráficos.** Barras de receita líquida e resultado dos últimos 12 meses e ranking de margem por obra (barras horizontais, maior margem primeiro; margem negativa em vermelho). SVG puro, tema claro e escuro.
+
+**D-5.3.3 — CSV detalhado.** Uma linha por lançamento do período e da empresa escolhida, colunas `empresa;obra;competencia;categoria;subcategoria;descricao;valor;origem`, separador `;`, valor com vírgula decimal e BOM para abrir direto no Excel brasileiro.
+*Desenho conforme a especificação; como o app gera o arquivo na hora a partir dos lançamentos, nenhum arquivo de exemplo foi criado no repositório.*
