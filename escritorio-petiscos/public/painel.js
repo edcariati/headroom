@@ -29,7 +29,8 @@
   }
 
   const media = (arr) => (arr.length ? arr.reduce((a, b) => a + Number(b), 0) / arr.length : null);
-  const nomeLanche = (id) => (dados.lanches.find((l) => l.id === id) || {}).nome || "Lanche " + id;
+  const infoLanche = (id) => dados.lanches.find((l) => l.id === id) || { id, nome: "Lanche " + id, codinome: "", descricao: "" };
+  const nomeLanche = (id) => { const l = infoLanche(id); return l.codinome ? `${l.codinome} · ${l.nome}` : l.nome; };
   const nomeAvaliador = (id) => (dados.avaliadores.find((a) => a.id === id) || {}).nome || "?";
 
   // ---------- Login ----------
@@ -344,6 +345,8 @@
     if (!dados) return;
     const s = statsLanche(Number($("sel-lanche").value || 1));
     const precos = s.av.map((a) => Number(a.preco));
+    const info = infoLanche(s.id);
+    $("desc-lanche").innerHTML = `<div class="rotulo-desc">${esc(info.codinome)} · ${esc(info.nome)}</div><p>${esc(info.descricao || "")}</p>`;
     kpis("kpis-lanche", [
       ["Avaliações", s.n],
       ["Nota final média", num(s.nota), "/ 10"],
@@ -413,7 +416,8 @@
           "Avaliador": p.nome,
           "Idade": p.idade ?? "",
           "Nº lanche": a.lanche_id,
-          "Lanche": nomeLanche(a.lanche_id),
+          "Codinome": infoLanche(a.lanche_id).codinome,
+          "Lanche": infoLanche(a.lanche_id).nome,
           "Tempo de espera": rotulo("espera", a.espera),
           "Chegou": rotulo("chegou", a.chegou),
           "Percepção de tamanho": rotulo("tamanho_percepcao", a.tamanho_percepcao),
@@ -431,7 +435,7 @@
   function linhasResumo() {
     return Array.from({ length: TOTAL }, (_, i) => {
       const s = statsLanche(i + 1);
-      const r = { "Nº": s.id, "Lanche": nomeLanche(s.id), "Avaliações": s.n, "Nota final média": s.nota == null ? "" : +s.nota.toFixed(2), "Preço médio (R$)": s.preco == null ? "" : +s.preco.toFixed(2) };
+      const r = { "Nº": s.id, "Codinome": infoLanche(s.id).codinome, "Lanche": infoLanche(s.id).nome, "Ingredientes": infoLanche(s.id).descricao, "Avaliações": s.n, "Nota final média": s.nota == null ? "" : +s.nota.toFixed(2), "Preço médio (R$)": s.preco == null ? "" : +s.preco.toFixed(2) };
       NOTAS.forEach(([c, rot]) => { const m = media(s.av.map((a) => a[c])); r[rot] = m == null ? "" : +m.toFixed(2); });
       OPCOES.chegou.concat(OPCOES.espera, OPCOES.tamanho_percepcao).forEach(([v, rot]) => {
         const campo = Object.keys(OPCOES).find((k) => OPCOES[k].some((o) => o[0] === v));
@@ -486,24 +490,34 @@
     XLSX.writeFile(wb, nomeArquivo("xlsx"));
   });
 
-  // ---------- Renomear ----------
+  // ---------- Renomear / cardápio ----------
   function renderNomes() {
     $("lista-nomes").innerHTML = dados.lanches
-      .map((l) => `<label><b>${l.id}</b><input type="text" maxlength="60" data-id="${l.id}" value="${esc(l.nome)}" /></label>`)
+      .map((l) => `<fieldset class="editar-lanche" data-id="${l.id}">
+        <legend>${l.id}</legend>
+        <label>Codinome<input type="text" maxlength="40" data-campo="codinome" value="${esc(l.codinome)}" /></label>
+        <label>Nome<input type="text" maxlength="60" data-campo="nome" value="${esc(l.nome)}" /></label>
+        <label class="largo">Ingredientes<textarea maxlength="300" data-campo="descricao">${esc(l.descricao)}</textarea></label>
+      </fieldset>`)
       .join("");
   }
 
   $("form-nomes").addEventListener("submit", async (ev) => {
     ev.preventDefault();
     const nomes = {};
-    document.querySelectorAll("#lista-nomes input").forEach((i) => { if (i.value.trim()) nomes[i.dataset.id] = i.value.trim(); });
+    document.querySelectorAll("#lista-nomes .editar-lanche").forEach((f) => {
+      const item = {};
+      f.querySelectorAll("[data-campo]").forEach((i) => { if (i.value.trim()) item[i.dataset.campo] = i.value.trim(); });
+      nomes[f.dataset.id] = item;
+    });
     const btn = $("btn-nomes");
     btn.disabled = true;
+    $("erro-nomes").textContent = "";
     try {
       await rpc("admin_renomear", { p_senha: senha, p_nomes: nomes });
       await carregar(senha);
       renderTudo();
-      toast("Nomes salvos ✓");
+      toast("Cardápio salvo ✓");
     } catch (e) {
       $("erro-nomes").textContent = e.message;
     } finally {

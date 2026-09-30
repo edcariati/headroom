@@ -43,7 +43,7 @@
 
       <form id="form-inicio" class="cartao">
         <h2>Vamos começar</h2>
-        <p class="muted">Você vai provar <b>20 lanches</b> e dar notas de 0 a 10 para cada um. Leva poucos minutos por lanche e ajuda muito a montar o cardápio!</p>
+        <p class="muted">Você vai provar <b>13 lanches</b> e dar notas de 0 a 10 para cada um. Leva poucos minutos por lanche e ajuda muito a montar o cardápio!</p>
         <label class="campo" for="nome">Seu nome *</label>
         <input id="nome" type="text" autocomplete="name" maxlength="80" required placeholder="Ex.: Maria Souza" />
         <label class="campo" for="idade">Idade</label>
@@ -51,6 +51,7 @@
         <div class="erro-msg" id="erro-inicio"></div>
         <button class="botao cheio" type="submit" id="btn-comecar">Começar a degustação →</button>
       </form>
+      <p class="link-cardapio"><a href="/cardapio">📋 Ver o cardápio da degustação</a></p>
     </section>
 
     <!-- 2. Lista de lanches -->
@@ -64,11 +65,12 @@
         <button class="link" id="btn-sair">Não é você?</button>
       </div>
       <div class="progresso">
-        <div class="rotulo"><span>Seu progresso</span><span id="progresso-txt">0 de 20</span></div>
-        <div class="trilho" role="progressbar" aria-valuemin="0" aria-valuemax="20" id="progresso-trilho"><div class="barra" id="progresso-barra"></div></div>
+        <div class="rotulo"><span>Seu progresso</span><span id="progresso-txt">0 de 13</span></div>
+        <div class="trilho" role="progressbar" aria-valuemin="0" aria-valuemax="13" id="progresso-trilho"><div class="barra" id="progresso-barra"></div></div>
       </div>
       <div class="grade" id="grade"></div>
       <p class="dica" id="dica">Toque no número do lanche que você está provando.</p>
+      <p class="link-cardapio"><a href="/cardapio" target="_blank" rel="noopener">📋 Ver o cardápio com os ingredientes</a></p>
     </section>
 
     <!-- 3. Ficha -->
@@ -77,6 +79,7 @@
         <button class="voltar" id="btn-voltar" type="button">← Voltar</button>
         <div class="titulo" id="ficha-titulo"></div>
       </div>
+      <div class="cartao desc-lanche" id="ficha-desc"></div>
       <form id="form-ficha" novalidate></form>
       <div class="rodape-ficha">
         <div class="dentro">

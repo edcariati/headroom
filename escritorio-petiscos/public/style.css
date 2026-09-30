@@ -156,8 +156,8 @@ textarea { min-height: 84px; resize: vertical; }
 .progresso .trilho { height: 16px; border-radius: 999px; background: rgba(255, 250, 242, 0.18); overflow: hidden; border: 2px solid rgba(255, 250, 242, 0.25); }
 .progresso .barra { height: 100%; width: 0; background: linear-gradient(90deg, var(--laranja-escuro), var(--laranja)); border-radius: 999px; transition: width 0.4s; }
 
-.grade { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-@media (min-width: 560px) { .grade { grid-template-columns: repeat(5, 1fr); } }
+.grade { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+@media (min-width: 560px) { .grade { grid-template-columns: repeat(4, 1fr); } }
 .lanche {
   position: relative;
   background: var(--papel);
@@ -169,11 +169,13 @@ textarea { min-height: 84px; resize: vertical; }
   font: inherit;
   color: var(--texto);
   box-shadow: 0 4px 0 var(--cafe-300);
-  min-height: 92px;
+  min-height: 108px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
 }
 .lanche .n { font-family: var(--display); font-size: 30px; line-height: 1; color: var(--cafe-700); }
-.lanche .nm { font-size: 11.5px; line-height: 1.15; color: var(--texto-2); overflow-wrap: anywhere; }
+.lanche .cod { font-weight: 700; font-size: 13.5px; line-height: 1.15; color: var(--cafe-800); padding: 0 2px; }
+.lanche .nm { font-size: 12px; line-height: 1.15; color: var(--texto-2); overflow-wrap: anywhere; }
+.lanche.feito .cod { color: var(--creme); }
 .lanche.feito { background: var(--cafe-800); box-shadow: 0 4px 0 var(--cafe-900); border-color: var(--laranja); }
 .lanche.feito .n { color: var(--laranja); }
 .lanche.feito .nm { color: var(--cafe-300); }
@@ -330,3 +332,36 @@ table.mapa .nome-lanche { background: none; border: 0; font: inherit; color: var
   table.mapa th:first-child, table.mapa td:first-child { position: static; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* ---------- Descrição do lanche e cardápio ---------- */
+.desc-lanche { border-left: 6px solid var(--laranja); }
+.desc-lanche .rotulo-desc { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--laranja-escuro); }
+.desc-lanche p { margin: 6px 0 0; font-size: 16px; color: var(--cafe-800); }
+.link-cardapio { text-align: center; margin: 14px 0 0; }
+.link-cardapio a { color: var(--laranja); font-weight: 700; }
+
+.cardapio { background: var(--papel); border-radius: var(--raio); box-shadow: var(--sombra); padding: 28px 22px; }
+.cardapio h1 { font-family: var(--display); font-weight: 400; text-align: center; color: var(--cafe-800); font-size: clamp(26px, 7vw, 38px); margin: 0; letter-spacing: 1px; }
+.cardapio .cardapio-sub { text-align: center; color: var(--laranja-escuro); font-weight: 700; letter-spacing: 3px; text-transform: uppercase; font-size: 13px; margin: 6px 0 22px; }
+.item-cardapio { display: grid; grid-template-columns: 44px 1fr; gap: 4px 14px; padding: 16px 0; border-bottom: 2px dashed var(--linha); }
+.item-cardapio:last-of-type { border-bottom: 0; }
+.item-cardapio .num { grid-row: span 3; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--cafe-800); color: var(--laranja); font-family: var(--display); font-size: 20px; }
+.item-cardapio .cod { font-family: var(--display); font-size: 21px; color: var(--cafe-800); line-height: 1.1; text-transform: uppercase; }
+.item-cardapio .nome { font-weight: 700; color: var(--laranja-escuro); font-size: 15px; }
+.item-cardapio .ing { color: var(--texto-2); font-size: 15px; margin: 2px 0 0; }
+@media (min-width: 760px) {
+  .lista-cardapio { columns: 2; column-gap: 36px; }
+  .item-cardapio { break-inside: avoid; }
+}
+@media print {
+  .cardapio { box-shadow: none; padding: 0; }
+  .nao-imprimir { display: none !important; }
+}
+
+.editar-lanche { border: 2px solid var(--linha); border-radius: 12px; padding: 10px 14px 14px; margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+.editar-lanche legend { font-family: var(--display); color: var(--laranja-escuro); padding: 0 6px; font-size: 18px; }
+.editar-lanche label { display: block; font-size: 12px; font-weight: 700; color: var(--texto-2); text-transform: uppercase; letter-spacing: 0.5px; }
+.editar-lanche label.largo { grid-column: 1 / -1; }
+.editar-lanche input, .editar-lanche textarea { margin-top: 4px; font-size: 15px; padding: 9px 11px; text-transform: none; letter-spacing: 0; font-weight: 400; }
+.editar-lanche textarea { min-height: 64px; }
+.renomear:has(.editar-lanche) { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }

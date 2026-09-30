@@ -3,7 +3,7 @@
 // Estrutura no Blob:
 //   p/{id}.json              avaliador { id, segredo, nome, idade, criado_em }
 //   av/{id}/{lanche}.json    avaliação de um lanche por um avaliador
-//   cfg/lanches.json         nomes dos lanches { "1": "X-Burguer", ... }
+//   cfg/cardapio.json        lanches editados no painel { "1": { nome, codinome, descricao }, ... }
 //
 // O avaliador recebe o token "{id}.{segredo}" e só ele pode gravar as próprias notas.
 // O painel exige a senha da variável de ambiente ADMIN_SENHA.
@@ -11,7 +11,23 @@
 import { put, get, list, del } from "@vercel/blob";
 import { randomUUID, timingSafeEqual, createHash } from "node:crypto";
 
-const TOTAL = 20;
+// Cardápio da degustação (valores iniciais; o painel pode editar).
+const CARDAPIO = [
+  ["Burger", "O CLT", "Pão, carne, queijo muçarela, maionese e catupiry."],
+  ["Salada", "O Estagiário", "Pão, carne, queijo muçarela, maionese, catupiry, tomate, cebola e repolho."],
+  ["Bacon", "O PJ", "Pão, carne, queijo muçarela, repolho, maionese, catupiry e tomate."],
+  ["Onion Burger", "O Analista", "Pão, carne, queijo cheddar, barbecue e anéis de cebola empanados."],
+  ["Bacon MK", "O Especialista", "Pão, carne, queijo provolone, bacon e doce de leite."],
+  ["Burgueritos", "O Sócio", "Pão, carne, queijo cheddar Polenghi, maionese e Doritos."],
+  ["Toscana", "O Embaixador", "Pão, carne, linguiça toscana, queijo provolone, maionese, rúcula e abacaxi chapeado."],
+  ["Gorgon Burger", "O Visionário", "Pão, carne, queijo gorgonzola, cebola caramelizada no barbecue com mel e rúcula."],
+  ["Frango", "O Comandante", "Pão, frango empanado ou filé, repolho, queijo provolone, maionese e catupiry."],
+  ["Kids", "O Júnior", "Pão, carne e queijo muçarela."],
+  ["Vegan", "O Naturalista", "Pão, carne e queijo veganos, tomate, rúcula e cebola."],
+  ["Double", "O Diretor", "Pão, 2 carnes, 2 queijos cheddar, maionese, catupiry e tomate."],
+  ["Alma Gêmea", "O Apaixonado", "Pão, carne, queijo muçarela e goiabada."],
+];
+const TOTAL = CARDAPIO.length;
 const OPCOES = {
   espera: ["ate10", "10a20", "mais20"],
   chegou: ["quente", "morno", "frio"],
@@ -72,8 +88,13 @@ const idValido = (id) => typeof id === "string" && /^[0-9a-f-]{36}$/.test(id);
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function nomesLanches() {
-  const cfg = (await lerJson("cfg/lanches.json")) || {};
-  return Array.from({ length: TOTAL }, (_, i) => ({ id: i + 1, nome: cfg[i + 1] || `Lanche ${i + 1}` }));
+  const cfg = (await lerJson("cfg/cardapio.json")) || {};
+  return CARDAPIO.map(([nome, codinome, descricao], i) => ({
+    id: i + 1,
+    nome: cfg[i + 1]?.nome || nome,
+    codinome: cfg[i + 1]?.codinome || codinome,
+    descricao: cfg[i + 1]?.descricao || descricao,
+  }));
 }
 
 async function avaliadorPorToken(token) {
@@ -87,7 +108,7 @@ async function avaliadorPorToken(token) {
 async function avaliacoesDe(id) {
   const blobs = await listarTudo(`av/${id}/`);
   const av = await lerVarios(blobs.map((b) => b.pathname));
-  return av.sort((a, b) => a.lanche_id - b.lanche_id);
+  return av.filter((a) => a.lanche_id <= TOTAL).sort((a, b) => a.lanche_id - b.lanche_id);
 }
 
 async function checarSenha(senha) {
@@ -181,20 +202,26 @@ const FUNCOES = {
         .map(({ id, nome, idade, criado_em }) => ({ id, nome, idade, criado_em }))
         .sort((a, b) => a.criado_em.localeCompare(b.criado_em)),
       avaliacoes: avaliacoes
-        .filter((a) => vivos.has(a.avaliador_id))
+        .filter((a) => vivos.has(a.avaliador_id) && a.lanche_id <= TOTAL)
         .sort((a, b) => a.criado_em.localeCompare(b.criado_em)),
     };
   },
 
   async admin_renomear({ p_senha, p_nomes }) {
     await checarSenha(p_senha);
-    const cfg = (await lerJson("cfg/lanches.json")) || {};
+    const cfg = (await lerJson("cfg/cardapio.json")) || {};
+    const limites = { nome: 60, codinome: 40, descricao: 300 };
     for (const [k, v] of Object.entries(p_nomes || {})) {
       const n = Number(k);
-      const nome = String(v ?? "").trim().slice(0, 60);
-      if (Number.isInteger(n) && n >= 1 && n <= TOTAL && nome) cfg[n] = nome;
+      if (!Number.isInteger(n) || n < 1 || n > TOTAL || !v || typeof v !== "object") continue;
+      const item = { ...(cfg[n] || {}) };
+      for (const [campo, max] of Object.entries(limites)) {
+        const t = String(v[campo] ?? "").trim().slice(0, max);
+        if (t) item[campo] = t;
+      }
+      cfg[n] = item;
     }
-    await gravarJson("cfg/lanches.json", cfg);
+    await gravarJson("cfg/cardapio.json", cfg);
     return null;
   },
 

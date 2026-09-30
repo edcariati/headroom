@@ -33,7 +33,7 @@
         <button data-aba="resumo" class="ativa">Resumo</button>
         <button data-aba="lanches">Por lanche</button>
         <button data-aba="avaliadores">Avaliadores</button>
-        <button data-aba="nomes">Renomear lanches</button>
+        <button data-aba="nomes">Cardápio</button>
         <button data-aba="link">Link para enviar</button>
         <button id="btn-atualizar" style="margin-left:auto">↻ Atualizar</button>
       </nav>
@@ -89,6 +89,7 @@
           <label class="campo" for="sel-lanche" style="margin-top:0">Escolha o lanche</label>
           <select id="sel-lanche"></select>
         </div>
+        <div class="cartao desc-lanche" id="desc-lanche"></div>
         <div class="kpis" id="kpis-lanche"></div>
         <div class="linha-graficos">
           <div class="cartao"><h3>Média por critério</h3><div id="criterios"></div></div>
@@ -118,11 +119,14 @@
       <!-- Renomear -->
       <section data-painel="nomes" class="escondido">
         <form class="cartao" id="form-nomes">
-          <h2>Nomes dos 20 lanches</h2>
-          <p class="muted">Os avaliadores veem estes nomes abaixo de cada número. Deixe em branco para manter o nome atual.</p>
+          <div class="acoes" style="justify-content:space-between">
+            <h2 style="margin:0">Cardápio da degustação</h2>
+            <a class="botao pequeno secundario" href="/cardapio" target="_blank" rel="noopener">📋 Ver cardápio</a>
+          </div>
+          <p class="muted">Codinome, nome e ingredientes de cada lanche. É o que os avaliadores veem na lista, na ficha e no cardápio. Campo em branco mantém o valor atual.</p>
           <div class="renomear" id="lista-nomes"></div>
           <div class="erro-msg" id="erro-nomes"></div>
-          <button class="botao" type="submit" id="btn-nomes" style="margin-top:12px">Salvar nomes</button>
+          <button class="botao" type="submit" id="btn-nomes" style="margin-top:12px">Salvar cardápio</button>
         </form>
       </section>
 

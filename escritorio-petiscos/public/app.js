@@ -131,9 +131,12 @@
   $("btn-sair").addEventListener("click", trocar);
 
   // ---------- Lista ----------
+  function infoLanche(id) {
+    return estado.lanches.find((x) => x.id === id) || { id, nome: "Lanche " + id, codinome: "", descricao: "" };
+  }
   function nomeLanche(id) {
-    const l = estado.lanches.find((x) => x.id === id);
-    return l ? l.nome : "Lanche " + id;
+    const l = infoLanche(id);
+    return l.codinome ? `${l.codinome} (${l.nome})` : l.nome;
   }
 
   function mostrarLista() {
@@ -153,7 +156,7 @@
       const b = document.createElement("button");
       b.type = "button";
       b.className = "lanche" + (a ? " feito" : "");
-      b.innerHTML = `${a ? `<span class="selo">✓ ${num(a.nota_final)}</span>` : ""}<span class="n">${i}</span><span class="nm">${esc(nomeLanche(i))}</span>`;
+      b.innerHTML = `${a ? `<span class="selo">✓ ${num(a.nota_final)}</span>` : ""}<span class="n">${i}</span><span class="cod">${esc(infoLanche(i).codinome).replace(/^(O|A|Os|As) /, "$1&nbsp;")}</span><span class="nm">${esc(infoLanche(i).nome)}</span>`;
       b.setAttribute("aria-label", `Lanche ${i}, ${nomeLanche(i)}${a ? ", avaliado com nota " + num(a.nota_final) : ", não avaliado"}`);
       b.addEventListener("click", () => abrirFicha(i));
       grade.appendChild(b);
@@ -230,7 +233,10 @@
       OBRIGATORIOS.concat(["gostou", "mudaria"]).forEach((c) => (estado.ficha[c] = existente[c]));
       estado.ficha.preco = existente.preco != null ? Number(existente.preco).toFixed(2).replace(".", ",") : "";
     }
-    $("ficha-titulo").innerHTML = `Lanche ${id}<small>${esc(nomeLanche(id))}${existente ? " · corrigindo avaliação" : ""}</small>`;
+    const info = infoLanche(id);
+    $("ficha-titulo").innerHTML = `${id}. ${esc(info.codinome || info.nome)}<small>${esc(info.nome)}${existente ? " · corrigindo avaliação" : ""}</small>`;
+    $("ficha-desc").innerHTML = `<div class="rotulo-desc">O que vem no lanche</div><p>${esc(info.descricao || "")}</p>`;
+    $("ficha-desc").classList.toggle("escondido", !info.descricao);
     const f = $("form-ficha");
     f.querySelectorAll(".pergunta").forEach((p) => p.classList.remove("falta"));
     f.querySelectorAll(".escala, .opcoes").forEach((g) => pintarGrupo(g, estado.ficha[g.dataset.campo]));

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Cardápio · Escritório Petiscos &amp; Cia</title>
+  <meta name="description" content="Os lanches da degustação do Escritório Petiscos & Cia e seus ingredientes." />
+  <meta name="theme-color" content="#24150c" />
+  <meta property="og:title" content="Cardápio · Escritório Petiscos & Cia" />
+  <meta property="og:description" content="Os lanches da degustação e seus ingredientes." />
+  <meta property="og:image" content="https://escritorio-petiscos.vercel.app/poster.jpg" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍔</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Roboto+Slab:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="pagina larga" style="max-width:980px;padding-bottom:40px">
+    <header class="marca">
+      <div class="chamada">Feito pra matar a fome</div>
+      <div class="nome">ESCRITÓRIO</div>
+      <div class="cia">PETISCOS &amp; CIA</div>
+    </header>
+
+    <section class="cardapio">
+      <h1>Cardápio</h1>
+      <div class="cardapio-sub">Degustação · a equipe completa</div>
+      <div class="lista-cardapio" id="lista"><p class="vazio">Carregando…</p></div>
+    </section>
+
+    <p class="link-cardapio nao-imprimir">
+      <a href="/">← Voltar para a degustação</a> &nbsp;·&nbsp;
+      <a href="#" id="btn-imprimir">🖨 Imprimir / salvar PDF</a>
+    </p>
+  </main>
+
+  <script src="config.js"></script>
+  <script src="api.js"></script>
+  <script>
+    (async function () {
+      const { rpc, esc } = window.EP;
+      const lista = document.getElementById("lista");
+      try {
+        const lanches = await rpc("listar_lanches");
+        lista.innerHTML = lanches.map((l) => `
+          <article class="item-cardapio">
+            <div class="num">${l.id}</div>
+            <div class="cod">${esc(l.codinome || l.nome)}</div>
+            <div class="nome">${esc(l.nome)}</div>
+            <p class="ing">${esc(l.descricao || "")}</p>
+          </article>`).join("");
+      } catch (e) {
+        lista.innerHTML = `<p class="vazio">${esc(e.message)}</p>`;
+      }
+      document.getElementById("btn-imprimir").addEventListener("click", (ev) => { ev.preventDefault(); window.print(); });
+    })();
+  </script>
+</body>
+</html>
