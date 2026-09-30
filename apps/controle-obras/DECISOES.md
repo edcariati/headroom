@@ -144,3 +144,11 @@ e um item que começa exatamente em 80% já é B. Faixas editáveis em “Editar
 **D8.2 — Preço de referência.** Vem de um CSV `codigo;preco` que o Edson fornece (ex.: tabela SINAPI). O app não acessa API externa. Os preços ficam num documento próprio (`orcItens`, id `ref_<obra>`), separado do orçamento, para não alterar a versão 1, que é imutável.
 Item cujo preço unitário passa de **referência × (1 + margem da obra)** ganha o selo “Acima” e um alerta. O alerta compara o **orçamento**; compras não têm código de item do orçamento, então não são comparadas.
 Limite prático: o documento de preços cresce ~30 bytes por código; um orçamento de milhares de itens continua muito abaixo dos 256 KB.
+
+## Fase 5 — DRE, relatório ao cliente e avaliação
+
+### Passo 0 — Navegação da obra
+
+**D-5.0.1 — Grupos e subabas.** A obra passa a ter 8 grupos (Visão geral, Planejamento, Execução e qualidade, Suprimentos, Prestadores, Custo e financeiro, Gestão, Encerramento), como na proposta da especificação, com as subabas do grupo em uma segunda barra.
+Cada grupo abre na primeira subaba. Um grupo só aparece quando ao menos uma aba dele já existe, e a segunda barra só aparece se o grupo tem mais de uma aba (as abas novas entram nos passos seguintes).
+As URLs `#/obra/ID/aba` de antes continuam iguais; aba desconhecida abre o Resumo. A barra de grupos e a de subabas quebram em linhas no celular em vez de rolar de lado, para nada ficar escondido.

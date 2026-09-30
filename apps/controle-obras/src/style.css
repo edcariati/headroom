@@ -139,6 +139,9 @@ button{font:inherit;color:inherit}
 /* abas */
 .tabs{display:flex;flex-wrap:wrap;gap:0 2px;border-bottom:1px solid var(--line);margin-top:20px;scrollbar-width:none}
 .tabs a{font-family:var(--f-head);font-weight:600;font-size:16px;color:var(--ink2);padding:9px 14px;white-space:nowrap;border-bottom:3px solid transparent;margin-bottom:-1px}
+.tabs.grupos a{font-size:17px}
+.tabs.sub{margin-top:0;border-bottom:1px solid var(--line2)}
+.tabs.sub a{font-size:14px;font-weight:500;padding:7px 12px}
 .tabs a:hover{text-decoration:none;color:var(--ink)}
 .tabs a[aria-current="page"]{color:var(--ink);border-bottom-color:var(--steel)}
 

@@ -80,14 +80,13 @@ function vPainel(){
 /* ---- obra ---- */
 function vObra(r){
   var o=G('obras',r.oid); if(!o) return notFound();
-  var tabs=[['resumo','Resumo'],['etapas','Etapas'],['cronograma','Cronograma'],['balanco','Balanço'],['semana','Semana e PPC'],['diario','Diário'],['ocorrencias','Ocorrências'],['compras','Compras'],['estoque','Estoque'],['locacoes','Locações'],['orcamento','Orçamento'],['medicao','Medição'],['financeiro','Financeiro'],['fisfin','Físico-financeiro'],['contratos','Contratos e frentes'],['projeto','RFI e materiais'],['documentos','Documentos'],['agenda','Agenda'],['reunioes','Reuniões'],['entrega','Pré-entrega']];
-  var fn={resumo:tResumo, etapas:tEtapas, cronograma:tCron, balanco:tBalanco, semana:tSemana, diario:tDiario, ocorrencias:tOcorr, agenda:tAgenda, reunioes:tReunioes, projeto:tProjeto, documentos:tDocumentos, entrega:tEntrega, compras:tCompras, estoque:tEstoque, locacoes:tLocacoes, orcamento:tOrcamento, medicao:tMedicao, financeiro:tFinanceiro, fisfin:tFisFin, contratos:tContratos}[r.tab]||tResumo;
+  var mapa=abaMapa(), tab=mapa[r.tab]?r.tab:'resumo', fn=mapa[tab];
   var meta=[o.cliente, o.endereco, o.tipologia, o.area?o.area+' m²':'', o.inicio?'início em '+fmt(o.inicio):''].filter(Boolean).map(esc).join(' · ');
   return '<div class="wrap"><a class="back" href="#/painel">← Todas as obras</a>'
     +'<div class="ob-head"><div class="grow"><h1>'+esc(o.nome)+(o.codigo?' <span class="muted small num">'+esc(o.codigo)+'</span>':'')+'</h1><div class="meta">'+chipMod(o.modalidade)+'<span>'+meta+'</span></div></div>'
     +'<div class="row"><button class="btn" data-act="obra-editar" data-oid="'+o.id+'" data-write>Editar obra</button></div></div>'
     +'<div style="margin-top:20px">'+regua(o.id,false)+legenda()+'</div>'
-    +'<nav class="tabs" aria-label="Seções da obra">'+tabs.map(function(t){ return '<a href="#/obra/'+o.id+'/'+t[0]+'"'+(r.tab===t[0]?' aria-current="page"':'')+'>'+t[1]+'</a>'; }).join('')+'</nav>'
+    +obraNav(o,tab)
     +'<div style="margin-top:20px">'+fn(o)+'</div></div>';
 }
 
@@ -623,7 +622,7 @@ var A={
 document.addEventListener('click', function(e){
   if(e.target.closest('[data-close]')){ closeDlg(); return; }
   var el=e.target.closest('[data-act]'); if(!el) return;
-  var f=A[el.dataset.act]||A2[el.dataset.act]||A3[el.dataset.act]||A4[el.dataset.act]||ANuvem[el.dataset.act]; if(f){ e.preventDefault(); f(el.dataset, el); }
+  var f=A[el.dataset.act]||A2[el.dataset.act]||A3[el.dataset.act]||A4[el.dataset.act]||A5[el.dataset.act]||ANuvem[el.dataset.act]; if(f){ e.preventDefault(); f(el.dataset, el); }
 });
 document.addEventListener('change', function(e){
   var el=e.target.closest('[data-chg="cond"]'); if(!el) return;

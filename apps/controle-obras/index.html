@@ -150,6 +150,9 @@ button{font:inherit;color:inherit}
 /* abas */
 .tabs{display:flex;flex-wrap:wrap;gap:0 2px;border-bottom:1px solid var(--line);margin-top:20px;scrollbar-width:none}
 .tabs a{font-family:var(--f-head);font-weight:600;font-size:16px;color:var(--ink2);padding:9px 14px;white-space:nowrap;border-bottom:3px solid transparent;margin-bottom:-1px}
+.tabs.grupos a{font-size:17px}
+.tabs.sub{margin-top:0;border-bottom:1px solid var(--line2)}
+.tabs.sub a{font-size:14px;font-weight:500;padding:7px 12px}
 .tabs a:hover{text-decoration:none;color:var(--ink)}
 .tabs a[aria-current="page"]{color:var(--ink);border-bottom-color:var(--steel)}
 
@@ -3042,6 +3045,34 @@ function abcHtml(o){
     +'<div class="tbl-scroll"><table class="tbl"><thead><tr><th>Classe</th><th>Código</th><th>Material</th><th class="num">Valor</th><th class="num">% do total</th><th class="num">% acumulado</th></tr></thead><tbody>'+c.itens.slice(0,60).map(function(i){ return '<tr><td><span class="chip '+cores[i.classe]+'">'+i.classe+'</span></td><td>'+esc(i.codigo)+'</td><td>'+esc(short(i.descricao,60))+'</td><td class="num">'+brl(i.total)+'</td><td class="num">'+(Math.round(i.pct*10)/10).toString().replace('.',',')+'%</td><td class="num">'+(Math.round(i.acumPct*10)/10).toString().replace('.',',')+'%</td></tr>'; }).join('')+'</tbody></table></div>'+(c.itens.length>60?'<p class="small muted pad">Mostrando os 60 maiores de '+c.itens.length+'.</p>':'')+'</section>';
 }
 Object.assign(A4,{ 'ref-importar':function(d){ refImportDlg(d.oid); } });
+/* ================= FASE 5 ================= */
+/* ---------- navegação da obra: grupos e subabas ---------- */
+var NAV_GRUPOS=[
+  ['geral','Visão geral',['resumo']],
+  ['plan','Planejamento',['etapas','cronograma','balanco','semana']],
+  ['exec','Execução e qualidade',['diario','ocorrencias','entrega','projeto']],
+  ['sup','Suprimentos',['compras','estoque','locacoes']],
+  ['prest','Prestadores',['contratos','avaliacoes']],
+  ['custo','Custo e financeiro',['orcamento','medicao','financeiro','fisfin','dre']],
+  ['gest','Gestão',['agenda','reunioes','documentos','relatorio']],
+  ['enc','Encerramento',['encerramento']]
+];
+var NAV_ROTULO={resumo:'Resumo', etapas:'Etapas', cronograma:'Cronograma', balanco:'Balanço', semana:'Semana e PPC', diario:'Diário', ocorrencias:'Ocorrências', entrega:'Pré-entrega', projeto:'RFI e materiais', compras:'Compras', estoque:'Estoque', locacoes:'Locações', contratos:'Contratos e frentes', avaliacoes:'Avaliações', orcamento:'Orçamento', medicao:'Medição', financeiro:'Financeiro', fisfin:'Físico-financeiro', dre:'DRE', agenda:'Agenda', reunioes:'Reuniões', documentos:'Documentos', relatorio:'Relatório mensal', encerramento:'Encerramento e P0'};
+function abaMapa(){
+  return {resumo:tResumo, etapas:tEtapas, cronograma:tCron, balanco:tBalanco, semana:tSemana, diario:tDiario, ocorrencias:tOcorr, entrega:tEntrega, projeto:tProjeto, compras:tCompras, estoque:tEstoque, locacoes:tLocacoes, contratos:tContratos, orcamento:tOrcamento, medicao:tMedicao, financeiro:tFinanceiro, fisfin:tFisFin, agenda:tAgenda, reunioes:tReunioes, documentos:tDocumentos};
+}
+function obraNav(o,tab){
+  var mapa=abaMapa(), base='#/obra/'+o.id+'/', grupo=NAV_GRUPOS.filter(function(g){ return g[2].indexOf(tab)>=0; })[0]||NAV_GRUPOS[0];
+  var grupos=NAV_GRUPOS.map(function(g){
+    var abas=g[2].filter(function(t){ return mapa[t]; }); if(!abas.length) return '';
+    return '<a href="'+base+abas[0]+'"'+(g===grupo?' aria-current="page"':'')+'>'+g[1]+'</a>';
+  }).join('');
+  var subs=grupo[2].filter(function(t){ return mapa[t]; });
+  return '<nav class="tabs grupos" aria-label="Grupos de seções da obra">'+grupos+'</nav>'
+    +(subs.length>1?'<nav class="tabs sub" aria-label="Seções de '+esc(grupo[1])+'">'+subs.map(function(t){ return '<a href="'+base+t+'"'+(t===tab?' aria-current="page"':'')+'>'+NAV_ROTULO[t]+'</a>'; }).join('')+'</nav>':'');
+}
+COBX.NAV_GRUPOS=NAV_GRUPOS;
+var A5={};
 /* ================= VISÕES ================= */
 var ui={semana:{}, ocFiltro:'todas', det:{}, ganttScroll:0, agMes:hoje().slice(0,7), agDia:hoje(), agArea:'todas', docMes:{}, orcBusca:'', orcEtapa:'', orcTipo:'', finFiltro:'abertas'};
 var lastKey=null;
@@ -3124,14 +3155,13 @@ function vPainel(){
 /* ---- obra ---- */
 function vObra(r){
   var o=G('obras',r.oid); if(!o) return notFound();
-  var tabs=[['resumo','Resumo'],['etapas','Etapas'],['cronograma','Cronograma'],['balanco','Balanço'],['semana','Semana e PPC'],['diario','Diário'],['ocorrencias','Ocorrências'],['compras','Compras'],['estoque','Estoque'],['locacoes','Locações'],['orcamento','Orçamento'],['medicao','Medição'],['financeiro','Financeiro'],['fisfin','Físico-financeiro'],['contratos','Contratos e frentes'],['projeto','RFI e materiais'],['documentos','Documentos'],['agenda','Agenda'],['reunioes','Reuniões'],['entrega','Pré-entrega']];
-  var fn={resumo:tResumo, etapas:tEtapas, cronograma:tCron, balanco:tBalanco, semana:tSemana, diario:tDiario, ocorrencias:tOcorr, agenda:tAgenda, reunioes:tReunioes, projeto:tProjeto, documentos:tDocumentos, entrega:tEntrega, compras:tCompras, estoque:tEstoque, locacoes:tLocacoes, orcamento:tOrcamento, medicao:tMedicao, financeiro:tFinanceiro, fisfin:tFisFin, contratos:tContratos}[r.tab]||tResumo;
+  var mapa=abaMapa(), tab=mapa[r.tab]?r.tab:'resumo', fn=mapa[tab];
   var meta=[o.cliente, o.endereco, o.tipologia, o.area?o.area+' m²':'', o.inicio?'início em '+fmt(o.inicio):''].filter(Boolean).map(esc).join(' · ');
   return '<div class="wrap"><a class="back" href="#/painel">← Todas as obras</a>'
     +'<div class="ob-head"><div class="grow"><h1>'+esc(o.nome)+(o.codigo?' <span class="muted small num">'+esc(o.codigo)+'</span>':'')+'</h1><div class="meta">'+chipMod(o.modalidade)+'<span>'+meta+'</span></div></div>'
     +'<div class="row"><button class="btn" data-act="obra-editar" data-oid="'+o.id+'" data-write>Editar obra</button></div></div>'
     +'<div style="margin-top:20px">'+regua(o.id,false)+legenda()+'</div>'
-    +'<nav class="tabs" aria-label="Seções da obra">'+tabs.map(function(t){ return '<a href="#/obra/'+o.id+'/'+t[0]+'"'+(r.tab===t[0]?' aria-current="page"':'')+'>'+t[1]+'</a>'; }).join('')+'</nav>'
+    +obraNav(o,tab)
     +'<div style="margin-top:20px">'+fn(o)+'</div></div>';
 }
 
@@ -3667,7 +3697,7 @@ var A={
 document.addEventListener('click', function(e){
   if(e.target.closest('[data-close]')){ closeDlg(); return; }
   var el=e.target.closest('[data-act]'); if(!el) return;
-  var f=A[el.dataset.act]||A2[el.dataset.act]||A3[el.dataset.act]||A4[el.dataset.act]||ANuvem[el.dataset.act]; if(f){ e.preventDefault(); f(el.dataset, el); }
+  var f=A[el.dataset.act]||A2[el.dataset.act]||A3[el.dataset.act]||A4[el.dataset.act]||A5[el.dataset.act]||ANuvem[el.dataset.act]; if(f){ e.preventDefault(); f(el.dataset, el); }
 });
 document.addEventListener('change', function(e){
   var el=e.target.closest('[data-chg="cond"]'); if(!el) return;
