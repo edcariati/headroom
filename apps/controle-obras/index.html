@@ -2308,6 +2308,242 @@ document.addEventListener('change', function(e){
   var el=e.target.closest('[data-chg="orc-filtro"]'); if(!el) return;
   ui[el.dataset.k]=el.value; render();
 });
+
+/* ================= MEDIÇÃO ================= */
+var MED_ST={rascunho:'Rascunho', em_analise:'Em análise', aprovada:'Aprovada', paga:'Paga'};
+var MED_CONTA=['em_analise','aprovada','paga'];   // situações que já contam como medido
+function medDaObra(oid){ return byObra('medicoes',oid).sort(function(a,b){ return (a.periodoFim<b.periodoFim?1:(a.periodoFim>b.periodoFim?-1:b.numero-a.numero)); }); }
+function medDoContrato(cid){ return L('medicoes').filter(function(m){ return m.contratoId===cid; }); }
+function medBruto(m){ return r2((m.itens||[]).reduce(function(s,i){ return s+r2((Number(i.qtdMedida)||0)*i.precoUnitario); },0)); }
+function medItensDoPrestador(oid,pid){
+  return orcRevisado(oid).itens.filter(function(i){ return i.prestadorId===pid && i.total>0 && i.sinal!==-1; });
+}
+function medQtdOutras(oid, mid, cod){
+  var s=0;
+  byObra('medicoes',oid).forEach(function(m){
+    if(m.id===mid || MED_CONTA.indexOf(m.status)<0) return;
+    (m.itens||[]).forEach(function(i){ if(i.codigo===cod) s+=Number(i.qtdMedida)||0; });
+  });
+  return Math.round(s*1e6)/1e6;
+}
+function avancoPrestador(oid,pid){
+  var ats=byObra('atividades',oid).filter(function(a){ return a.prestadorId===pid; });
+  if(!ats.length) return null;
+  var tot=0, acc=0;
+  ats.forEach(function(a){ var d=Math.max(1,diffDays(a.inicio,a.fim)+1); tot+=d; acc+=d*(a.avanco||0)/100; });
+  return acc/tot;
+}
+function retidoApontamento(m){
+  var crit=byObra('ocorrencias',m.obraId).filter(function(x){ return ocAberta(x) && x.gravidade==='critica' && x.prestadorId===m.prestadorId && x.etapa; });
+  var et={}; crit.forEach(function(x){ et[x.etapa]=1; });
+  var itens=(m.itens||[]).filter(function(i){ return et[i.etapa] && (Number(i.qtdMedida)||0)>0; });
+  return {itens:itens, etapas:Object.keys(et).map(Number).sort(function(a,b){return a-b;}), total:r2(itens.reduce(function(s,i){ return s+r2(i.qtdMedida*i.precoUnitario); },0))};
+}
+function medCalc(m,o){
+  var adm=modAdm(o), bruto=medBruto(m), pct=Number(m.retencaoPct)||0, rap=retidoApontamento(m).total, ret=r2((bruto-rap)*pct/100);
+  var desc=r2((m.descontos||[]).reduce(function(s,d){ return s+(Number(d.valor)||0); },0));
+  var deduz=r2(ret+desc+rap);
+  return {bruto:bruto, retencao:ret, descontos:desc, retidoApontamento:rap, deducoes:deduz, liquido:adm?r2(bruto-deduz):bruto, recomendado:adm?0:deduz};
+}
+function medTravas(m,o){
+  var oid=m.obraId, b=[], av=[], its=(m.itens||[]).filter(function(i){ return (Number(i.qtdMedida)||0)>0; });
+  var mes=(m.periodoFim||hoje()).slice(0,7);
+  var faltam=DOC_MENSAIS.filter(function(t){ var d=docPrest(oid,m.prestadorId,mes,t.k); return !(d&&d.status==='conferido'); });
+  if(faltam.length) b.push({cod:'docs', t:'Documentos de '+mesNome(mes)+' de '+(prestNome(m.prestadorId)||'prestador')+' ainda não conferidos: '+faltam.map(function(t){ return t.n; }).join(', ')+'. Confira na aba Documentos.'});
+  its.forEach(function(i){
+    var ac=Math.round(((Number(i.qtdAnterior)||0)*0+medQtdOutras(oid,m.id,i.codigo)+i.qtdMedida)*1e6)/1e6;
+    if(ac>i.qtdOrcada+1e-9) b.push({cod:'qtd', t:'Item '+i.codigo+': quantidade acumulada '+String(ac).replace('.',',')+' '+i.unidade+' passa da orçada ('+String(i.qtdOrcada).replace('.',',')+'). Excedente: '+String(Math.round((ac-i.qtdOrcada)*1e6)/1e6).replace('.',',')+'.'});
+  });
+  var ct=G('contratosPrest',m.contratoId), baseCt=ct&&ct.valor>0?ct.valor:medItensDoPrestador(oid,m.prestadorId).reduce(function(s,i){ return s+i.total; },0);
+  var medido=medDoContrato(m.contratoId).filter(function(x){ return x.id!==m.id && MED_CONTA.indexOf(x.status)>=0; }).reduce(function(s,x){ return s+medBruto(x); },0)+medBruto(m);
+  var pctMed=baseCt>0?medido/baseCt*100:0, avp=avancoPrestador(oid,m.prestadorId), avanco=avp==null?0:avp*100, tol=o.tolerAvanco==null?5:o.tolerAvanco;
+  if(pctMed>avanco+tol+1e-9 && !(m.justificativas||[]).some(function(j){ return j.trava==='avanco'; })){
+    b.push({cod:'avanco', t:'Medição acumulada de '+(Math.round(pctMed*10)/10).toString().replace('.',',')+'% do contrato passa do avanço registrado no cronograma ('+(Math.round(avanco*10)/10).toString().replace('.',',')+'%) mais a tolerância de '+String(tol).replace('.',',')+' pontos.'+(avp==null?' Não há atividades do prestador no cronograma.':'')+' Registre uma justificativa da engenharia ou atualize o avanço.'});
+  }
+  var vistas={};
+  its.forEach(function(i){
+    var n=i.etapa; if(!n||vistas[n]) return; vistas[n]=1;
+    var ap=0, rep=0, reins=0, pend=0;
+    etapaInfo(n).verif.forEach(function(_,k){ var f=fichaDoc(oid,n,k); if(!f) pend++; else if(f.resultado==='aprovado') ap++; else if(f.resultado==='reprovado') rep++; else if(f.resultado==='reinspecao') reins++; });
+    if(rep||reins) b.push({cod:'ficha', t:'Etapa '+n+' ('+etapaInfo(n).nome+'): há ficha de verificação '+(rep?'reprovada':'aguardando reinspeção')+'. Resolva antes de medir.'});
+    else if(!ap) b.push({cod:'ficha', t:'Etapa '+n+' ('+etapaInfo(n).nome+'): nenhuma ficha de verificação aprovada. Inspecione ao menos uma ficha antes de medir.'});
+    else if(pend) av.push('Etapa '+n+': '+plural(pend,'ficha ainda sem inspeção','fichas ainda sem inspeção')+'.');
+  });
+  its.forEach(function(i){
+    if(!i.aditivoId) return;
+    var a=G('aditivos',i.aditivoId);
+    if(!a||a.status!=='assinado') b.push({cod:'aditivo', t:'Item '+i.codigo+' vem de um aditivo que não está assinado pelo cliente.'});
+  });
+  var rap=retidoApontamento(m);
+  if(rap.total>0) av.push('Ocorrência crítica aberta do prestador na(s) etapa(s) '+rap.etapas.join(', ')+': '+brl(rap.total)+' ficam retidos até a ocorrência fechar.');
+  return {bloqueios:b, avisos:av, pctMedido:pctMed, avanco:avanco};
+}
+COBX.medCalc=medCalc; COBX.medTravas=medTravas; COBX.medItensDoPrestador=medItensDoPrestador; COBX.avancoPrestador=avancoPrestador;
+COBX.G=G; COBX.L=L; COBX.byObra=byObra;
+
+/* ---------- contas a pagar (geração; a tela vem no passo 4) ---------- */
+function contaId(origem,id){ return 'cp_'+origem+'_'+id; }
+function upsertConta(o, d){
+  var id=contaId(d.origem,d.origemId), cur=G('contasPagar',id);
+  if(cur && (cur.status==='paga')) return Promise.resolve(id);
+  var rec=Object.assign({status:'aberta', pagoEm:'', forma:'', obs:'', vencimento:'', criadoEm:new Date().toISOString(), por:Store.uid||null}, cur||{}, d, {obraId:o.id});
+  if(cur && cur.status==='cancelada') rec.status='aberta';
+  delete rec.id;
+  return Store.set('contasPagar', id, rec).then(function(){ return id; });
+}
+function baixarConta(origem,origemId,data){
+  var c=G('contasPagar',contaId(origem,origemId)); if(!c||c.status==='paga') return Promise.resolve();
+  return Store.set('contasPagar', c.id, Object.assign({}, c, {status:'paga', pagoEm:data||hoje()}));
+}
+COBX.contaId=contaId;
+
+/* ---------- aba Medição ---------- */
+function tMedicao(o){
+  var oid=o.id, ms=medDaObra(oid), adm=modAdm(o);
+  var head='<div class="sec-h"><div><h2>Medição</h2><p class="muted small">'+(adm?'A medição aprovada gera a conta a pagar, com retenção e descontos.':'A Cariati mede e aprova; o cliente paga. Retenção e desconto de dano são recomendações da Cariati ao cliente.')+'</p></div><button class="btn primary" data-act="med-nova" data-oid="'+oid+'" data-write>+ Nova medição</button></div>';
+  if(!ms.length) return head+'<div class="card empty" style="margin-top:14px"><h3>Nenhuma medição</h3><p>Escolha o contrato do prestador e o período. Só aparecem para medir os itens do orçamento revisado ligados ao prestador.</p></div>';
+  return head+'<div class="card tbl-scroll" style="margin-top:14px"><table class="tbl"><thead><tr><th>Nº</th><th>Prestador</th><th>Período</th><th class="num">Bruto</th><th class="num">'+(adm?'Líquido a pagar':'A pagar (cliente)')+'</th><th>Situação</th><th></th></tr></thead><tbody>'+ms.map(function(m){
+    var c=medCalc(m,o), parada=m.status==='em_analise' && m.analiseDesde && diffDays(m.analiseDesde.slice(0,10),hoje())>(o.diasEscalar==null?7:o.diasEscalar);
+    return '<tr><td class="num">'+m.numero+'</td><td><strong>'+esc(prestNome(m.prestadorId)||'Prestador removido')+'</strong></td><td>'+fmtC(m.periodoIni)+' a '+fmt(m.periodoFim)+'</td><td class="num">'+brl(c.bruto)+'</td><td class="num"><strong>'+brl(m.status==='rascunho'||m.status==='em_analise'?c.liquido:(m.valorLiquido!=null?m.valorLiquido:c.liquido))+'</strong></td><td><span class="chip '+(m.status==='paga'?'ok':(m.status==='aprovada'?'steel':(parada?'crit':(m.status==='em_analise'?'warn':''))))+'">'+MED_ST[m.status]+(parada?' há muito tempo':'')+'</span></td><td><button class="btn sm" data-act="med-abrir" data-id="'+m.id+'">Abrir</button></td></tr>';
+  }).join('')+'</tbody></table></div>';
+}
+function medNovaForm(oid){
+  var o=G('obras',oid), cts=byObra('contratosPrest',oid).filter(function(c){ return c.status!=='encerrado'; });
+  if(!cts.length){ blockDlg('Cadastre um contrato de prestador',['A medição é feita sobre o contrato do prestador. Abra “Contratos e frentes” e cadastre o contrato.'],'Sem contrato'); return; }
+  if(!orcVigente(oid)){ blockDlg('Importe o orçamento',['A medição usa os itens do orçamento revisado. Abra “Orçamento” e importe o CSV.'],'Sem orçamento'); return; }
+  openForm({title:'Nova medição',
+    fields:[{name:'contratoId',label:'Contrato',type:'select',required:true,options:selOpts(cts.map(function(c){ return [c.id, (prestNome(c.prestadorId)||'Prestador')+' — '+short(c.escopo,50)]; }),'Selecione…')},
+      [{name:'periodoIni',label:'Início do período',type:'date',required:true,value:addDays(hoje(),-30)},{name:'periodoFim',label:'Fim do período',type:'date',required:true,value:hoje()}]],
+    submit:'Continuar',
+    onSubmit:async function(v){
+      var c=G('contratosPrest',v.contratoId); if(!c) return 'Escolha o contrato.';
+      if(!v.periodoIni||!v.periodoFim) return 'Informe o período.';
+      if(v.periodoFim<v.periodoIni) return 'O fim do período não pode ser antes do início.';
+      if(!medItensDoPrestador(oid,c.prestadorId).length) return 'Nenhum item do orçamento está ligado a este prestador. Importe o orçamento com o nome do prestador na coluna “prestador”.';
+      var num=medDoContrato(c.id).reduce(function(m,x){ return Math.max(m,x.numero); },0)+1, id=nid();
+      await Store.set('medicoes', id, {obraId:oid, contratoId:c.id, prestadorId:c.prestadorId, numero:num, periodoIni:v.periodoIni, periodoFim:v.periodoFim, status:'rascunho', itens:[], retencaoPct:c.retencao==null||c.retencao===''?0:Number(c.retencao), descontos:[], justificativas:[], criadoEm:new Date().toISOString(), por:Store.uid||null, hist:[]});
+      setTimeout(function(){ medItensForm(id); }, 30); return false;
+    }});
+}
+function medItensForm(id){
+  var m=G('medicoes',id); if(!m) return;
+  if(m.status!=='rascunho'){ blockDlg('Medição não pode ser editada',['Medição '+MED_ST[m.status].toLowerCase()+' não aceita alterações.'],'Edição bloqueada'); return; }
+  var disp=medItensDoPrestador(m.obraId,m.prestadorId), atual={};
+  (m.itens||[]).forEach(function(i){ atual[i.codigo]=i.qtdMedida; });
+  var fields=disp.map(function(i,k){
+    var ant=medQtdOutras(m.obraId,m.id,i.codigo);
+    return {name:'q_'+k, label:i.codigo+' — '+short(i.descricao,60)+' ('+i.unidade+')', type:'number', min:0, step:'any', value:atual[i.codigo]==null?'':atual[i.codigo], hint:'Orçado '+String(i.quantidade).replace('.',',')+' · já medido '+String(ant).replace('.',',')+' · saldo '+String(Math.round((i.quantidade-ant)*1e6)/1e6).replace('.',',')+' · '+brl(i.precoUnitario)+' por '+i.unidade};
+  });
+  fields.push({name:'retencaoPct',label:'Retenção (%)',type:'number',min:0,max:100,step:'0.1',value:m.retencaoPct,hint:'Vem do contrato; pode ajustar.'});
+  openForm({title:'Medição nº '+m.numero+': quantidades do período', wide:true, intro:esc(prestNome(m.prestadorId))+' — '+fmtC(m.periodoIni)+' a '+fmt(m.periodoFim)+'. Informe só o que foi executado no período; deixe em branco o resto.', fields:fields, submit:'Salvar quantidades',
+    onSubmit:async function(v){
+      var itens=[], excesso=[];
+      disp.forEach(function(i,k){
+        var q=v['q_'+k]; if(q==null||q===''||q===0) return;
+        if(!(q>0)) { excesso.push(i.codigo+': quantidade inválida'); return; }
+        var ant=medQtdOutras(m.obraId,m.id,i.codigo);
+        if(ant+q>i.quantidade+1e-9) excesso.push(i.codigo+': '+String(q).replace('.',',')+' + '+String(ant).replace('.',',')+' já medidos passa da orçada ('+String(i.quantidade).replace('.',',')+'). Excedente '+String(Math.round((ant+q-i.quantidade)*1e6)/1e6).replace('.',','));
+        itens.push({codigo:i.codigo, descricao:i.descricao, unidade:i.unidade, precoUnitario:i.precoUnitario, qtdOrcada:i.quantidade, qtdAnterior:ant, qtdMedida:q, etapa:i.etapa, valor:r2(q*i.precoUnitario), aditivoId:i.aditivoId||''});
+      });
+      if(excesso.length) return 'Quantidade acima do orçado: '+excesso[0]+(excesso.length>1?' (e mais '+(excesso.length-1)+')':'')+'.';
+      if(!itens.length) return 'Informe a quantidade de ao menos um item.';
+      var upd=Object.assign({}, m, {itens:itens, retencaoPct:v.retencaoPct==null?0:v.retencaoPct}), c=medCalc(upd,G('obras',m.obraId));
+      if(c.liquido<0) return 'Retenções e descontos ('+brl(c.deducoes)+') passam do valor bruto ('+brl(c.bruto)+').';
+      upd.valorBruto=c.bruto;
+      await Store.set('medicoes', id, upd);
+      setTimeout(function(){ medAbrir(id); },30); return false;
+    }});
+}
+function medAbrir(id){
+  var m=G('medicoes',id); if(!m){ closeDlg(); return; }
+  var o=G('obras',m.obraId), adm=modAdm(o), c=medCalc(m,o), tv=medTravas(m,o), ed=m.status==='rascunho';
+  var stx={rascunho:'', em_analise:'', aprovada:'', paga:''}[m.status];
+  var itens=(m.itens||[]).length?'<div class="tbl-scroll"><table class="tbl"><thead><tr><th>Item</th><th class="num">Orçado</th><th class="num">Anterior</th><th class="num">Neste período</th><th class="num">Valor</th></tr></thead><tbody>'+m.itens.map(function(i){ return '<tr><td>'+esc(i.codigo)+' — '+esc(short(i.descricao,50))+'<div class="tiny muted">Etapa '+(i.etapa||'—')+' · '+brl(i.precoUnitario)+'/'+esc(i.unidade)+'</div></td><td class="num">'+String(i.qtdOrcada).replace('.',',')+'</td><td class="num">'+String(medQtdOutras(m.obraId,m.id,i.codigo)).replace('.',',')+'</td><td class="num">'+String(i.qtdMedida).replace('.',',')+'</td><td class="num">'+brl(r2(i.qtdMedida*i.precoUnitario))+'</td></tr>'; }).join('')+'</tbody></table></div>':'<p class="muted small">Nenhuma quantidade lançada ainda.</p>';
+  var danos=ed?L('danos').filter(function(d){ return d.obraId===m.obraId && d.causadorId===m.prestadorId && d.status==='aberta' && !(m.descontos||[]).some(function(x){ return x.ref===d.id; }); }):[];
+  var ct=G('contratosPrest',m.contratoId);
+  var descHtml=((m.descontos||[]).length?'<ul class="small" style="padding-left:18px">'+m.descontos.map(function(d,k){ return '<li>'+({dano:'Dano',adiantamento:'Adiantamento',outro:'Outro'})[d.tipo]+': '+esc(d.descricao||'')+' — <strong>'+brl(d.valor)+'</strong>'+(ed?' <button class="linkbtn" style="display:inline;color:var(--crit)" data-act="med-desc-rem" data-id="'+m.id+'" data-k="'+k+'" data-write aria-label="Remover desconto">×</button>':'')+'</li>'; }).join('')+'</ul>':'<p class="muted small">Nenhum desconto.</p>')
+    +(danos.length?'<div class="callout" style="margin-top:8px"><strong>Danos abertos causados por este prestador</strong>'+(ct&&ct.regraDano?'<p class="small">Regra do contrato: '+esc(ct.regraDano)+'</p>':'')+'<ul>'+danos.map(function(d){ return '<li>'+esc(short(d.descricao,60))+' — '+brl(d.custo)+' <button class="btn sm" data-act="med-desc-dano" data-id="'+m.id+'" data-dano="'+d.id+'" data-write>Aplicar desconto</button></li>'; }).join('')+'</ul></div>':'');
+  var tvHtml=(tv.bloqueios.length?'<div class="callout crit" style="margin-top:12px"><strong>Travas que impedem a aprovação</strong><ul>'+tv.bloqueios.map(function(b){ return '<li>'+esc(b.t)+'</li>'; }).join('')+'</ul>'+(tv.bloqueios.some(function(b){ return b.cod==='avanco'; })&&m.status!=='paga'&&m.status!=='aprovada'?'<p style="margin-top:8px"><button class="btn sm" data-act="med-justificar" data-id="'+m.id+'" data-write>Registrar justificativa de avanço</button></p>':'')+'</div>':(m.status==='rascunho'||m.status==='em_analise'?'<div class="callout ok" style="margin-top:12px"><strong>Nenhuma trava aberta.</strong></div>':''))
+    +(tv.avisos.length&&(m.status==='rascunho'||m.status==='em_analise')?'<div class="callout" style="margin-top:12px"><strong>Avisos</strong><ul>'+tv.avisos.map(function(a){ return '<li>'+esc(a)+'</li>'; }).join('')+'</ul></div>':'')
+    +((m.justificativas||[]).length?'<div class="small" style="margin-top:10px"><strong>Justificativas registradas</strong><ul style="padding-left:18px">'+m.justificativas.map(function(j){ return '<li>'+fmt(j.em)+' por '+esc(Names.get(j.por))+': '+esc(j.texto)+'</li>'; }).join('')+'</ul></div>':'');
+  var acts='';
+  if(m.status==='rascunho') acts='<button class="btn danger" data-act="med-excluir" data-id="'+m.id+'" data-write style="margin-right:auto">Excluir rascunho</button><button class="btn" data-act="med-itens" data-id="'+m.id+'" data-write>Editar quantidades</button><button class="btn primary" data-act="med-enviar" data-id="'+m.id+'" data-write>Enviar para análise</button>';
+  if(m.status==='em_analise') acts='<button class="btn" data-act="med-devolver" data-id="'+m.id+'" data-write style="margin-right:auto">Devolver a rascunho</button><button class="btn primary" data-act="med-aprovar" data-id="'+m.id+'" data-write>Aprovar medição</button>';
+  if(m.status==='aprovada') acts='<button class="btn primary" data-act="med-pagar" data-id="'+m.id+'" data-write>'+(adm?'Marcar como paga':'Cliente pagou')+'</button>';
+  var fin=m.status==='aprovada'||m.status==='paga'?{bruto:m.valorBruto,retencao:m.retencao,desconto:m.descontosValor,rap:m.valorRetidoApontamento,liquido:m.valorLiquido}:{bruto:c.bruto,retencao:c.retencao,desconto:c.descontos,rap:c.retidoApontamento,liquido:c.liquido};
+  openDlg('<div class="dlg-h"><h2>Medição nº '+m.numero+'</h2><button type="button" class="btn ghost ico" data-close aria-label="Fechar">✕</button></div><div class="dlg-b">'
+    +'<div class="row" style="margin-bottom:8px"><span class="chip steel">'+MED_ST[m.status]+'</span><strong>'+esc(prestNome(m.prestadorId)||'Prestador')+'</strong><span class="muted small">'+fmt(m.periodoIni)+' a '+fmt(m.periodoFim)+'</span></div>'
+    +'<p class="small muted">Acumulado medido do contrato: '+(Math.round(tv.pctMedido*10)/10).toString().replace('.',',')+'% · avanço no cronograma: '+(Math.round(tv.avanco*10)/10).toString().replace('.',',')+'%</p>'
+    +itens+'<h3 style="margin-top:14px">Descontos</h3>'+descHtml+(ed?'<p style="margin-top:8px"><button class="btn sm" data-act="med-desc-outro" data-id="'+m.id+'" data-write>+ Adiantamento ou outro desconto</button></p>':'')
+    +'<dl class="small" style="display:grid;grid-template-columns:1fr auto;gap:4px 14px;margin:16px 0 0"><dt>Valor bruto medido</dt><dd class="num" style="margin:0">'+brl(fin.bruto)+'</dd>'
+    +'<dt>Retenção ('+String(m.retencaoPct||0).replace('.',',')+'%)'+(adm?'':' — recomendada')+'</dt><dd class="num" style="margin:0">− '+brl(fin.retencao)+'</dd>'
+    +'<dt>Descontos'+(adm?'':' — recomendados')+'</dt><dd class="num" style="margin:0">− '+brl(fin.desconto)+'</dd>'
+    +'<dt>Retido por apontamento crítico'+(adm?'':' — recomendado')+'</dt><dd class="num" style="margin:0">− '+brl(fin.rap)+'</dd>'
+    +'<dt><strong>'+(adm?'Líquido a pagar':'A pagar pelo cliente')+'</strong></dt><dd class="num" style="margin:0;font-size:18px"><strong>'+brl(fin.liquido)+'</strong></dd></dl>'
+    +(adm?'':'<p class="small muted" style="margin-top:8px">Neste contrato a Cariati não retém nem paga. Recomendação ao cliente: reter '+brl(r2((fin.retencao||0)+(fin.desconto||0)+(fin.rap||0)))+'.</p>')
+    +tvHtml
+    +(m.analiseDesvio?'<div class="callout" style="margin-top:12px"><strong>Análise do desvio</strong><p class="small" style="white-space:pre-wrap">'+esc(m.analiseDesvio)+'</p></div>':'')
+    +'</div><div class="dlg-f">'+acts+'</div>', true);
+}
+function medAprovar(id){
+  var m=G('medicoes',id), o=G('obras',m.obraId);
+  if(m.status!=='em_analise'){ blockDlg('Não é possível aprovar',['Só uma medição em análise pode ser aprovada.'],'Aprovação bloqueada'); return; }
+  var tv=medTravas(m,o);
+  if(tv.bloqueios.length){ blockDlg('Não é possível aprovar a medição', tv.bloqueios.map(function(b){ return b.t; }), 'Antes de aprovar:'); return; }
+  var c=medCalc(m,o), ev=evm(o), abaixo=(ev.spi!=null&&ev.spi<1)||(modAdm(o)&&ev.cpi!=null&&ev.cpi<1);
+  var fim=async function(analise){
+    var upd=Object.assign({}, m, {status:'aprovada', aprovadaPor:Store.uid||null, aprovadaEm:new Date().toISOString(), valorBruto:c.bruto, retencao:c.retencao, descontosValor:c.descontos, valorRetidoApontamento:c.retidoApontamento, valorLiquido:c.liquido, hist:(m.hist||[]).concat([{de:m.status, para:'aprovada', data:new Date().toISOString(), por:Store.uid||null}]).slice(-20)});
+    if(analise) upd.analiseDesvio=analise;
+    await Store.set('medicoes', id, upd);
+    if(modAdm(o)) await upsertConta(o, {origem:'medicao', origemId:id, descricao:'Medição nº '+m.numero+' — '+(prestNome(m.prestadorId)||'prestador'), credorTipo:'prestador', credorId:m.prestadorId, valor:c.liquido, retencao:c.retencao, desconto:r2(c.descontos+c.retidoApontamento)});
+    toast('Medição aprovada.'+(modAdm(o)?' Conta a pagar gerada.':' O cliente foi informado no relatório.'));
+    setTimeout(function(){ medAbrir(id); },30);
+  };
+  if(abaixo){
+    openForm({title:'Desvio de custo ou prazo', intro:'<strong>'+(ev.cpi!=null&&ev.cpi<1&&modAdm(o)?'CPI '+String(Math.round(ev.cpi*100)/100).replace('.',','):'')+(ev.spi!=null&&ev.spi<1?' SPI '+String(Math.round(ev.spi*100)/100).replace('.',','):'')+'</strong> abaixo de 1. Registre a causa e lembre-se de avisar o cliente.',
+      fields:[{name:'analise',label:'Análise da causa do desvio',type:'textarea',required:true,rows:3}], submit:'Aprovar com análise',
+      onSubmit:async function(v){ if(!(v.analise||'').trim()) return 'Registre a análise da causa do desvio.'; await fim(v.analise.trim()); return false; }});
+    return;
+  }
+  confirmDlg('Aprovar medição nº '+m.numero+'?','<p>'+esc(prestNome(m.prestadorId))+': <strong>'+brl(c.liquido)+'</strong>'+(modAdm(o)?' líquido a pagar (gera a conta a pagar).':' a pagar pelo cliente.')+'</p><p class="small muted" style="margin-top:8px">Depois de aprovada, a medição não pode ser alterada.</p>','Aprovar',false).then(function(ok){ if(ok) fim(''); });
+}
+function medJustificarForm(id){
+  var m=G('medicoes',id);
+  openForm({title:'Justificativa de avanço', intro:'A medição passa do avanço registrado no cronograma. A engenharia explica e a justificativa fica registrada com autor e data.',
+    fields:[{name:'texto',label:'Justificativa',type:'textarea',required:true,rows:3,ph:'Ex.: avanço não lançado no cronograma; fiscalização em campo confirma a execução.'}], submit:'Registrar justificativa',
+    onSubmit:async function(v){ if(!(v.texto||'').trim()) return 'Escreva a justificativa.'; await Store.set('medicoes', id, Object.assign({}, m, {justificativas:(m.justificativas||[]).concat([{trava:'avanco', texto:v.texto.trim(), por:Store.uid||null, em:hoje()}])})); setTimeout(function(){ medAbrir(id); },30); return false; }});
+}
+function medDescOutroForm(id){
+  var m=G('medicoes',id);
+  openForm({title:'Adiantamento ou outro desconto', fields:[{name:'tipo',label:'Tipo',type:'radio',required:true,options:[['adiantamento','Adiantamento'],['outro','Outro']],value:'adiantamento'},{name:'descricao',label:'Descrição',required:true},{name:'valor',label:'Valor (R$)',type:'number',min:0,step:'0.01',required:true}], submit:'Aplicar',
+    onSubmit:async function(v){ if(!(v.descricao||'').trim()) return 'Descreva o desconto.'; if(!(v.valor>0)) return 'Informe o valor.'; await Store.set('medicoes', id, Object.assign({}, m, {descontos:(m.descontos||[]).concat([{tipo:v.tipo, ref:'', valor:r2(v.valor), descricao:v.descricao.trim()}])})); setTimeout(function(){ medAbrir(id); },30); return false; }});
+}
+Object.assign(A4,{
+  'med-nova':function(d){ medNovaForm(d.oid); },
+  'med-abrir':function(d){ medAbrir(d.id); },
+  'med-itens':function(d){ medItensForm(d.id); },
+  'med-enviar':async function(d){
+    var m=G('medicoes',d.id); if(!(m.itens||[]).length){ blockDlg('Medição vazia',['Lance a quantidade de ao menos um item.'],'Não dá para enviar'); return; }
+    await Store.set('medicoes', d.id, Object.assign({}, m, {status:'em_analise', analiseDesde:new Date().toISOString(), hist:(m.hist||[]).concat([{de:'rascunho', para:'em_analise', data:new Date().toISOString(), por:Store.uid||null}]).slice(-20)}));
+    toast('Medição enviada para análise.'); medAbrir(d.id);
+  },
+  'med-devolver':async function(d){ var m=G('medicoes',d.id); await Store.set('medicoes', d.id, Object.assign({}, m, {status:'rascunho', analiseDesde:''})); medAbrir(d.id); },
+  'med-aprovar':function(d){ medAprovar(d.id); },
+  'med-pagar':async function(d){
+    var m=G('medicoes',d.id), o=G('obras',m.obraId);
+    var ok=await confirmDlg(modAdm(o)?'Marcar como paga?':'Registrar pagamento do cliente?','<p>Medição nº '+m.numero+': <strong>'+brl(m.valorLiquido)+'</strong>.</p>',modAdm(o)?'Marcar como paga':'Registrar',false); if(!ok) return;
+    await Store.set('medicoes', d.id, Object.assign({}, m, {status:'paga', pagaEm:hoje()}));
+    if(modAdm(o)) await baixarConta('medicao', d.id, hoje());
+    toast('Pagamento registrado.'); medAbrir(d.id);
+  },
+  'med-excluir':async function(d){ var m=G('medicoes',d.id); if(m.status!=='rascunho') return; var ok=await confirmDlg('Excluir rascunho?','<p>Só rascunhos podem ser excluídos.</p>','Excluir',true); if(ok){ await Store.del('medicoes',d.id); closeDlg(); } },
+  'med-justificar':function(d){ medJustificarForm(d.id); },
+  'med-desc-dano':async function(d){ var m=G('medicoes',d.id), dn=G('danos',d.dano); if(!dn) return; await Store.set('medicoes', d.id, Object.assign({}, m, {descontos:(m.descontos||[]).concat([{tipo:'dano', ref:dn.id, valor:r2(dn.custo), descricao:short(dn.descricao,60)}])})); medAbrir(d.id); },
+  'med-desc-outro':function(d){ medDescOutroForm(d.id); },
+  'med-desc-rem':async function(d){ var m=G('medicoes',d.id); var ds=(m.descontos||[]).slice(); ds.splice(Number(d.k),1); await Store.set('medicoes', d.id, Object.assign({}, m, {descontos:ds})); medAbrir(d.id); }
+});
+/* espaço reservado: substituído no passo 6 pelo cálculo real de CPI e SPI */
+function evm(o){ return {cpi:null, spi:null}; }
 /* ================= VISÕES ================= */
 var ui={semana:{}, ocFiltro:'todas', det:{}, ganttScroll:0, agMes:hoje().slice(0,7), agDia:hoje(), agArea:'todas', docMes:{}, orcBusca:'', orcEtapa:'', orcTipo:''};
 var lastKey=null;
@@ -2390,8 +2626,8 @@ function vPainel(){
 /* ---- obra ---- */
 function vObra(r){
   var o=G('obras',r.oid); if(!o) return notFound();
-  var tabs=[['resumo','Resumo'],['etapas','Etapas'],['cronograma','Cronograma'],['balanco','Balanço'],['semana','Semana e PPC'],['diario','Diário'],['ocorrencias','Ocorrências'],['compras','Compras'],['estoque','Estoque'],['locacoes','Locações'],['orcamento','Orçamento'],['contratos','Contratos e frentes'],['projeto','RFI e materiais'],['documentos','Documentos'],['agenda','Agenda'],['reunioes','Reuniões'],['entrega','Pré-entrega']];
-  var fn={resumo:tResumo, etapas:tEtapas, cronograma:tCron, balanco:tBalanco, semana:tSemana, diario:tDiario, ocorrencias:tOcorr, agenda:tAgenda, reunioes:tReunioes, projeto:tProjeto, documentos:tDocumentos, entrega:tEntrega, compras:tCompras, estoque:tEstoque, locacoes:tLocacoes, orcamento:tOrcamento, contratos:tContratos}[r.tab]||tResumo;
+  var tabs=[['resumo','Resumo'],['etapas','Etapas'],['cronograma','Cronograma'],['balanco','Balanço'],['semana','Semana e PPC'],['diario','Diário'],['ocorrencias','Ocorrências'],['compras','Compras'],['estoque','Estoque'],['locacoes','Locações'],['orcamento','Orçamento'],['medicao','Medição'],['contratos','Contratos e frentes'],['projeto','RFI e materiais'],['documentos','Documentos'],['agenda','Agenda'],['reunioes','Reuniões'],['entrega','Pré-entrega']];
+  var fn={resumo:tResumo, etapas:tEtapas, cronograma:tCron, balanco:tBalanco, semana:tSemana, diario:tDiario, ocorrencias:tOcorr, agenda:tAgenda, reunioes:tReunioes, projeto:tProjeto, documentos:tDocumentos, entrega:tEntrega, compras:tCompras, estoque:tEstoque, locacoes:tLocacoes, orcamento:tOrcamento, medicao:tMedicao, contratos:tContratos}[r.tab]||tResumo;
   var meta=[o.cliente, o.endereco, o.tipologia, o.area?o.area+' m²':'', o.inicio?'início em '+fmt(o.inicio):''].filter(Boolean).map(esc).join(' · ');
   return '<div class="wrap"><a class="back" href="#/painel">← Todas as obras</a>'
     +'<div class="ob-head"><div class="grow"><h1>'+esc(o.nome)+(o.codigo?' <span class="muted small num">'+esc(o.codigo)+'</span>':'')+'</h1><div class="meta">'+chipMod(o.modalidade)+'<span>'+meta+'</span></div></div>'
@@ -2627,12 +2863,13 @@ function obraForm(o){
       [{name:'tipologia',label:'Tipologia',type:'select',options:TIPOLOGIAS.map(function(t){return [t,t];}),value:(o&&o.tipologia)||TIPOLOGIAS[0]},{name:'modalidade',label:'Modalidade do contrato',type:'select',options:MODALIDADES.map(function(t){return [t,t];}),value:(o&&o.modalidade)||MODALIDADES[0]}],
       [{name:'area',label:'Área (m²)',type:'number',step:'0.01',min:0,value:o&&o.area},{name:'inicio',label:'Início da obra',type:'date',value:o&&o.inicio}],
       [{name:'metaPPC',label:'Meta de PPC (%)',type:'number',min:0,max:100,value:o&&o.metaPPC!=null?o.metaPPC:80,hint:'Valor provisório, a definir pela Cariati.'},{name:'diasEscalar',label:'Dias de atraso para escalar',type:'number',min:1,value:o&&o.diasEscalar!=null?o.diasEscalar:7,hint:'Apontamento vencido há mais dias vai à diretoria.'}],
-      [{name:'alcada',label:'Alçada de compra e locação (R$)',type:'number',min:0,step:'0.01',value:o&&o.alcada,hint:'Acima disso, a compra exige aprovação do cliente. A definir pela Cariati.'},{name:'margemPreco',label:'Margem aceita sobre o orçado (%)',type:'number',min:0,step:'0.1',value:o&&o.margemPreco!=null?o.margemPreco:5,hint:'Valor provisório.'}]
+      [{name:'alcada',label:'Alçada de compra e locação (R$)',type:'number',min:0,step:'0.01',value:o&&o.alcada,hint:'Acima disso, a compra exige aprovação do cliente. A definir pela Cariati.'},{name:'margemPreco',label:'Margem aceita sobre o orçado (%)',type:'number',min:0,step:'0.1',value:o&&o.margemPreco!=null?o.margemPreco:5,hint:'Valor provisório.'}],
+      [{name:'tolerAvanco',label:'Tolerância entre avanço e medição (pontos %)',type:'number',min:0,step:'0.1',value:o&&o.tolerAvanco!=null?o.tolerAvanco:5,hint:'Valor provisório, a definir pela Cariati.'},{name:'abcA',label:'Curva ABC: classe A até (%)',type:'number',min:1,max:100,step:'1',value:o&&o.abcA!=null?o.abcA:80,hint:'Valor provisório.'},{name:'abcB',label:'Curva ABC: classe B até (%)',type:'number',min:1,max:100,step:'1',value:o&&o.abcB!=null?o.abcB:95,hint:'Valor provisório.'}]
     ],
     extra:novo?'':'<button type="button" class="btn danger" data-act="obra-excluir" data-oid="'+o.id+'" style="margin-right:auto">Excluir obra</button>',
     onSubmit:async function(v){
       if(!(v.nome||'').trim()) return 'Informe o nome da obra.';
-      var data=Object.assign({}, o||{}, {nome:v.nome.trim(), codigo:v.codigo||'', cliente:v.cliente||'', endereco:v.endereco||'', tipologia:v.tipologia, modalidade:v.modalidade, area:v.area, inicio:v.inicio||'', metaPPC:v.metaPPC==null?80:v.metaPPC, diasEscalar:v.diasEscalar==null?7:v.diasEscalar, alcada:v.alcada, margemPreco:v.margemPreco==null?5:v.margemPreco});
+      var data=Object.assign({}, o||{}, {nome:v.nome.trim(), codigo:v.codigo||'', cliente:v.cliente||'', endereco:v.endereco||'', tipologia:v.tipologia, modalidade:v.modalidade, area:v.area, inicio:v.inicio||'', metaPPC:v.metaPPC==null?80:v.metaPPC, diasEscalar:v.diasEscalar==null?7:v.diasEscalar, alcada:v.alcada, margemPreco:v.margemPreco==null?5:v.margemPreco, tolerAvanco:v.tolerAvanco==null?5:v.tolerAvanco, abcA:v.abcA==null?80:v.abcA, abcB:v.abcB==null?95:v.abcB});
       if(novo) data.criadoEm=new Date().toISOString();
       var id=novo?nid():o.id; await Store.set('obras', id, data);
       if(novo) location.hash='#/obra/'+id+'/resumo';

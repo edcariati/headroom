@@ -7,6 +7,7 @@
 
 - **Passo 1:** aba Orçamento: importação de CSV com validação, versões (v1 base imutável) e comparação entre versões. Modelo CSV para baixar.
 - **Passo 2:** aditivos (rascunho → enviado → assinado/recusado), orçamento revisado, botão “Gerar aditivo” na ocorrência e no material.
+- **Passo 3:** aba Medição com as 5 travas (documentos do mês, avanço, ficha, aditivo assinado, apontamento crítico), retenção, descontos de dano e as duas modalidades. Campos novos na obra: tolerância de avanço e faixas da curva ABC.
 
 ## Fase 3 — Suprimentos
 Fornecedores, compras, estoque, locações, contratos de prestador, termos de frente e danos.

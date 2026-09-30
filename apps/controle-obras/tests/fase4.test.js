@@ -224,3 +224,189 @@ test('fase 4 · passo 2 · texto do aditivo é escapado', async () => {
   assert.equal(e.doc.querySelector('img[src="x"]'), null);
   assert.equal(e.win.__xss, undefined);
 });
+
+/* ---------------- passo 3: medição ---------------- */
+const fichasOk = (oid, n, qtd, resultado) => { const o = {}; for (let i = 0; i < qtd; i++) o[oid + '_' + n + '_' + i] = { obraId: oid, etapa: n, idx: i, item: 'F' + i, resultado: resultado || 'aprovado', primeira: 'ok', hist: [] }; return o; };
+const mesDe = (d) => d.slice(0, 7);
+function seedMed(over, opts) {
+  opts = opts || {};
+  const docs = {};
+  if (opts.docs !== false) ['inss', 'fgts', 'folha', 'certidoes'].forEach((k) => { docs['o1_p1_' + mesDe(dia(0)) + '_' + k] = { obraId: 'o1', prestadorId: 'p1', mes: mesDe(dia(0)), tipo: k, status: 'conferido' }; });
+  const s = {
+    obras: { o1: (opts.gestao ? obra : obraAdm)({ tolerAvanco: 5 }) },
+    prestadores: { p1: { nome: 'Alvenaria Souza', seguro: dia(90), treinamento: dia(90) } },
+    orcamentos: { b1: { obraId: 'o1', versao: 1, data: dia(-20), motivo: 'Orçamento base', total: 10000, nItens: 2, lotes: 1, porEtapa: { 7: 10000 }, porTipo: { mao_de_obra: 10000 } } },
+    orcItens: { b1_0: { obraId: 'o1', orcId: 'b1', lote: 0, itens: [
+      { codigo: '7.01', etapa: 7, descricao: 'Alvenaria de vedação', unidade: 'm²', quantidade: 100, precoUnitario: 60, tipo: 'mao_de_obra', prestador: 'Alvenaria Souza', prestadorId: 'p1', total: 6000 },
+      { codigo: '7.02', etapa: 7, descricao: 'Reboco', unidade: 'm²', quantidade: 50, precoUnitario: 80, tipo: 'mao_de_obra', prestador: 'Alvenaria Souza', prestadorId: 'p1', total: 4000 }] } },
+    contratosPrest: { ct1: { obraId: 'o1', prestadorId: 'p1', escopo: 'Alvenaria e reboco', valor: 10000, retencao: 5, inicio: dia(-20), fim: dia(60), status: 'ativo', regraDano: 'Reparo descontado da medição' } },
+    atividades: { a1: { obraId: 'o1', nome: 'Alvenaria', etapa: 7, prestadorId: 'p1', inicio: dia(-20), fim: dia(20), avanco: 50 } },
+    docsPrest: docs,
+    fichas: fichasOk('o1', 7, 1)
+  };
+  return Object.assign(s, over || {});
+}
+const med = (o) => Object.assign({ obraId: 'o1', contratoId: 'ct1', prestadorId: 'p1', numero: 1, periodoIni: dia(-30), periodoFim: dia(0), status: 'em_analise', analiseDesde: new Date().toISOString(), retencaoPct: 5, descontos: [], justificativas: [], hist: [],
+  itens: [{ codigo: '7.01', descricao: 'Alvenaria de vedação', unidade: 'm²', precoUnitario: 60, qtdOrcada: 100, qtdAnterior: 0, qtdMedida: 40, etapa: 7, valor: 2400, aditivoId: '' }] }, o || {});
+const cods = (t) => t.bloqueios.map((b) => b.cod).join(',');
+
+test('fase 4 · passo 3 · cálculo: bruto, retenção, desconto e líquido nas duas modalidades', async () => {
+  const e = await abrir({ seed: seedMed({ medicoes: { m1: med({ descontos: [{ tipo: 'dano', valor: 100 }] }) } }) });
+  const m = e.linhas('medicoes')[0], adm = e.x.G('obras', 'o1');
+  const c = e.x.medCalc(m, adm);
+  assert.equal(c.bruto, 2400);
+  assert.equal(c.retencao, 120);
+  assert.equal(c.descontos, 100);
+  assert.equal(c.liquido, 2180);
+  const g = await abrir({ seed: seedMed({ medicoes: { m1: med({ descontos: [{ tipo: 'dano', valor: 100 }] }) } }, { gestao: true }) });
+  const cg = g.x.medCalc(g.linhas('medicoes')[0], g.x.G('obras', 'o1'));
+  assert.equal(cg.liquido, 2400);           // Gestão: cliente paga o valor medido
+  assert.equal(cg.recomendado, 220);        // retenção 120 + dano 100 só como recomendação
+});
+
+test('fase 4 · passo 3 · trava 1: documentos do mês precisam estar conferidos', async () => {
+  const ok = await abrir({ seed: seedMed({ medicoes: { m1: med() } }) });
+  assert.equal(cods(ok.x.medTravas(ok.linhas('medicoes')[0], ok.x.G('obras', 'o1'))), '');
+  const bad = await abrir({ seed: seedMed({ medicoes: { m1: med() } }, { docs: false }) });
+  const t = bad.x.medTravas(bad.linhas('medicoes')[0], bad.x.G('obras', 'o1'));
+  assert.equal(cods(t), 'docs');
+  assert.match(t.bloqueios[0].t, /INSS, FGTS, Folha, Certidões/);
+});
+
+test('fase 4 · passo 3 · quantidade acumulada não passa da orçada', async () => {
+  const seed = seedMed({ medicoes: {
+    m0: med({ numero: 1, status: 'paga', itens: [{ codigo: '7.01', descricao: 'Alvenaria', unidade: 'm²', precoUnitario: 60, qtdOrcada: 100, qtdAnterior: 0, qtdMedida: 70, etapa: 7, valor: 4200 }] }),
+    m1: med({ numero: 2, itens: [{ codigo: '7.01', descricao: 'Alvenaria', unidade: 'm²', precoUnitario: 60, qtdOrcada: 100, qtdAnterior: 70, qtdMedida: 40, etapa: 7, valor: 2400 }] })
+  } });
+  const e = await abrir({ seed });
+  const t = e.x.medTravas(e.linhas('medicoes').find((m) => m.numero === 2), e.x.G('obras', 'o1'));
+  assert.ok(t.bloqueios.some((b) => b.cod === 'qtd' && /Excedente: 10/.test(b.t)), JSON.stringify(t.bloqueios));
+});
+
+test('fase 4 · passo 3 · trava 2: medição maior que o avanço + tolerância exige justificativa', async () => {
+  const grande = med({ itens: [{ codigo: '7.01', descricao: 'Alvenaria', unidade: 'm²', precoUnitario: 60, qtdOrcada: 100, qtdAnterior: 0, qtdMedida: 100, etapa: 7, valor: 6000 }] });
+  const e = await abrir({ seed: seedMed({ medicoes: { m1: grande } }) });
+  let t = e.x.medTravas(e.linhas('medicoes')[0], e.x.G('obras', 'o1'));
+  assert.equal(cods(t), 'avanco');                 // 60% medido > 50% + 5
+  assert.match(t.bloqueios[0].t, /60% do contrato.*50%.*5 pontos/);
+  const dentro = await abrir({ seed: seedMed({ medicoes: { m1: grande }, atividades: { a1: { obraId: 'o1', nome: 'Alvenaria', etapa: 7, prestadorId: 'p1', inicio: dia(-20), fim: dia(20), avanco: 56 } } }) });
+  assert.equal(cods(dentro.x.medTravas(dentro.linhas('medicoes')[0], dentro.x.G('obras', 'o1'))), '');   // 60 ≤ 56 + 5
+  const just = await abrir({ seed: seedMed({ medicoes: { m1: Object.assign({}, grande, { justificativas: [{ trava: 'avanco', texto: 'Fiscalizado em campo', por: 'u1', em: dia(0) }] }) } }) });
+  assert.equal(cods(just.x.medTravas(just.linhas('medicoes')[0], just.x.G('obras', 'o1'))), '');
+});
+
+test('fase 4 · passo 3 · trava 3: ficha de verificação aprovada na etapa; reprovada bloqueia; sem inspeção só avisa', async () => {
+  const semFicha = await abrir({ seed: seedMed({ medicoes: { m1: med() }, fichas: {} }) });
+  assert.equal(cods(semFicha.x.medTravas(semFicha.linhas('medicoes')[0], semFicha.x.G('obras', 'o1'))), 'ficha');
+  const rep = await abrir({ seed: seedMed({ medicoes: { m1: med() }, fichas: Object.assign(fichasOk('o1', 7, 1), { o1_7_1: { obraId: 'o1', etapa: 7, idx: 1, item: 'F1', resultado: 'reprovado', hist: [] } }) }) });
+  assert.match(rep.x.medTravas(rep.linhas('medicoes')[0], rep.x.G('obras', 'o1')).bloqueios[0].t, /reprovada/);
+  const ok = await abrir({ seed: seedMed({ medicoes: { m1: med() } }) });
+  const t = ok.x.medTravas(ok.linhas('medicoes')[0], ok.x.G('obras', 'o1'));
+  assert.equal(cods(t), '');
+  assert.match(t.avisos.join(' '), /6 fichas ainda sem inspeção/);
+});
+
+test('fase 4 · passo 3 · trava 4: item de aditivo só entra com o aditivo assinado', async () => {
+  const item = { codigo: 'A1.1', descricao: 'Muro extra', unidade: 'm²', precoUnitario: 50, qtdOrcada: 10, qtdAnterior: 0, qtdMedida: 2, etapa: 7, valor: 100, aditivoId: 'ad1' };
+  const ad = (st) => ({ ad1: { obraId: 'o1', numero: 1, descricao: 'x', tipo: 'acrescimo', status: st, itens: [{ descricao: 'Muro extra', unidade: 'm²', quantidade: 10, precoUnitario: 50, total: 500, etapa: 7, tipoItem: 'empreitada', prestadorId: 'p1' }] } });
+  const bad = await abrir({ seed: seedMed({ medicoes: { m1: med({ itens: [item] }) }, aditivos: ad('rascunho') }) });
+  assert.equal(cods(bad.x.medTravas(bad.linhas('medicoes')[0], bad.x.G('obras', 'o1'))), 'aditivo');
+  const ok = await abrir({ seed: seedMed({ medicoes: { m1: med({ itens: [item] }) }, aditivos: ad('assinado') }) });
+  assert.equal(cods(ok.x.medTravas(ok.linhas('medicoes')[0], ok.x.G('obras', 'o1'))), '');
+  assert.ok(ok.x.medItensDoPrestador('o1', 'p1').some((i) => i.codigo === 'A1.1'));
+});
+
+test('fase 4 · passo 3 · trava 5: ocorrência crítica do prestador retém o valor da etapa', async () => {
+  const seed = seedMed({ medicoes: { m1: med({ itens: [
+    { codigo: '7.01', descricao: 'Alvenaria', unidade: 'm²', precoUnitario: 60, qtdOrcada: 100, qtdAnterior: 0, qtdMedida: 40, etapa: 7, valor: 2400 },
+    { codigo: '8.01', descricao: 'Telhado', unidade: 'm²', precoUnitario: 100, qtdOrcada: 50, qtdAnterior: 0, qtdMedida: 10, etapa: 8, valor: 1000 }] }) },
+    ocorrencias: { c1: { obraId: 'o1', etapa: 8, tipo: 'apontamento', gravidade: 'critica', descricao: 'Telha sem fixação', prestadorId: 'p1', status: 'aberta', prazo: dia(3), interacoes: [], criadoEm: new Date().toISOString() } } });
+  const e = await abrir({ seed });
+  const m = e.linhas('medicoes')[0], o = e.x.G('obras', 'o1');
+  const c = e.x.medCalc(m, o);
+  assert.equal(c.bruto, 3400);
+  assert.equal(c.retidoApontamento, 1000);
+  assert.equal(c.retencao, 120);                 // 5% de (3400 − 1000)
+  assert.equal(c.liquido, 3400 - 1000 - 120);
+  assert.match(e.x.medTravas(m, o).avisos.join(' '), /1\.000,00.*retidos/);
+});
+
+test('fase 4 · passo 3 · Administração: aprovar gera a conta a pagar e pagar dá baixa', async () => {
+  const e = await abrir({ seed: seedMed({ medicoes: { m1: med() } }), hash: '#/obra/o1/medicao' });
+  await e.click('[data-act="med-abrir"]');
+  await e.click('[data-act="med-aprovar"]');
+  await e.click('[data-x="1"]');
+  let m = e.linhas('medicoes')[0];
+  assert.equal(m.status, 'aprovada');
+  assert.equal(m.valorLiquido, 2280);
+  const cs = e.linhas('contasPagar');
+  assert.equal(cs.length, 1);
+  assert.equal(cs[0].valor, 2280);
+  assert.equal(cs[0].retencao, 120);
+  assert.equal(cs[0].origem, 'medicao');
+  assert.equal(cs[0].status, 'aberta');
+  assert.equal(e.doc.querySelector('[data-act="med-itens"]'), null);   // aprovada é imutável
+  await e.click('[data-act="med-pagar"]');
+  await e.click('[data-x="1"]');
+  m = e.linhas('medicoes')[0];
+  assert.equal(m.status, 'paga');
+  assert.equal(e.linhas('contasPagar')[0].status, 'paga');
+});
+
+test('fase 4 · passo 3 · Gestão: aprova sem gerar conta e sem reter', async () => {
+  const e = await abrir({ seed: seedMed({ medicoes: { m1: med() } }, { gestao: true }), hash: '#/obra/o1/medicao' });
+  await e.click('[data-act="med-abrir"]');
+  assert.match(e.dlg(), /A pagar pelo cliente/);
+  assert.match(e.dlg(), /Recomendação ao cliente: reter R\$\s*120,00/);
+  await e.click('[data-act="med-aprovar"]');
+  await e.click('[data-x="1"]');
+  const m = e.linhas('medicoes')[0];
+  assert.equal(m.status, 'aprovada');
+  assert.equal(m.valorLiquido, 2400);
+  assert.equal(e.linhas('contasPagar').length, 0);
+});
+
+test('fase 4 · passo 3 · aprovação bloqueada mostra o motivo e nada muda', async () => {
+  const e = await abrir({ seed: seedMed({ medicoes: { m1: med() } }, { docs: false }), hash: '#/obra/o1/medicao' });
+  await e.click('[data-act="med-abrir"]');
+  await e.click('[data-act="med-aprovar"]');
+  assert.match(e.dlg(), /Não é possível aprovar a medição/);
+  assert.match(e.dlg(), /Documentos de .* ainda não conferidos/);
+  assert.equal(e.linhas('medicoes')[0].status, 'em_analise');
+  assert.equal(e.linhas('contasPagar').length, 0);
+});
+
+test('fase 4 · passo 3 · nova medição pelo formulário: excedente bloqueia, saldo salva, descontos de dano', async () => {
+  const seed = seedMed({ danos: { d1: { obraId: 'o1', descricao: 'Vidro quebrado', custo: 300, causadorId: 'p1', status: 'aberta' } } });
+  const e = await abrir({ seed, hash: '#/obra/o1/medicao' });
+  await e.click('[data-act="med-nova"]');
+  await e.submit({ contratoId: 'ct1', periodoIni: dia(-30), periodoFim: dia(0) });
+  assert.equal(e.linhas('medicoes').length, 1);
+  assert.match(e.dlg(), /quantidades do período/);
+  await e.submit({ q_0: '150', q_1: '', retencaoPct: '5' });
+  assert.match(e.erroForm(), /Quantidade acima do orçado/);
+  await e.submit({ q_0: '40', q_1: '10', retencaoPct: '5' });
+  let m = e.linhas('medicoes')[0];
+  assert.equal(m.itens.length, 2);
+  assert.equal(m.valorBruto, 2400 + 800);
+  assert.equal(m.status, 'rascunho');
+  assert.match(e.dlg(), /Danos abertos causados por este prestador/);
+  await e.click('[data-act="med-desc-dano"]');
+  m = e.linhas('medicoes')[0];
+  assert.equal(m.descontos[0].valor, 300);
+  assert.match(e.dlg(), /Líquido a pagar.*R\$\s*2\.740,00/);        // 3200 − 160 (5%) − 300
+});
+
+test('fase 4 · passo 3 · sem contrato ou sem orçamento a medição avisa o que falta', async () => {
+  const e = await abrir({ seed: { obras: { o1: obraAdm() } }, hash: '#/obra/o1/medicao' });
+  await e.click('[data-act="med-nova"]');
+  assert.match(e.dlg(), /Cadastre um contrato de prestador/);
+});
+
+test('fase 4 · passo 3 · texto da medição é escapado', async () => {
+  const xss = '<img src=x onerror="window.__xss=6">';
+  const e = await abrir({ seed: seedMed({ medicoes: { m1: med({ justificativas: [{ trava: 'avanco', texto: xss, por: 'u1', em: dia(0) }], descontos: [{ tipo: 'outro', valor: 1, descricao: xss }] }) } }), hash: '#/obra/o1/medicao' });
+  await e.click('[data-act="med-abrir"]');
+  assert.equal(e.doc.querySelector('img[src="x"]'), null);
+  assert.equal(e.win.__xss, undefined);
+});

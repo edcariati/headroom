@@ -55,3 +55,23 @@ e **não aparece para medição**. Aditivo de prazo não tem itens, só dias.
 Assinar exige o registro de como o cliente assinou (texto obrigatório, anexo opcional).
 
 **D2.4 — Orçamento revisado.** Versão vigente do orçamento (a de maior número) + aditivos assinados. Cada item de aditivo entra com código `A<nº>.<item>`. O orçamento base nunca é reescrito.
+
+### Passo 3 — Medição
+
+**D3.1 — Fichas (trava 3).** Para medir itens da etapa N: precisa haver ao menos uma ficha **aprovada** (“não se aplica” não conta) e nenhuma reprovada ou aguardando reinspeção.
+Fichas ainda sem inspeção só geram aviso. Etapa sem nenhuma ficha aprovada bloqueia. *Por quê:* é a leitura mais conservadora de “ao menos uma ficha aprovada e nenhuma reprovada”.
+
+**D3.2 — Avanço (trava 2).** Percentual medido do contrato = (medido em análise/aprovado/pago + esta medição) ÷ valor do contrato (se o contrato não tem valor, usa o orçado dos itens do prestador).
+Avanço físico do prestador = média das atividades dele no cronograma ponderada pela duração; **sem atividades o avanço é 0** (e a tela avisa), então a medição exige justificativa.
+A justificativa fica em `justificativas[]` (autor, data). Tolerância padrão de 5 pontos, editável na obra (`tolerAvanco`).
+
+**D3.3 — Retenção por apontamento crítico (trava 5).** Ocorrência crítica **aberta** do prestador na etapa de itens medidos retém o valor desses itens (não bloqueia). Como o valor retido não está sendo pago,
+**a retenção % incide só sobre (bruto − retido)**, para não descontar duas vezes o mesmo dinheiro.
+
+**D3.4 — Gestão.** A Cariati mede e aprova, mas o valor a pagar pelo cliente é o bruto medido; retenção, descontos de dano e valor retido aparecem como **recomendação** (“reter R$ X”). Não gera conta a pagar.
+
+**D3.5 — Quantidades já medidas.** Contam medições em análise, aprovadas e pagas; rascunho não conta (para dois rascunhos não se bloquearem). O excedente é conferido ao salvar as quantidades **e** de novo ao aprovar.
+
+**D3.6 — Desvio (CPI/SPI).** A aprovação já pede `analiseDesvio` quando CPI ou SPI < 1 (Gestão: só SPI). Até o passo 6 o cálculo de CPI/SPI é um espaço reservado que devolve “sem dados”; o passo 6 o substitui.
+
+**D3.7 — Conta a pagar.** A aprovação (Administração) cria a conta com id fixo `cp_medicao_<id>` (não duplica), valor líquido, retenção destacada e vencimento em branco para o financeiro preencher.
