@@ -4,4 +4,5 @@ async function boot(){
   await Store.init();
   render();
 }
+if(window.__COB_TEST_HOOK) window.__COB_TEST_HOOK(COBX);
 boot();

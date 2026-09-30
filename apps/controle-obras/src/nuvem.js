@@ -1,5 +1,5 @@
 /* ================= NUVEM, LOGIN E HISTÓRICO ================= */
-var COL_NOMES={obras:'Obra', etapas:'Etapa', atividades:'Atividade', pacotes:'Pacote semanal', diarios:'Diário', fichas:'Ficha de verificação', ocorrencias:'Ocorrência', prestadores:'Prestador', eventos:'Agenda', atas:'Ata', acoes:'Ação', docsLegais:'Documento legal', docsPrest:'Documento de prestador', rfis:'Consulta técnica', materiais:'Material', locs:'Local', servicos:'Serviço', treinamentos:'Treinamento', fornecedores:'Fornecedor', compras:'Compra', movEstoque:'Estoque', locacoes:'Locação', contratosPrest:'Contrato', termos:'Termo', danos:'Dano'};
+var COL_NOMES={obras:'Obra', etapas:'Etapa', atividades:'Atividade', pacotes:'Pacote semanal', diarios:'Diário', fichas:'Ficha de verificação', ocorrencias:'Ocorrência', prestadores:'Prestador', eventos:'Agenda', atas:'Ata', acoes:'Ação', docsLegais:'Documento legal', docsPrest:'Documento de prestador', rfis:'Consulta técnica', materiais:'Material', locs:'Local', servicos:'Serviço', treinamentos:'Treinamento', fornecedores:'Fornecedor', compras:'Compra', movEstoque:'Estoque', locacoes:'Locação', contratosPrest:'Contrato', termos:'Termo', danos:'Dano', orcamentos:'Orçamento (versão)', orcItens:'Itens do orçamento', aditivos:'Aditivo', medicoes:'Medição', contasPagar:'Conta a pagar', aportes:'Aporte do cliente'};
 var hist={rows:null, carregando:false, erro:'', obra:'', colecao:''};
 
 function vLogin(){
@@ -118,7 +118,7 @@ async function importarDados(colecoes, origem){
   }catch(e){ toast('Falha ao enviar ('+(e.code||e.message)+').', true); }
 }
 
-var A4={
+var ANuvem={
   'nuvem-desconectar':async function(){
     var ok=await confirmDlg('Desconectar da nuvem?','<p>Este aparelho volta ao modo local. Os dados na nuvem continuam guardados.</p>','Desconectar',true);
     if(!ok) return;

@@ -45,6 +45,7 @@ async function abrir(opts) {
   opts = opts || {};
   const db = bancoFalso(opts.seed);
   const erros = [];
+  const gancho = {};
   const dom = new JSDOM(HTML, {
     url: 'http://localhost/' + (opts.hash || '#/painel'),
     runScripts: 'dangerously',
@@ -53,6 +54,7 @@ async function abrir(opts) {
       win.HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
       win.HTMLDialogElement.prototype.close = function () { if (this.hasAttribute('open')) { this.removeAttribute('open'); this.dispatchEvent(new win.Event('close')); } };
       Object.defineProperty(win.HTMLDialogElement.prototype, 'open', { configurable: true, get() { return this.hasAttribute('open'); } });
+      win.__COB_TEST_HOOK = (x) => { gancho.x = x; };
       win.scrollTo = () => {};
       win.matchMedia = win.matchMedia || (() => ({ matches: false, addListener() {}, removeListener() {} }));
       win.URL.createObjectURL = () => 'blob:teste';
@@ -69,6 +71,7 @@ async function abrir(opts) {
 
   const env = {
     win, doc, db, erros, tick,
+    get x() { return gancho.x; },
     app: () => doc.getElementById('app').textContent.replace(/\s+/g, ' '),
     dlg: () => doc.getElementById('dlg').textContent.replace(/\s+/g, ' '),
     dlgAberto: () => doc.getElementById('dlg').hasAttribute('open'),

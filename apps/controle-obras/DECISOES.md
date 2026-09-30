@@ -23,4 +23,21 @@ No passo 1 elas viram `ANuvem` e `A4` fica livre para as ações da fase 4, como
 
 ## Fase 4 — decisões de negócio (preenchidas conforme cada passo entra)
 
-_Nenhuma ainda._
+### Passo 1 — Orçamento
+
+**D1.1 — Itens em lotes (`orcItens`).** Os itens de cada versão vão sempre para a coleção `orcItens`, em lotes de 150 itens por documento
+(`<orcId>_<n>`); o documento da versão (`orcamentos`) guarda só o cabeçalho, o total e os subtotais por etapa e por tipo.
+*Por quê:* um item ocupa ~250 bytes; 150 itens ≈ 40 KB, longe dos 256 KB por documento, e o orçamento de uma obra grande cabe em poucos documentos
+(o limite de ~5.000 documentos no total continua respeitado). Os lotes são gravados antes do cabeçalho, então uma importação interrompida não deixa versão sem itens.
+
+**D1.2 — Formato do CSV.** Colunas obrigatórias `codigo, etapa, descricao, unidade, quantidade, preco_unitario, tipo`; opcionais `prestador, total`.
+Aceita `;`, `,` ou tabulação, decimal com vírgula ou ponto, R$ e milhar com ponto. Nomes de coluna sem acento/maiúscula e algumas variações
+(`qtd`, `un`, `pu`, `servico`…). Arquivo em Windows-1252 (Excel brasileiro) é detectado. Dá para colar o texto em vez de enviar arquivo.
+*Por quê:* o Edson ainda não definiu a origem do orçamento (Vobi, Base44 ou planilha); o CSV é o denominador comum.
+
+**D1.3 — Validação.** Qualquer erro bloqueia a importação inteira (nada é importado pela metade). Linha só com total é rejeitada
+(orçamento detalhado é exigência do Edson). Prestador não encontrado é aviso: o item entra sem prestador e não poderá ser medido até o prestador ser cadastrado e o CSV importado de novo como nova versão.
+
+**D1.4 — Ligação item → prestador.** Feita pelo nome, na importação, comparando sem acento e sem diferença de maiúsculas.
+*Por quê:* a medição só lista itens do prestador; guardar o id evita depender do texto depois.
+

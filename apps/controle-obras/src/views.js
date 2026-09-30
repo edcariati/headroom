@@ -1,5 +1,5 @@
 /* ================= VISÕES ================= */
-var ui={semana:{}, ocFiltro:'todas', det:{}, ganttScroll:0, agMes:hoje().slice(0,7), agDia:hoje(), agArea:'todas', docMes:{}};
+var ui={semana:{}, ocFiltro:'todas', det:{}, ganttScroll:0, agMes:hoje().slice(0,7), agDia:hoje(), agArea:'todas', docMes:{}, orcBusca:'', orcEtapa:'', orcTipo:''};
 var lastKey=null;
 
 function parseRoute(){
@@ -80,8 +80,8 @@ function vPainel(){
 /* ---- obra ---- */
 function vObra(r){
   var o=G('obras',r.oid); if(!o) return notFound();
-  var tabs=[['resumo','Resumo'],['etapas','Etapas'],['cronograma','Cronograma'],['balanco','Balanço'],['semana','Semana e PPC'],['diario','Diário'],['ocorrencias','Ocorrências'],['compras','Compras'],['estoque','Estoque'],['locacoes','Locações'],['contratos','Contratos e frentes'],['projeto','RFI e materiais'],['documentos','Documentos'],['agenda','Agenda'],['reunioes','Reuniões'],['entrega','Pré-entrega']];
-  var fn={resumo:tResumo, etapas:tEtapas, cronograma:tCron, balanco:tBalanco, semana:tSemana, diario:tDiario, ocorrencias:tOcorr, agenda:tAgenda, reunioes:tReunioes, projeto:tProjeto, documentos:tDocumentos, entrega:tEntrega, compras:tCompras, estoque:tEstoque, locacoes:tLocacoes, contratos:tContratos}[r.tab]||tResumo;
+  var tabs=[['resumo','Resumo'],['etapas','Etapas'],['cronograma','Cronograma'],['balanco','Balanço'],['semana','Semana e PPC'],['diario','Diário'],['ocorrencias','Ocorrências'],['compras','Compras'],['estoque','Estoque'],['locacoes','Locações'],['orcamento','Orçamento'],['contratos','Contratos e frentes'],['projeto','RFI e materiais'],['documentos','Documentos'],['agenda','Agenda'],['reunioes','Reuniões'],['entrega','Pré-entrega']];
+  var fn={resumo:tResumo, etapas:tEtapas, cronograma:tCron, balanco:tBalanco, semana:tSemana, diario:tDiario, ocorrencias:tOcorr, agenda:tAgenda, reunioes:tReunioes, projeto:tProjeto, documentos:tDocumentos, entrega:tEntrega, compras:tCompras, estoque:tEstoque, locacoes:tLocacoes, orcamento:tOrcamento, contratos:tContratos}[r.tab]||tResumo;
   var meta=[o.cliente, o.endereco, o.tipologia, o.area?o.area+' m²':'', o.inicio?'início em '+fmt(o.inicio):''].filter(Boolean).map(esc).join(' · ');
   return '<div class="wrap"><a class="back" href="#/painel">← Todas as obras</a>'
     +'<div class="ob-head"><div class="grow"><h1>'+esc(o.nome)+(o.codigo?' <span class="muted small num">'+esc(o.codigo)+'</span>':'')+'</h1><div class="meta">'+chipMod(o.modalidade)+'<span>'+meta+'</span></div></div>'
@@ -334,7 +334,7 @@ async function excluirObra(oid){
   var ok=await confirmDlg('Excluir a obra “'+o.nome+'”?','<p>Isso apaga a obra e todos os registros dela: etapas, fichas, cronograma, pacotes, diário e ocorrências. Não dá para desfazer.</p>','Excluir obra',true);
   if(!ok) return;
   var tasks=[];
-  ['etapas','atividades','pacotes','diarios','fichas','ocorrencias','eventos','atas','acoes','docsLegais','docsPrest','rfis','materiais','locs','servicos','compras','movEstoque','locacoes','contratosPrest','termos','danos'].forEach(function(c){ byObra(c,oid).forEach(function(x){ tasks.push(Store.del(c,x.id)); }); });
+  ['etapas','atividades','pacotes','diarios','fichas','ocorrencias','eventos','atas','acoes','docsLegais','docsPrest','rfis','materiais','locs','servicos','compras','movEstoque','locacoes','contratosPrest','termos','danos','orcamentos','orcItens','aditivos','medicoes','contasPagar','aportes'].forEach(function(c){ byObra(c,oid).forEach(function(x){ tasks.push(Store.del(c,x.id)); }); });
   tasks.push(Store.del('obras',oid));
   await Promise.all(tasks); location.hash='#/painel'; toast('Obra excluída.');
 }
@@ -622,7 +622,7 @@ var A={
 document.addEventListener('click', function(e){
   if(e.target.closest('[data-close]')){ closeDlg(); return; }
   var el=e.target.closest('[data-act]'); if(!el) return;
-  var f=A[el.dataset.act]||A2[el.dataset.act]||A3[el.dataset.act]||A4[el.dataset.act]; if(f){ e.preventDefault(); f(el.dataset, el); }
+  var f=A[el.dataset.act]||A2[el.dataset.act]||A3[el.dataset.act]||A4[el.dataset.act]||ANuvem[el.dataset.act]; if(f){ e.preventDefault(); f(el.dataset, el); }
 });
 document.addEventListener('change', function(e){
   var el=e.target.closest('[data-chg="cond"]'); if(!el) return;
