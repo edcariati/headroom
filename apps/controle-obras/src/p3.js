@@ -258,6 +258,7 @@ function pedidoForm(id,vol){
       var tr=travasPedido(G('obras',c.obraId),c); if(tr.length) return tr[0];
       if(!(v.total>0)) return 'Informe o valor do pedido.';
       await setCompra(c,{status:'pedido', pedido:{data:v.data, fornecedorId:e?e.fornecedorId:'', total:v.total, entregaPrevista:v.entregaPrevista, obs:v.obs||''}},'Pedido emitido');
+      await contaDaCompra(id);
       toast('Pedido emitido.'); return depoisCompra(id,vol);
     }});
 }
@@ -298,7 +299,7 @@ function pagoForm(id,vol){
   if(c.status!=='conferido'){ blockDlg('Não é possível registrar o pagamento',['O recebimento ainda não foi conferido.'],'Pagamento bloqueado'); return; }
   openForm({title:'Marcar como pago', intro:esc(c.item)+' — '+brl(valorCompra(c)),
     fields:[{name:'data',label:'Data do pagamento',type:'date',required:true,value:hoje()}], submit:'Marcar como pago',
-    onSubmit:async function(v){ await setCompra(c,{status:'pago', pagoEm:v.data},'Pagamento registrado'); return depoisCompra(id,vol); }});
+    onSubmit:async function(v){ await setCompra(c,{status:'pago', pagoEm:v.data},'Pagamento registrado'); await baixarConta('compra', id, v.data); return depoisCompra(id,vol); }});
 }
 
 /* ================= ESTOQUE ================= */
@@ -406,6 +407,7 @@ function devolverLocacao(id){
       var nao=CK_SAIDA.some(function(_,i){ return v['s_'+i]==='nao'; });
       if(nao && !(v.obs||'').trim()) return 'Explique o item marcado como “Não”.';
       await Store.set('locacoes', id, Object.assign({}, l, {status:'devolvida', devolucao:{data:v.data, itens:CK_SAIDA.map(function(t,i){return {t:t, ok:v['s_'+i]==='sim'};}), obs:v.obs||'', fotos:v.fotos||[]}}));
+      await contaDaLocacao(id);
       toast('Devolução registrada.');
     }});
 }

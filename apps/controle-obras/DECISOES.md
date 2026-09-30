@@ -75,3 +75,20 @@ A justificativa fica em `justificativas[]` (autor, data). Tolerância padrão de
 **D3.6 — Desvio (CPI/SPI).** A aprovação já pede `analiseDesvio` quando CPI ou SPI < 1 (Gestão: só SPI). Até o passo 6 o cálculo de CPI/SPI é um espaço reservado que devolve “sem dados”; o passo 6 o substitui.
 
 **D3.7 — Conta a pagar.** A aprovação (Administração) cria a conta com id fixo `cp_medicao_<id>` (não duplica), valor líquido, retenção destacada e vencimento em branco para o financeiro preencher.
+
+### Passo 4 — Contas a pagar, aportes e fluxo de caixa
+
+**D4.1 — Geração das contas (só Administração).** Medição aprovada, pedido de compra emitido e locação devolvida geram a conta com id fixo (`cp_<origem>_<id>`); repetir o evento **atualiza** a mesma conta em vez de duplicar, e uma conta já paga nunca é sobrescrita.
+Compra: vencimento = entrega prevista + N, quando a condição da cotação escolhida tem “N dias”; senão fica em branco e a conta mostra “Sem vencimento” (não entra no fluxo até ser preenchido).
+Locação: valor real (do início até a devolução), não o previsto.
+
+**D4.2 — Pagar pelos dois lados.** “Marcar como paga” na conta e “Marcar como pago” na compra/medição dão o mesmo resultado (a origem e a conta ficam pagas). A conta só é paga se a origem estiver conferida
+(compra conferida, medição aprovada, locação devolvida). Locação não tem situação “paga” própria; o pago dela é a conta paga.
+
+**D4.3 — Fluxo de caixa.** Por mês: aportes previstos e recebidos, desembolsos previstos (contas não canceladas, por vencimento) e pagos (por data de pagamento).
+**Saldo do mês** = recebido − pago nos meses até o atual, e previsto − previsto nos meses futuros; o saldo acumulado soma isso desde o primeiro mês. Meses com saldo acumulado negativo ficam em destaque.
+*Por quê:* misturar previsto e realizado no mesmo mês distorceria o saldo; o passado é fato, o futuro é projeção.
+
+**D4.4 — Gestão.** A aba Financeiro mostra só o desembolso previsto do cliente por mês (medições aprovadas e a aprovar, pelo mês do fim do período). Não há contas a pagar na Gestão.
+
+**D4.5 — Gráficos.** SVG puro, sem biblioteca, com as cores das variáveis do tema (`var(--steel)` etc.), então funcionam nos temas claro e escuro. O mesmo gerador serve às curvas S do passo 6.

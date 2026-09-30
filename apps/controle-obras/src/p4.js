@@ -575,3 +575,186 @@ Object.assign(A4,{
 });
 /* espaço reservado: substituído no passo 6 pelo cálculo real de CPI e SPI */
 function evm(o){ return {cpi:null, spi:null}; }
+
+/* ================= CONTAS A PAGAR, APORTES E FLUXO DE CAIXA ================= */
+var CONTA_ST={aberta:'Aberta', paga:'Paga', cancelada:'Cancelada'};
+var CONTA_ORIGEM={medicao:'Medição', compra:'Compra', locacao:'Locação', outro:'Avulsa'};
+var FORMAS_PAG=['Pix','Transferência','Boleto','Dinheiro','Cheque','Outra'];
+
+function vencDaCond(cond, base){ var m=/(\d+)\s*dias?/i.exec(String(cond||'')); return (m&&base)?addDays(base,Number(m[1])):''; }
+function contaDaCompra(id){
+  var c=G('compras',id); if(!c||!c.pedido) return Promise.resolve();
+  var o=G('obras',c.obraId); if(!o||!modAdm(o)) return Promise.resolve();
+  var e=cotEscolhida(c), venc=vencDaCond(e&&e.cond, c.pedido.entregaPrevista);
+  var d={origem:'compra', origemId:id, descricao:'Compra: '+c.item, credorTipo:'fornecedor', credorId:c.pedido.fornecedorId||'', valor:r2(c.pedido.total), retencao:0, desconto:0};
+  var cur=G('contasPagar',contaId('compra',id)); if(!cur||!cur.vencimento) d.vencimento=venc;
+  return upsertConta(o,d);
+}
+function locValorReal(l){ return r2((Number(l.valorDia)||0)*Math.max(1,diffDays(l.inicio,(l.devolucao&&l.devolucao.data)||l.fimPrevisto)+1)); }
+function contaDaLocacao(id){
+  var l=G('locacoes',id); if(!l||l.status!=='devolvida') return Promise.resolve();
+  var o=G('obras',l.obraId); if(!o||!modAdm(o)) return Promise.resolve();
+  return upsertConta(o,{origem:'locacao', origemId:id, descricao:'Locação: '+l.equipamento, credorTipo:'fornecedor', credorId:l.fornecedorId||'', valor:locValorReal(l), retencao:0, desconto:0});
+}
+COBX.vencDaCond=vencDaCond; COBX.locValorReal=locValorReal;
+
+function contaVencida(c){ return c.status==='aberta' && c.vencimento && c.vencimento<hoje(); }
+function contaAVencer(c,dias){ return c.status==='aberta' && c.vencimento && c.vencimento>=hoje() && c.vencimento<=addDays(hoje(),dias||7); }
+function contasDaObra(oid){ return byObra('contasPagar',oid).sort(function(a,b){ return (a.vencimento||'9')<(b.vencimento||'9')?-1:1; }); }
+function credorNome(c){ return c.credorTipo==='prestador'?prestNome(c.credorId):(c.credorTipo==='fornecedor'?fornNome(c.credorId):'')||c.credorNome||''; }
+function origemConferida(c){
+  if(c.origem==='compra'){ var x=G('compras',c.origemId); return !!x && (x.status==='conferido'||x.status==='pago'); }
+  if(c.origem==='medicao'){ var m=G('medicoes',c.origemId); return !!m && (m.status==='aprovada'||m.status==='paga'); }
+  if(c.origem==='locacao'){ var l=G('locacoes',c.origemId); return !!l && l.status==='devolvida'; }
+  return true;
+}
+function mesDe(s){ return s?String(s).slice(0,7):''; }
+function fluxoCaixa(oid){
+  var contas=byObra('contasPagar',oid).filter(function(c){ return c.status!=='cancelada'; }), aps=byObra('aportes',oid), M={}, semData={n:0,valor:0};
+  var at=function(m){ return M[m]||(M[m]={mes:m,aportePrev:0,aporteRec:0,desembPrev:0,desembReal:0}); };
+  aps.forEach(function(a){ if(a.dataPrevista&&a.valorPrevisto) at(mesDe(a.dataPrevista)).aportePrev=r2(at(mesDe(a.dataPrevista)).aportePrev+Number(a.valorPrevisto)); if(a.dataRecebida&&a.valorRecebido) at(mesDe(a.dataRecebida)).aporteRec=r2(at(mesDe(a.dataRecebida)).aporteRec+Number(a.valorRecebido)); });
+  contas.forEach(function(c){
+    if(c.vencimento) at(mesDe(c.vencimento)).desembPrev=r2(at(mesDe(c.vencimento)).desembPrev+c.valor); else if(c.status==='aberta'){ semData.n++; semData.valor=r2(semData.valor+c.valor); }
+    if(c.status==='paga'&&c.pagoEm) at(mesDe(c.pagoEm)).desembReal=r2(at(mesDe(c.pagoEm)).desembReal+c.valor);
+  });
+  var ms=Object.keys(M).sort(), atual=hoje().slice(0,7), acum=0, out=[];
+  if(ms.length){ for(var m=ms[0]; m<=ms[ms.length-1]; m=mesAdd(m,1)) at(m); ms=Object.keys(M).sort(); }
+  ms.forEach(function(m){ var x=M[m], passado=m<=atual; x.saldoMes=passado?r2(x.aporteRec-x.desembReal):r2(x.aportePrev-x.desembPrev); acum=r2(acum+x.saldoMes); x.saldoAcum=acum; x.realizado=passado; out.push(x); });
+  return {meses:out, semData:semData};
+}
+COBX.fluxoCaixa=fluxoCaixa;
+function desembolsoCliente(oid){
+  var o=G('obras',oid), M={};
+  byObra('medicoes',oid).forEach(function(m){
+    var mes=mesDe(m.periodoFim); if(!mes) return; var x=M[mes]||(M[mes]={mes:mes,aprovadas:0,aAprovar:0}), c=medCalc(m,o);
+    if(m.status==='aprovada'||m.status==='paga') x.aprovadas=r2(x.aprovadas+(m.valorLiquido!=null?m.valorLiquido:c.liquido)); else x.aAprovar=r2(x.aAprovar+c.liquido);
+  });
+  return Object.keys(M).sort().map(function(k){ return M[k]; });
+}
+COBX.desembolsoCliente=desembolsoCliente;
+
+/* ---------- gráfico SVG genérico (barras e linhas) ---------- */
+function svgGrafico(cfg){
+  var W=Math.max(520,cfg.labels.length*(cfg.largBarra||56)+90), H=cfg.altura||240, L0=64, R=14, T=14, B=34, iw=W-L0-R, ih=H-T-B, n=cfg.labels.length;
+  var todos=[0]; (cfg.barras||[]).concat(cfg.linhas||[]).forEach(function(s){ s.v.forEach(function(x){ if(x!=null) todos.push(x); }); });
+  var mn=Math.min.apply(null,todos), mx=Math.max.apply(null,todos); if(mx===mn) mx=mn+1;
+  var pad=(mx-mn)*0.06; if(mx>0) mx+=pad; if(mn<0) mn-=pad;
+  var Y=function(v){ return T+ih-(v-mn)/(mx-mn)*ih; }, gw=iw/Math.max(1,n), fmtv=cfg.fmt||function(v){ return String(Math.round(v)); };
+  var g='';
+  for(var k=0;k<=4;k++){ var v=mn+(mx-mn)*k/4, y=Y(v); g+='<line x1="'+L0+'" x2="'+(W-R)+'" y1="'+y+'" y2="'+y+'" class="lob-grid"/><text x="'+(L0-6)+'" y="'+(y+4)+'" text-anchor="end" class="lob-t">'+esc(fmtv(v))+'</text>'; }
+  g+='<line x1="'+L0+'" x2="'+(W-R)+'" y1="'+Y(0)+'" y2="'+Y(0)+'" stroke="var(--ink3)" stroke-width="1"/>';
+  var nb=(cfg.barras||[]).length, bw=Math.min(22,gw*0.72/Math.max(1,nb));
+  (cfg.barras||[]).forEach(function(s,si){ s.v.forEach(function(x,i){ if(x==null) return; var cx=L0+gw*i+gw/2, bx=cx-(nb*bw)/2+si*bw, y0=Y(0), y1=Y(x); g+='<rect x="'+bx+'" y="'+Math.min(y0,y1)+'" width="'+(bw-2)+'" height="'+Math.max(1,Math.abs(y0-y1))+'" rx="2" fill="'+s.cor+'"'+(s.opaco?' opacity=".45"':'')+'><title>'+esc(s.nome+' — '+cfg.labels[i]+': '+fmtv(x))+'</title></rect>'; }); });
+  (cfg.linhas||[]).forEach(function(s){
+    var pts=[]; s.v.forEach(function(x,i){ if(x!=null) pts.push((L0+gw*i+gw/2)+','+Y(x)); });
+    if(pts.length>1) g+='<polyline points="'+pts.join(' ')+'" fill="none" stroke="'+s.cor+'" stroke-width="2.5"'+(s.tracejado?' stroke-dasharray="6 4"':'')+'/>';
+    s.v.forEach(function(x,i){ if(x!=null) g+='<circle cx="'+(L0+gw*i+gw/2)+'" cy="'+Y(x)+'" r="3" fill="'+s.cor+'"><title>'+esc(s.nome+' — '+cfg.labels[i]+': '+fmtv(x))+'</title></circle>'; });
+  });
+  var passo=Math.ceil(n/Math.max(1,Math.floor(iw/46)));
+  cfg.labels.forEach(function(lb,i){ if(i%passo===0) g+='<text x="'+(L0+gw*i+gw/2)+'" y="'+(H-12)+'" text-anchor="middle" class="lob-t">'+esc(lb)+'</text>'; });
+  var leg='<div class="legenda" style="margin-top:6px">'+(cfg.barras||[]).concat(cfg.linhas||[]).map(function(s){ return '<span><i style="background:'+s.cor+';border-color:'+s.cor+'"></i>'+esc(s.nome)+'</span>'; }).join('')+'</div>';
+  return '<div style="overflow-x:auto"><svg class="lob" viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" role="img" aria-label="'+esc(cfg.titulo||'Gráfico')+'">'+g+'</svg></div>'+leg;
+}
+function kfmt(v){ var a=Math.abs(v); return (v<0?'−':'')+(a>=1000000?(Math.round(a/1e5)/10).toString().replace('.',',')+' mi':(a>=1000?(Math.round(a/100)/10).toString().replace('.',',')+' mil':String(Math.round(a)))); }
+function mesCurto(m){ var N=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']; return N[Number(m.slice(5))-1]+'/'+m.slice(2,4); }
+COBX.svgGrafico=svgGrafico;
+
+/* ---------- aba Financeiro ---------- */
+function tFinanceiro(o){
+  var oid=o.id, adm=modAdm(o);
+  if(!adm){
+    var ds=desembolsoCliente(oid);
+    var head='<div class="sec-h"><div><h2>Desembolso previsto do cliente</h2><p class="muted small">Neste contrato o cliente paga os prestadores. Aqui ficam as medições aprovadas e a aprovar, por mês.</p></div></div>';
+    if(!ds.length) return head+'<div class="card empty"><h3>Nenhuma medição ainda</h3><p>Quando houver medições, o desembolso previsto aparece aqui.</p></div>';
+    return head+'<section class="card pad">'+svgGrafico({titulo:'Desembolso previsto do cliente por mês', labels:ds.map(function(x){ return mesCurto(x.mes); }), barras:[{nome:'Medições aprovadas',cor:'var(--steel)',v:ds.map(function(x){ return x.aprovadas; })},{nome:'A aprovar',cor:'var(--amber-bar)',v:ds.map(function(x){ return x.aAprovar; })}], fmt:kfmt})+'</section>'
+      +'<div class="card tbl-scroll sec"><table class="tbl"><thead><tr><th>Mês</th><th class="num">Aprovadas</th><th class="num">A aprovar</th><th class="num">Total</th></tr></thead><tbody>'+ds.map(function(x){ return '<tr><td>'+mesNome(x.mes)+'</td><td class="num">'+brl(x.aprovadas)+'</td><td class="num">'+brl(x.aAprovar)+'</td><td class="num"><strong>'+brl(r2(x.aprovadas+x.aAprovar))+'</strong></td></tr>'; }).join('')+'</tbody></table></div>';
+  }
+  var contas=contasDaObra(oid), f=ui.finFiltro||'abertas', fl={todas:contas, abertas:contas.filter(function(c){ return c.status==='aberta'; }), vencidas:contas.filter(contaVencida), avencer:contas.filter(function(c){ return contaAVencer(c,7); }), pagas:contas.filter(function(c){ return c.status==='paga'; }), canceladas:contas.filter(function(c){ return c.status==='cancelada'; })}[f]||contas;
+  var abertas=contas.filter(function(c){ return c.status==='aberta'; }), soma=function(l){ return r2(l.reduce(function(s,c){ return s+c.valor; },0)); };
+  var cards='<div class="grid cols3"><div class="card pad"><div class="small muted">Em aberto</div><div class="num" style="font-size:24px;font-weight:600">'+brl(soma(abertas))+'</div><div class="tiny muted">'+plural(abertas.length,'conta','contas')+'</div></div>'
+    +'<div class="card pad"><div class="small muted">Vencidas</div><div class="num" style="font-size:24px;font-weight:600;color:'+(contas.some(contaVencida)?'var(--crit)':'inherit')+'">'+brl(soma(contas.filter(contaVencida)))+'</div></div>'
+    +'<div class="card pad"><div class="small muted">A vencer em 7 dias</div><div class="num" style="font-size:24px;font-weight:600">'+brl(soma(contas.filter(function(c){ return contaAVencer(c,7); })))+'</div></div></div>';
+  var filtros='<div class="row" style="gap:6px;margin:12px 0">'+[['abertas','Abertas'],['vencidas','Vencidas'],['avencer','A vencer em 7 dias'],['pagas','Pagas'],['canceladas','Canceladas'],['todas','Todas']].map(function(x){ return '<button class="btn sm'+(f===x[0]?' primary':'')+'" data-act="fin-filtro" data-f="'+x[0]+'">'+x[1]+'</button>'; }).join('')+'</div>';
+  var tab=fl.length?'<div class="tbl-scroll"><table class="tbl"><thead><tr><th>Conta</th><th>Credor</th><th>Vencimento</th><th class="num">Valor</th><th>Situação</th><th></th></tr></thead><tbody>'+fl.map(function(c){
+    var acts='<button class="btn sm ghost" data-act="conta-editar" data-id="'+c.id+'" data-write>Editar</button>';
+    if(c.status==='aberta') acts='<button class="btn sm primary" data-act="conta-paga" data-id="'+c.id+'" data-write>Marcar paga</button>'+acts+'<button class="btn sm ghost" data-act="conta-cancelar" data-id="'+c.id+'" data-write>Cancelar</button>';
+    return '<tr><td>'+esc(c.descricao)+'<div class="tiny muted">'+CONTA_ORIGEM[c.origem]+(c.retencao?' · retenção '+brl(c.retencao):'')+(c.desconto?' · descontos '+brl(c.desconto):'')+(c.obs?' · '+esc(short(c.obs,50)):'')+'</div></td><td>'+esc(credorNome(c)||'—')+'</td><td>'+(c.vencimento?fmt(c.vencimento):'<span class="chip warn">Sem vencimento</span>')+'</td><td class="num">'+brl(c.valor)+'</td><td><span class="chip '+(c.status==='paga'?'ok':(c.status==='cancelada'?'':(contaVencida(c)?'crit':'steel')))+'">'+(contaVencida(c)?'Vencida':CONTA_ST[c.status])+'</span>'+(c.status==='paga'?'<div class="tiny muted">'+fmt(c.pagoEm)+(c.forma?' · '+esc(c.forma):'')+'</div>':'')+(c.status==='cancelada'&&c.motivoCancelamento?'<div class="tiny muted">'+esc(short(c.motivoCancelamento,50))+'</div>':'')+'</td><td style="white-space:nowrap">'+acts+'</td></tr>';
+  }).join('')+'</tbody></table></div>':'<p class="muted pad">Nenhuma conta nesta lista.</p>';
+  var aps=byObra('aportes',oid).sort(function(a,b){ return (a.dataPrevista||'9')<(b.dataPrevista||'9')?-1:1; });
+  var apHtml=aps.length?'<div class="tbl-scroll"><table class="tbl"><thead><tr><th>Aporte</th><th>Previsto</th><th class="num">Valor previsto</th><th>Recebido</th><th class="num">Valor recebido</th><th></th></tr></thead><tbody>'+aps.map(function(a){
+    var atr=!a.dataRecebida && a.dataPrevista && a.dataPrevista<hoje();
+    return '<tr><td>'+esc(a.descricao)+(a.obs?'<div class="tiny muted">'+esc(short(a.obs,60))+'</div>':'')+'</td><td>'+fmt(a.dataPrevista)+(atr?' <span class="chip crit">Atrasado</span>':'')+'</td><td class="num">'+brl(a.valorPrevisto)+'</td><td>'+(a.dataRecebida?fmt(a.dataRecebida):'—')+'</td><td class="num">'+(a.valorRecebido!=null&&a.valorRecebido!==''?brl(a.valorRecebido):'—')+'</td><td style="white-space:nowrap">'+(a.dataRecebida?'':'<button class="btn sm primary" data-act="aporte-receber" data-id="'+a.id+'" data-write>Registrar recebimento</button>')+'<button class="btn sm ghost" data-act="aporte-editar" data-id="'+a.id+'" data-write>Editar</button></td></tr>';
+  }).join('')+'</tbody></table></div>':'<p class="muted pad">Nenhum aporte cadastrado. Registre quando o cliente vai depositar e quanto.</p>';
+  var fx=fluxoCaixa(oid), fxHtml='';
+  if(fx.meses.length){
+    var neg=fx.meses.filter(function(m){ return m.saldoAcum<0; });
+    fxHtml='<section class="card sec"><div class="card-h"><div><h2>Fluxo de caixa mensal</h2><p class="muted small">Meses até o atual usam o realizado (recebido − pago); meses futuros usam o previsto.</p></div>'+(neg.length?'<span class="chip crit">Saldo negativo em '+plural(neg.length,'mês','meses')+'</span>':'')+'</div><div class="pad">'
+      +svgGrafico({titulo:'Fluxo de caixa mensal da obra', labels:fx.meses.map(function(m){ return mesCurto(m.mes); }), barras:[{nome:'Aportes (recebido ou previsto)',cor:'var(--ok)',v:fx.meses.map(function(m){ return m.realizado?m.aporteRec:m.aportePrev; })},{nome:'Desembolso (pago ou previsto)',cor:'var(--amber-bar)',v:fx.meses.map(function(m){ return m.realizado?m.desembReal:m.desembPrev; })}], linhas:[{nome:'Saldo acumulado',cor:'var(--steel)',v:fx.meses.map(function(m){ return m.saldoAcum; })}], fmt:kfmt})
+      +'</div><div class="tbl-scroll"><table class="tbl"><thead><tr><th>Mês</th><th class="num">Aportes previstos</th><th class="num">Aportes recebidos</th><th class="num">Desembolso previsto</th><th class="num">Desembolso pago</th><th class="num">Saldo do mês</th><th class="num">Saldo acumulado</th></tr></thead><tbody>'+fx.meses.map(function(m){ return '<tr'+(m.saldoAcum<0?' style="background:var(--crit-soft)"':'')+'><td>'+mesNome(m.mes)+'</td><td class="num">'+brl(m.aportePrev)+'</td><td class="num">'+brl(m.aporteRec)+'</td><td class="num">'+brl(m.desembPrev)+'</td><td class="num">'+brl(m.desembReal)+'</td><td class="num">'+brl(m.saldoMes)+'</td><td class="num"><strong'+(m.saldoAcum<0?' style="color:var(--crit)"':'')+'>'+brl(m.saldoAcum)+'</strong></td></tr>'; }).join('')+'</tbody></table></div>'
+      +(fx.semData.n?'<p class="small muted pad">'+plural(fx.semData.n,'conta sem vencimento','contas sem vencimento')+' ('+brl(fx.semData.valor)+') não entra no fluxo até o vencimento ser informado.</p>':'')+'</section>';
+  }
+  return '<div class="sec-h"><div><h2>Financeiro</h2><p class="muted small">Contas a pagar geradas por medições, pedidos de compra e locações devolvidas, aportes do cliente e fluxo de caixa.</p></div><div class="row"><button class="btn" data-act="aporte-novo" data-oid="'+oid+'" data-write>+ Aporte</button><button class="btn primary" data-act="conta-nova" data-oid="'+oid+'" data-write>+ Conta avulsa</button></div></div>'
+    +'<div style="margin-top:14px">'+cards+'</div><section class="card sec"><div class="card-h"><h2>Contas a pagar</h2></div><div class="pad" style="padding-bottom:0">'+filtros+'</div>'+tab+'</section>'
+    +'<section class="card sec"><div class="card-h"><h2>Aportes do cliente</h2></div>'+apHtml+'</section>'+fxHtml;
+}
+function contaNovaForm(oid){
+  openForm({title:'Conta avulsa', intro:'Para despesas que não vêm de medição, compra ou locação.',
+    fields:[{name:'descricao',label:'Descrição',required:true},{name:'credorNome',label:'Credor'},[{name:'valor',label:'Valor (R$)',type:'number',min:0,step:'0.01',required:true},{name:'vencimento',label:'Vencimento',type:'date'}],{name:'obs',label:'Observações',type:'textarea',rows:2}],
+    onSubmit:async function(v){
+      if(!(v.descricao||'').trim()) return 'Descreva a conta.'; if(!(v.valor>0)) return 'Informe o valor.';
+      var o=G('obras',oid), oi=nid(); await upsertConta(o,{origem:'outro', origemId:oi, descricao:v.descricao.trim(), credorTipo:'', credorId:'', credorNome:(v.credorNome||'').trim(), valor:r2(v.valor), retencao:0, desconto:0, vencimento:v.vencimento||'', obs:v.obs||''});
+    }});
+}
+function contaEditarForm(id){
+  var c=G('contasPagar',id), livre=c.origem==='outro', trav=c.status==='paga';
+  openForm({title:'Editar conta', intro:esc(c.descricao)+(livre?'':' — valor vem da origem ('+CONTA_ORIGEM[c.origem]+') e não é editável aqui.'),
+    fields:(livre?[{name:'descricao',label:'Descrição',required:true,value:c.descricao},{name:'valor',label:'Valor (R$)',type:'number',min:0,step:'0.01',required:true,value:c.valor}]:[]).concat([{name:'vencimento',label:'Vencimento',type:'date',value:c.vencimento},{name:'obs',label:'Observações',type:'textarea',rows:2,value:c.obs}]),
+    onSubmit:async function(v){
+      if(trav) return 'Conta paga não pode ser alterada.';
+      var upd=Object.assign({}, c, {vencimento:v.vencimento||'', obs:v.obs||''});
+      if(livre){ if(!(v.valor>0)) return 'Informe o valor.'; upd.descricao=(v.descricao||'').trim()||c.descricao; upd.valor=r2(v.valor); }
+      delete upd.id; await Store.set('contasPagar', id, upd);
+    }});
+}
+function contaPagaForm(id){
+  var c=G('contasPagar',id);
+  if(!origemConferida(c)){ blockDlg('Não é possível registrar o pagamento',[{compra:'O recebimento da compra ainda não foi conferido.',medicao:'A medição ainda não foi aprovada.',locacao:'O equipamento ainda não foi devolvido.'}[c.origem]||'A origem da conta ainda não foi conferida.'],'Pagamento bloqueado'); return; }
+  openForm({title:'Marcar como paga', intro:esc(c.descricao)+' — <strong>'+brl(c.valor)+'</strong>',
+    fields:[[{name:'data',label:'Data do pagamento',type:'date',required:true,value:hoje()},{name:'forma',label:'Forma',type:'select',options:FORMAS_PAG.map(function(f){ return [f,f]; }),value:'Pix'}]], submit:'Marcar como paga',
+    onSubmit:async function(v){
+      if(!v.data) return 'Informe a data.';
+      var upd=Object.assign({}, c, {status:'paga', pagoEm:v.data, forma:v.forma||''}); delete upd.id; await Store.set('contasPagar', id, upd);
+      if(c.origem==='compra'){ var x=G('compras',c.origemId); if(x&&x.status==='conferido') await setCompra(x,{status:'pago', pagoEm:v.data},'Pagamento registrado pela conta'); }
+      if(c.origem==='medicao'){ var m=G('medicoes',c.origemId); if(m&&m.status==='aprovada') await Store.set('medicoes', m.id, Object.assign({}, m, {status:'paga', pagaEm:v.data})); }
+      toast('Pagamento registrado.');
+    }});
+}
+function contaCancelarForm(id){
+  var c=G('contasPagar',id);
+  openForm({title:'Cancelar conta', intro:esc(c.descricao)+' — '+brl(c.valor), fields:[{name:'motivo',label:'Motivo do cancelamento',type:'textarea',required:true,rows:2}], submit:'Cancelar conta',
+    onSubmit:async function(v){ if(!(v.motivo||'').trim()) return 'Informe o motivo do cancelamento.'; var upd=Object.assign({}, c, {status:'cancelada', motivoCancelamento:v.motivo.trim(), canceladaEm:hoje()}); delete upd.id; await Store.set('contasPagar', id, upd); }});
+}
+function aporteForm(oid,a,receber){
+  var novo=!a;
+  openForm({title:receber?'Registrar recebimento do aporte':(novo?'Novo aporte do cliente':'Editar aporte'),
+    fields:(receber?[]:[{name:'descricao',label:'Descrição',required:true,value:a&&a.descricao,ph:'Ex.: 2º aporte — fundação'},[{name:'valorPrevisto',label:'Valor previsto (R$)',type:'number',min:0,step:'0.01',required:true,value:a&&a.valorPrevisto},{name:'dataPrevista',label:'Data prevista',type:'date',required:true,value:a&&a.dataPrevista}]]).concat([[{name:'valorRecebido',label:'Valor recebido (R$)',type:'number',min:0,step:'0.01',value:a?(a.valorRecebido!=null?a.valorRecebido:(receber?a.valorPrevisto:'')):''},{name:'dataRecebida',label:'Data do recebimento',type:'date',value:a&&a.dataRecebida?a.dataRecebida:(receber?hoje():'')}]]).concat(receber?[]:[{name:'obs',label:'Observações',type:'textarea',rows:2,value:a&&a.obs}]),
+    extra:novo||receber?'':'<button type="button" class="btn danger" data-act="aporte-excluir" data-id="'+a.id+'" style="margin-right:auto">Excluir</button>',
+    onSubmit:async function(v){
+      if(!receber){ if(!(v.descricao||'').trim()) return 'Descreva o aporte.'; if(!(v.valorPrevisto>0)) return 'Informe o valor previsto.'; if(!v.dataPrevista) return 'Informe a data prevista.'; }
+      if((v.valorRecebido>0)!==!!v.dataRecebida) return 'Informe o valor e a data do recebimento juntos.';
+      var rec=Object.assign({}, a||{}, {obraId:oid}); if(!receber){ rec.descricao=v.descricao.trim(); rec.valorPrevisto=r2(v.valorPrevisto); rec.dataPrevista=v.dataPrevista; rec.obs=v.obs||''; }
+      rec.valorRecebido=v.valorRecebido>0?r2(v.valorRecebido):null; rec.dataRecebida=v.dataRecebida||'';
+      delete rec.id; await Store.set('aportes', a?a.id:nid(), rec);
+    }});
+}
+Object.assign(A4,{
+  'fin-filtro':function(d){ ui.finFiltro=d.f; render(); },
+  'conta-nova':function(d){ contaNovaForm(d.oid); },
+  'conta-editar':function(d){ contaEditarForm(d.id); },
+  'conta-paga':function(d){ contaPagaForm(d.id); },
+  'conta-cancelar':function(d){ contaCancelarForm(d.id); },
+  'aporte-novo':function(d){ aporteForm(d.oid); },
+  'aporte-editar':function(d){ var a=G('aportes',d.id); aporteForm(a.obraId,a); },
+  'aporte-receber':function(d){ var a=G('aportes',d.id); aporteForm(a.obraId,a,true); },
+  'aporte-excluir':async function(d){ var ok=await confirmDlg('Excluir aporte?','<p>O registro será removido do fluxo de caixa.</p>','Excluir',true); if(ok){ await Store.del('aportes',d.id); closeDlg(); } }
+});

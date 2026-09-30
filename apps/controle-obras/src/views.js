@@ -1,5 +1,5 @@
 /* ================= VISÕES ================= */
-var ui={semana:{}, ocFiltro:'todas', det:{}, ganttScroll:0, agMes:hoje().slice(0,7), agDia:hoje(), agArea:'todas', docMes:{}, orcBusca:'', orcEtapa:'', orcTipo:''};
+var ui={semana:{}, ocFiltro:'todas', det:{}, ganttScroll:0, agMes:hoje().slice(0,7), agDia:hoje(), agArea:'todas', docMes:{}, orcBusca:'', orcEtapa:'', orcTipo:'', finFiltro:'abertas'};
 var lastKey=null;
 
 function parseRoute(){
@@ -80,8 +80,8 @@ function vPainel(){
 /* ---- obra ---- */
 function vObra(r){
   var o=G('obras',r.oid); if(!o) return notFound();
-  var tabs=[['resumo','Resumo'],['etapas','Etapas'],['cronograma','Cronograma'],['balanco','Balanço'],['semana','Semana e PPC'],['diario','Diário'],['ocorrencias','Ocorrências'],['compras','Compras'],['estoque','Estoque'],['locacoes','Locações'],['orcamento','Orçamento'],['medicao','Medição'],['contratos','Contratos e frentes'],['projeto','RFI e materiais'],['documentos','Documentos'],['agenda','Agenda'],['reunioes','Reuniões'],['entrega','Pré-entrega']];
-  var fn={resumo:tResumo, etapas:tEtapas, cronograma:tCron, balanco:tBalanco, semana:tSemana, diario:tDiario, ocorrencias:tOcorr, agenda:tAgenda, reunioes:tReunioes, projeto:tProjeto, documentos:tDocumentos, entrega:tEntrega, compras:tCompras, estoque:tEstoque, locacoes:tLocacoes, orcamento:tOrcamento, medicao:tMedicao, contratos:tContratos}[r.tab]||tResumo;
+  var tabs=[['resumo','Resumo'],['etapas','Etapas'],['cronograma','Cronograma'],['balanco','Balanço'],['semana','Semana e PPC'],['diario','Diário'],['ocorrencias','Ocorrências'],['compras','Compras'],['estoque','Estoque'],['locacoes','Locações'],['orcamento','Orçamento'],['medicao','Medição'],['financeiro','Financeiro'],['contratos','Contratos e frentes'],['projeto','RFI e materiais'],['documentos','Documentos'],['agenda','Agenda'],['reunioes','Reuniões'],['entrega','Pré-entrega']];
+  var fn={resumo:tResumo, etapas:tEtapas, cronograma:tCron, balanco:tBalanco, semana:tSemana, diario:tDiario, ocorrencias:tOcorr, agenda:tAgenda, reunioes:tReunioes, projeto:tProjeto, documentos:tDocumentos, entrega:tEntrega, compras:tCompras, estoque:tEstoque, locacoes:tLocacoes, orcamento:tOrcamento, medicao:tMedicao, financeiro:tFinanceiro, contratos:tContratos}[r.tab]||tResumo;
   var meta=[o.cliente, o.endereco, o.tipologia, o.area?o.area+' m²':'', o.inicio?'início em '+fmt(o.inicio):''].filter(Boolean).map(esc).join(' · ');
   return '<div class="wrap"><a class="back" href="#/painel">← Todas as obras</a>'
     +'<div class="ob-head"><div class="grow"><h1>'+esc(o.nome)+(o.codigo?' <span class="muted small num">'+esc(o.codigo)+'</span>':'')+'</h1><div class="meta">'+chipMod(o.modalidade)+'<span>'+meta+'</span></div></div>'
