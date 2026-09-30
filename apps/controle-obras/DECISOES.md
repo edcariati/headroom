@@ -219,3 +219,43 @@ Reincidência = 10 × (1 − ocorrências que já foram reabertas ÷ ocorrência
 **D-5.5.3 — Ranking e aviso.** A página Prestadores mostra nota média, número de obras avaliadas, última avaliação e “recontrataria”. Ao **criar** contrato com prestador de nota média abaixo de 6, o formulário mostra um aviso na primeira tentativa de salvar; salvar de novo confirma (não bloqueia).
 
 **D-5.5.4 — Encerramento do contrato.** Encerrar o contrato registra `encerradoEm`, sugere abrir a avaliação e o prestador entra em “avaliação pendente” na aba Avaliações da obra (grupo Prestadores).
+
+### Passo 6 — Encerramento, lições e ajuste do P0
+
+**D-5.6.1 — Mapeamento etapa → disciplina (PROPOSTA, para o Edson confirmar).** O P0 é organizado por disciplina e o app por etapa do protocolo. Proposta inicial, já editável na tela (fica guardada e vale para todas as obras):
+
+| Disciplina | Etapas do protocolo |
+| --- | --- |
+| Projetos e legalização | 1 Pré-obra |
+| Canteiro e mobilização | 2 Mobilização e canteiro |
+| Terraplanagem e contenções | 3 Terraplanagem e locação · 4 Contenções e drenagem do terreno |
+| Fundação e estrutura | 5 Fundação · 6 Estrutura |
+| Alvenaria e vedações | 7 Alvenaria e vedações |
+| Cobertura | 8 Cobertura |
+| Instalações prediais | 9 Instalações embutidas · 10 Reservatórios, fossa e águas pluviais · 11 SPDA e aterramento |
+| Impermeabilização e isolamentos | 12 Impermeabilização · 13 Isolamento térmico e acústico |
+| Revestimentos, contrapisos e fachada | 14 Revestimentos, contrapisos e forros · 15 Fachada e revestimentos externos |
+| Esquadrias e marcenaria | 16 Esquadrias, marcenaria e serralheria |
+| Pintura | 17 Pintura |
+| Energia solar e aquecimento | 18 Energia solar e aquecimento de água |
+| Acabamentos finais | 19 Acabamentos finais |
+| Áreas externas | 20 Áreas externas |
+| Limpeza e entrega | 21 Limpeza, vistoria e entrega · 22 Pós-obra |
+
+**D-5.6.2 — Regra do P0 (método do Edson).** Só entra na comparação o que já foi executado ou comprado: etapa **liberada** ou com **custo apropriado > 0**. Para cada uma: orçado (orçamento revisado) × real (apropriado), desvio em R$ e %, R$/m² (dividido pela área da obra) orçado e real e incidência real (% do custo real total).
+**Economia** (real ≤ orçado) → ação **manter** o valor unitário do P0; **déficit** (real > orçado) → ação **ajustar**, com o R$/m² real como sugestão de novo valor, que o Edson pode editar antes de exportar. Etapa sem custo e não liberada fica fora. Área da obra em branco: sem R$/m² (o app avisa).
+O quadro por disciplina soma as etapas dela e aplica a mesma regra.
+
+**D-5.6.3 — Referência opcional (20 serviços).** CSV `servico;incidencia;minimo;maximo` (percentuais); o serviço é casado pelo nome da disciplina (sem acento e sem diferença de maiúsculas) e incidências reais fora da faixa são sinalizadas.
+
+**D-5.6.4 — Curva real.** % acumulado por mês do custo apropriado até o total (serve de referência físico-financeira para novos orçamentos).
+
+**D-5.6.5 — Exportação “P0 calibrado” (desenho).** CSV `;`, com BOM, em duas partes: (1) `etapa;disciplina;rs_m2_p0_original;rs_m2_real;desvio_pct;acao;rs_m2_calibrado;incidencia_real_pct`; (2) depois de uma linha em branco, a curva real `mes;pct_acumulado`. Gerado na hora a partir dos dados; nenhum arquivo de exemplo foi criado no repositório.
+
+**D-5.6.6 — Encerrar a obra.** Checklist de 9 itens (documentos de encerramento, ocorrências, danos, contas a pagar [Administração], termos de frente, estoque, avaliações, relatório do último mês, lições). Item pendente exige **justificativa** para encerrar. Definições onde havia ambiguidade:
+*termos de frente* = todo prestador com contrato na obra tem ao menos um termo em que ele sai; *estoque* = saldo positivo exige registrar o destino (justificativa); *relatório do último mês* = emitido no mês atual ou, se hoje é até o dia 10, no mês anterior.
+Obra encerrada ganha selo, e criar algo novo nela pede confirmação (uma vez por sessão). É possível reabrir.
+
+**D-5.6.7 — Lições.** Causas do desvio digitadas uma por linha (`etapa; causa; valor; texto`, com a causa entre cliente, fornecedor, produção, projeto, clima, retrabalho, orçamento subdimensionado, outra); o app guarda junto o orçado × realizado por etapa no momento do registro.
+
+**D-5.6.8 — Onde ficam os dados.** Configurações globais (mapa de disciplinas, referência do P0) e ajustes por obra ficam na coleção nova `config` (ids `p0_mapa`, `p0_ref`, `p0_<obra>`); ela entra na exclusão em cascata só para o que tem `obraId`.

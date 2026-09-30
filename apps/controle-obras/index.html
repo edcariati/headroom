@@ -444,7 +444,7 @@ var Supa={ cli:null, cfg:null, session:null,
 function blobUrl(id){ id=String(id||''); return id.indexOf('sb:')===0?Supa.publicUrl(id.slice(3)):'/_blob/'+id; }
 
 /* ---------- armazenamento ---------- */
-var COLS=['obras','etapas','atividades','pacotes','diarios','fichas','ocorrencias','prestadores','eventos','atas','acoes','docsLegais','docsPrest','rfis','materiais','locs','servicos','treinamentos','fornecedores','compras','movEstoque','locacoes','contratosPrest','termos','danos','orcamentos','orcItens','aditivos','medicoes','contasPagar','aportes','empresas','contratosCliente','lancamentos','relatorios','avaliacoes','licoes'];
+var COLS=['obras','etapas','atividades','pacotes','diarios','fichas','ocorrencias','prestadores','eventos','atas','acoes','docsLegais','docsPrest','rfis','materiais','locs','servicos','treinamentos','fornecedores','compras','movEstoque','locacoes','contratosPrest','termos','danos','orcamentos','orcItens','aditivos','medicoes','contasPagar','aportes','empresas','contratosCliente','lancamentos','relatorios','avaliacoes','licoes','config'];
 var Store={
   mode:'boot', db:null, data:{}, uid:null, writable:true, user:null, q:new Map(), unsubs:[],
   init:async function(){
@@ -3072,7 +3072,7 @@ var NAV_GRUPOS=[
 ];
 var NAV_ROTULO={resumo:'Resumo', etapas:'Etapas', cronograma:'Cronograma', balanco:'Balanço', semana:'Semana e PPC', diario:'Diário', ocorrencias:'Ocorrências', entrega:'Pré-entrega', projeto:'RFI e materiais', compras:'Compras', estoque:'Estoque', locacoes:'Locações', contratos:'Contratos e frentes', avaliacoes:'Avaliações', orcamento:'Orçamento', medicao:'Medição', financeiro:'Financeiro', fisfin:'Físico-financeiro', dre:'DRE', agenda:'Agenda', reunioes:'Reuniões', documentos:'Documentos', relatorio:'Relatório mensal', encerramento:'Encerramento e P0'};
 function abaMapa(){
-  return {resumo:tResumo, etapas:tEtapas, cronograma:tCron, balanco:tBalanco, semana:tSemana, diario:tDiario, ocorrencias:tOcorr, entrega:tEntrega, projeto:tProjeto, compras:tCompras, estoque:tEstoque, locacoes:tLocacoes, contratos:tContratos, avaliacoes:tAvaliacoes, orcamento:tOrcamento, medicao:tMedicao, financeiro:tFinanceiro, fisfin:tFisFin, dre:tDRE, relatorio:tRelatorio, agenda:tAgenda, reunioes:tReunioes, documentos:tDocumentos};
+  return {resumo:tResumo, etapas:tEtapas, cronograma:tCron, balanco:tBalanco, semana:tSemana, diario:tDiario, ocorrencias:tOcorr, entrega:tEntrega, projeto:tProjeto, compras:tCompras, estoque:tEstoque, locacoes:tLocacoes, contratos:tContratos, avaliacoes:tAvaliacoes, encerramento:tEncerramento, orcamento:tOrcamento, medicao:tMedicao, financeiro:tFinanceiro, fisfin:tFisFin, dre:tDRE, relatorio:tRelatorio, agenda:tAgenda, reunioes:tReunioes, documentos:tDocumentos};
 }
 function obraNav(o,tab){
   var mapa=abaMapa(), base='#/obra/'+o.id+'/', grupo=NAV_GRUPOS.filter(function(g){ return g[2].indexOf(tab)>=0; })[0]||NAV_GRUPOS[0];
@@ -3616,6 +3616,176 @@ Object.assign(A5,{
   'av-editar':function(d){ var a=G('avaliacoes',d.id); avForm(a.obraId,a.prestadorId,a); },
   'av-excluir':async function(d){ var ok=await confirmDlg('Excluir avaliação?','<p>A nota deixa de contar no ranking do prestador.</p>','Excluir',true); if(ok){ await Store.del('avaliacoes',d.id); closeDlg(); } }
 });
+
+/* ================= ENCERRAMENTO, LIÇÕES E AJUSTE DO P0 ================= */
+var DISC_PADRAO={1:'Projetos e legalização',2:'Canteiro e mobilização',3:'Terraplanagem e contenções',4:'Terraplanagem e contenções',5:'Fundação e estrutura',6:'Fundação e estrutura',7:'Alvenaria e vedações',8:'Cobertura',9:'Instalações prediais',10:'Instalações prediais',11:'Instalações prediais',12:'Impermeabilização e isolamentos',13:'Impermeabilização e isolamentos',14:'Revestimentos, contrapisos e fachada',15:'Revestimentos, contrapisos e fachada',16:'Esquadrias e marcenaria',17:'Pintura',18:'Energia solar e aquecimento',19:'Acabamentos finais',20:'Áreas externas',21:'Limpeza e entrega',22:'Limpeza e entrega'};
+var CAUSAS_DESVIO={cliente:'Cliente', fornecedor:'Fornecedor', producao:'Produção', projeto:'Projeto', clima:'Clima', retrabalho:'Retrabalho', orcamento_subdimensionado:'Orçamento subdimensionado', outra:'Outra'};
+function mapaDisc(){ var d=G('config','p0_mapa'), m=Object.assign({}, DISC_PADRAO); if(d&&d.mapa) Object.keys(d.mapa).forEach(function(k){ if(d.mapa[k]) m[k]=d.mapa[k]; }); return m; }
+function encerrada(o){ return o&&o.situacao==='encerrada'; }
+
+/* ---------- checklist de encerramento ---------- */
+function checklistEncerramento(o){
+  var oid=o.id, base='#/obra/'+oid+'/', adm=modAdm(o), j=o.encerramentoJust||{}, itens=[];
+  var add=function(k,t,ok,det,to,aplica){ if(aplica===false) return; itens.push({k:k, t:t, ok:ok, det:det, to:to, just:j[k]||''}); };
+  var faltamDocs=['sero','cnd','habitese'].filter(function(k){ return !docRegistrado(docLegal(oid,k)); }).map(function(k){ return DOC_LEGAIS.filter(function(x){ return x.k===k; })[0].n; });
+  add('docs','Documentos de encerramento (SERO, CND e habite-se)', !faltamDocs.length, faltamDocs.length?'Faltam: '+faltamDocs.join(', ')+'.':'Todos registrados.', base+'documentos');
+  var oa=byObra('ocorrencias',oid).filter(ocAberta).length; add('ocorrencias','Nenhuma ocorrência aberta', oa===0, oa?plural(oa,'ocorrência aberta','ocorrências abertas')+'.':'Nenhuma aberta.', base+'ocorrencias');
+  var da=byObra('danos',oid).filter(function(d){ return d.status==='aberta'; }).length; add('danos','Nenhum dano aberto', da===0, da?plural(da,'dano aberto','danos abertos')+'.':'Nenhum aberto.', base+'contratos');
+  var ca=byObra('contasPagar',oid).filter(function(c){ return c.status==='aberta'; }); add('contas','Nenhuma conta a pagar aberta', ca.length===0, ca.length?plural(ca.length,'conta aberta','contas abertas')+', somando '+brl(r2(ca.reduce(function(s,c){ return s+c.valor; },0)))+'.':'Nenhuma aberta.', base+'financeiro', adm);
+  var cts=byObra('contratosPrest',oid), semTermo=cts.filter(function(c){ return !byObra('termos',oid).some(function(t){ return t.saiId===c.prestadorId; }); }).map(function(c){ return prestNome(c.prestadorId)||'prestador'; });
+  add('termos','Termo de frente registrado para cada prestador', semTermo.length===0, semTermo.length?'Sem termo: '+semTermo.join(', ')+'.':(cts.length?'Todos registrados.':'Sem contratos de prestador.'), base+'contratos');
+  var sd=saldos(oid).filter(function(s){ return s.saldo>0; }); add('estoque','Estoque com destino definido', sd.length===0, sd.length?'Saldo em estoque: '+sd.slice(0,4).map(function(s){ return s.item+' ('+String(Math.round(s.saldo*100)/100).replace('.',',')+' '+s.un+')'; }).join(', ')+(sd.length>4?'…':'')+'. Registre o destino na justificativa.':'Estoque zerado.', base+'estoque');
+  var semAv=cts.filter(function(c){ return !byObra('avaliacoes',oid).some(function(a){ return a.prestadorId===c.prestadorId; }); }).map(function(c){ return prestNome(c.prestadorId)||'prestador'; }); add('avaliacoes','Avaliação de todos os prestadores', semAv.length===0, semAv.length?'Sem avaliação: '+semAv.join(', ')+'.':(cts.length?'Todos avaliados.':'Sem contratos de prestador.'), base+'avaliacoes');
+  var mAtual=hoje().slice(0,7), mUlt=new Date().getDate()<=10?mesAdd(mAtual,-1):mAtual, rel=relVigente(oid,mAtual)||(mUlt!==mAtual?relVigente(oid,mUlt):null);
+  add('relatorio','Relatório do último mês emitido', !!rel, rel?'Emitido ('+mesNome(rel.mes)+').':'Falta emitir o relatório de '+mesNome(mUlt)+'.', base+'relatorio');
+  var nl=byObra('licoes',oid).length; add('licoes','Lições aprendidas registradas', nl>0, nl?plural(nl,'registro','registros')+'.':'Nenhuma lição registrada.', base+'encerramento');
+  return itens;
+}
+COBX.checklistEncerramento=checklistEncerramento;
+function encerrarObra(oid){
+  var o=G('obras',oid), it=checklistEncerramento(o), semJust=it.filter(function(x){ return !x.ok && !x.just; });
+  if(semJust.length){ blockDlg('Não é possível encerrar a obra', semJust.map(function(x){ return x.t+': '+x.det; }), 'Resolva ou justifique cada item pendente:'); return; }
+  var just=it.filter(function(x){ return !x.ok; });
+  confirmDlg('Encerrar a obra “'+o.nome+'”?','<p>'+(just.length?plural(just.length,'item segue pendente, com justificativa','itens seguem pendentes, com justificativa')+'.':'Todos os itens do checklist estão em ordem.')+'</p><p class="small muted" style="margin-top:8px">Depois de encerrada, criar algo novo na obra pede confirmação. Você pode reabri-la.</p>','Encerrar obra',false).then(async function(ok){
+    if(!ok) return; var rec=Object.assign({}, o, {situacao:'encerrada', encerradaEm:hoje()}); delete rec.id; await Store.set('obras', oid, rec); toast('Obra encerrada.');
+  });
+}
+function justItemForm(oid,k){
+  var o=G('obras',oid), it=checklistEncerramento(o).filter(function(x){ return x.k===k; })[0]; if(!it) return;
+  openForm({title:'Justificar: '+it.t, intro:esc(it.det), fields:[{name:'texto',label:'Justificativa',type:'textarea',required:true,rows:3,value:it.just}], submit:'Registrar justificativa',
+    onSubmit:async function(v){ var j=Object.assign({}, o.encerramentoJust||{}); if((v.texto||'').trim()) j[k]=v.texto.trim(); else delete j[k]; var rec=Object.assign({}, o, {encerramentoJust:j}); delete rec.id; await Store.set('obras', oid, rec); }});
+}
+
+/* ---------- lições aprendidas ---------- */
+function parseCausas(texto){
+  var out=[], erros=[];
+  String(texto||'').split('\n').map(function(l){ return l.trim(); }).filter(Boolean).forEach(function(l,i){
+    var p=l.split(';').map(function(x){ return x.trim(); }), et=p[0]===''?0:numBR(p[0]), cs=chave(p[1]||''), v=p[2]?numBR(p[2]):0;
+    if(!(et>=0&&et<=22&&et===Math.floor(et))){ erros.push('Linha '+(i+1)+': etapa de 1 a 22 (ou vazia).'); return; }
+    if(!CAUSAS_DESVIO[cs]){ erros.push('Linha '+(i+1)+': causa “'+(p[1]||'')+'” inválida. Use: '+Object.keys(CAUSAS_DESVIO).join(', ')+'.'); return; }
+    if(isNaN(v)){ erros.push('Linha '+(i+1)+': valor inválido.'); return; }
+    out.push({etapa:et, causa:cs, valor:r2(v), texto:p.slice(3).join(';').trim()});
+  });
+  return {causas:out, erros:erros};
+}
+COBX.parseCausas=parseCausas;
+function licaoForm(oid,l){
+  var txt=l?(l.causasDesvio||[]).map(function(c){ return [c.etapa||'',c.causa,String(c.valor).replace('.',','),c.texto].join('; '); }).join('\n'):'';
+  openForm({title:l?'Editar lições':'Lições aprendidas', wide:true,
+    fields:[{name:'causas',label:'Causas dos desvios (uma por linha: etapa; causa; valor; texto)',type:'textarea',rows:4,value:txt,ph:'5; orcamento_subdimensionado; 6500; Contenção não estava prevista',hint:'Causas: '+Object.keys(CAUSAS_DESVIO).join(', ')+'.'},
+      {name:'oQueFuncionou',label:'O que funcionou',type:'textarea',rows:3,value:l&&l.oQueFuncionou},{name:'oQueMudar',label:'O que mudar',type:'textarea',rows:3,value:l&&l.oQueMudar},
+      {name:'ajustesProtocolo',label:'Ajustes no protocolo',type:'textarea',rows:2,value:l&&l.ajustesProtocolo},{name:'anexos',label:'Anexos',type:'anexos',value:(l&&l.anexos)||[]}],
+    extra:l?'<button type="button" class="btn danger" data-act="licao-excluir" data-id="'+l.id+'" style="margin-right:auto">Excluir</button>':'',
+    onSubmit:async function(v){
+      var r=parseCausas(v.causas); if(r.erros.length) return r.erros[0];
+      if(!r.causas.length&&!(v.oQueFuncionou||'').trim()&&!(v.oQueMudar||'').trim()&&!(v.ajustesProtocolo||'').trim()) return 'Registre ao menos uma causa, o que funcionou, o que mudar ou um ajuste do protocolo.';
+      var snap={}; custoEtapa(oid).etapas.forEach(function(x){ snap[x.etapa]={orcado:x.orcado, real:x.apropriado}; });
+      var rec=Object.assign({data:hoje(), criadoEm:new Date().toISOString(), por:Store.uid||null}, l||{}, {obraId:oid, snapshotOrcadoRealizado:snap, causasDesvio:r.causas, oQueFuncionou:(v.oQueFuncionou||'').trim(), oQueMudar:(v.oQueMudar||'').trim(), ajustesProtocolo:(v.ajustesProtocolo||'').trim(), anexos:v.anexos||[]});
+      delete rec.id; await Store.set('licoes', l?l.id:nid(), rec);
+    }});
+}
+
+/* ---------- ajuste do P0 ---------- */
+function p0Calc(o){
+  var oid=o.id, area=Number(o.area)||0, mapa=mapaDisc(), c=custoEtapa(oid), totReal=c.total.apropriado, aj=(G('config','p0_'+oid)||{}).ajustes||{};
+  var linhas=[];
+  c.etapas.forEach(function(x){
+    if(!x.etapa) return;
+    var lib=etapaDoc(oid,x.etapa).status==='liberada';
+    if(!lib && !(x.apropriado>0)) return;
+    var orc=x.orcado, real=x.apropriado, desv=r2(real-orc), acao=real>orc+0.005?'ajustar':'manter';
+    var m2o=area>0?r2(orc/area):null, m2r=area>0?r2(real/area):null, sug=acao==='ajustar'?m2r:m2o;
+    linhas.push({etapa:x.etapa, disciplina:mapa[x.etapa]||'—', orcado:orc, real:real, desvio:desv, desvioPct:orc>0?desv/orc:null, m2Orcado:m2o, m2Real:m2r, acao:acao, sugestao:sug, calibrado:aj[x.etapa]!=null?Number(aj[x.etapa]):sug, editado:aj[x.etapa]!=null, incidencia:totReal>0?real/totReal:null});
+  });
+  var disc={}; linhas.forEach(function(l){ var d=disc[l.disciplina]||(disc[l.disciplina]={disciplina:l.disciplina, orcado:0, real:0}); d.orcado=r2(d.orcado+l.orcado); d.real=r2(d.real+l.real); });
+  var ref=(G('config','p0_ref')||{}).linhas||[];
+  var discs=Object.keys(disc).map(function(k){ var d=disc[k], desv=r2(d.real-d.orcado), acao=d.real>d.orcado+0.005?'ajustar':'manter'; var inc=totReal>0?d.real/totReal:null; var rf=ref.filter(function(r){ return chave(r.servico)===chave(d.disciplina); })[0]; var fora=rf&&inc!=null?(inc*100<rf.minimo||inc*100>rf.maximo):false; return {disciplina:d.disciplina, orcado:d.orcado, real:d.real, desvio:desv, desvioPct:d.orcado>0?desv/d.orcado:null, m2Orcado:area>0?r2(d.orcado/area):null, m2Real:area>0?r2(d.real/area):null, acao:acao, incidencia:inc, ref:rf||null, fora:fora}; });
+  return {linhas:linhas, disciplinas:discs, area:area, totalReal:totReal};
+}
+COBX.p0Calc=p0Calc;
+function curvaRealCusto(oid){
+  var ev=eventosCusto(oid).filter(function(x){ return x.tipo==='apropriado'; }), por={}, tot=0;
+  ev.forEach(function(x){ var m=x.data.slice(0,7); por[m]=(por[m]||0)+x.valor; tot+=x.valor; });
+  var ms=Object.keys(por).sort(); if(!ms.length) return [];
+  var acc=0; return mesesEntre(ms[0],ms[ms.length-1]).map(function(m){ acc+=(por[m]||0); return {mes:m, valor:r2(por[m]||0), pct:tot>0?acc/tot*100:0}; });
+}
+COBX.curvaRealCusto=curvaRealCusto;
+function csvP0(o){
+  var p=p0Calc(o), fp=function(x){ return x==null?'':String(Math.round(x*100)/100).replace('.',','); };
+  var a=[['etapa','disciplina','rs_m2_p0_original','rs_m2_real','desvio_pct','acao','rs_m2_calibrado','incidencia_real_pct']].concat(p.linhas.map(function(l){ return [l.etapa, l.disciplina, fp(l.m2Orcado), fp(l.m2Real), l.desvioPct==null?'':fp(l.desvioPct*100), l.acao, fp(l.calibrado), l.incidencia==null?'':fp(l.incidencia*100)]; }));
+  var b=[['mes','pct_acumulado']].concat(curvaRealCusto(o.id).map(function(x){ return [x.mes, fp(x.pct)]; }));
+  return a.map(function(l){ return csvLinha(l,';'); }).join('\r\n')+'\r\n\r\n'+b.map(function(l){ return csvLinha(l,';'); }).join('\r\n')+'\r\n';
+}
+COBX.csvP0=csvP0;
+function p0RefParse(texto){
+  var rows=csvParse(texto), rel={erros:[], linhas:[]}; if(rows.length<2){ rel.erros.push('O arquivo precisa ter o cabeçalho (servico;incidencia;minimo;maximo) e linhas.'); return rel; }
+  var h=rows[0].map(chave), ix=function(n){ return h.indexOf(n); };
+  if(ix('servico')<0||ix('incidencia')<0||ix('minimo')<0||ix('maximo')<0){ rel.erros.push('O cabeçalho precisa de servico, incidencia, minimo e maximo.'); return rel; }
+  for(var i=1;i<rows.length;i++){ var r=rows[i], nome=String(r[ix('servico')]||'').trim(), inc=numBR(r[ix('incidencia')]), mn=numBR(r[ix('minimo')]), mx=numBR(r[ix('maximo')]); if(!nome) continue;
+    if(isNaN(inc)||isNaN(mn)||isNaN(mx)||mn>mx){ rel.erros.push('Linha '+(i+1)+': incidência, mínimo e máximo devem ser números, com mínimo ≤ máximo.'); continue; } rel.linhas.push({servico:nome, incidencia:inc, minimo:mn, maximo:mx}); }
+  if(!rel.linhas.length&&!rel.erros.length) rel.erros.push('Nenhuma linha válida.'); return rel;
+}
+COBX.p0RefParse=p0RefParse;
+function p0RefDlg(){
+  var d=openDlg('<form id="p0form"><div class="dlg-h"><h2>Referência do P0</h2><button type="button" class="btn ghost ico" data-close aria-label="Fechar">✕</button></div><div class="dlg-b"><p class="muted small">CSV <strong>servico;incidencia;minimo;maximo</strong> (percentuais). O nome do serviço é comparado com o nome da disciplina.</p><div class="fld"><label for="p0_csv">Cole o conteúdo do CSV</label><textarea id="p0_csv" rows="7" spellcheck="false"></textarea></div><div id="p0_rel"></div></div><div class="dlg-f"><button type="button" class="btn" data-close>Cancelar</button><button type="button" class="btn" data-p0="validar">Validar</button><button type="button" class="btn primary" data-p0="ok" disabled>Salvar referência</button></div></form>', true);
+  var ta=$('#p0_csv',d), ok=d.querySelector('[data-p0="ok"]'), rel=null;
+  d.addEventListener('click', async function(e){ var b=e.target.closest('[data-p0]'); if(!b) return;
+    if(b.dataset.p0==='validar'){ rel=p0RefParse(ta.value); $('#p0_rel',d).innerHTML=rel.erros.length?'<div class="callout crit" style="margin-top:12px"><ul>'+rel.erros.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul></div>':'<div class="callout ok" style="margin-top:12px"><strong>'+plural(rel.linhas.length,'serviço válido','serviços válidos')+'.</strong></div>'; ok.disabled=!!rel.erros.length; return; }
+    if(b.dataset.p0==='ok'&&rel&&!rel.erros.length){ await Store.set('config','p0_ref',{linhas:rel.linhas, atualizadoEm:hoje()}); closeDlg(); toast('Referência do P0 salva.'); } });
+}
+function p0MapaForm(){
+  var m=mapaDisc();
+  openForm({title:'Mapeamento etapa → disciplina', wide:true, intro:'O P0 é organizado por disciplina e o app por etapa. Edite o nome da disciplina de cada etapa; etapas com o mesmo nome se somam.',
+    fields:ETAPAS.map(function(e){ return {name:'d_'+e.n, label:e.n+'. '+e.nome, value:m[e.n]}; }),
+    extra:'<button type="button" class="btn" data-act="p0-mapa-padrao" style="margin-right:auto">Restaurar padrão</button>',
+    onSubmit:async function(v){ var mp={}; ETAPAS.forEach(function(e){ var x=(v['d_'+e.n]||'').trim(); if(!x) return; mp[e.n]=x; }); if(Object.keys(mp).length<ETAPAS.length) return 'Toda etapa precisa de uma disciplina.'; await Store.set('config','p0_mapa',{mapa:mp}); }});
+}
+function p0AjusteForm(oid,etapa){
+  var o=G('obras',oid), l=p0Calc(o).linhas.filter(function(x){ return x.etapa===etapa; })[0]; if(!l) return;
+  openForm({title:'Valor calibrado: etapa '+etapa, intro:'Sugestão do método: <strong>'+(l.sugestao==null?'—':brl(l.sugestao)+'/m²')+'</strong> ('+(l.acao==='ajustar'?'déficit: usa o custo real':'economia: mantém o P0')+').',
+    fields:[{name:'valor',label:'R$/m² calibrado',type:'number',min:0,step:'0.01',required:true,value:l.calibrado}], submit:'Salvar',
+    onSubmit:async function(v){ if(!(v.valor>=0)) return 'Informe o valor.'; var cur=G('config','p0_'+oid)||{obraId:oid, ajustes:{}}; var aj=Object.assign({}, cur.ajustes); aj[etapa]=r2(v.valor); await Store.set('config','p0_'+oid,{obraId:oid, ajustes:aj}); }});
+}
+
+/* ---------- aba Encerramento e P0 ---------- */
+function tEncerramento(o){
+  var oid=o.id, enc=encerrada(o), it=checklistEncerramento(o), pend=it.filter(function(x){ return !x.ok; }), ls=byObra('licoes',oid).sort(function(a,b){ return a.data<b.data?1:-1; });
+  var stat=enc?'<div class="callout ok"><strong>Obra encerrada em '+fmt(o.encerradaEm)+'.</strong> <button class="btn sm" data-act="obra-reabrir" data-oid="'+oid+'" data-write>Reabrir obra</button></div>':'<div class="callout'+(pend.length?'':' ok')+'"><strong>'+(pend.length?plural(pend.length,'item pendente','itens pendentes')+' no checklist.':'Checklist completo: a obra pode ser encerrada.')+'</strong> Item pendente pode seguir com justificativa.</div>';
+  var check='<section class="card sec"><div class="card-h"><h2>Checklist de encerramento</h2>'+(enc?'':'<button class="btn primary" data-act="obra-encerrar" data-oid="'+oid+'" data-write>Encerrar obra</button>')+'</div>'+it.map(function(x){
+    return '<div class="ficha" style="grid-template-columns:1fr auto"><div><span class="chip '+(x.ok?'ok':(x.just?'warn':'crit'))+'">'+(x.ok?'Ok':(x.just?'Justificado':'Pendente'))+'</span> <strong>'+esc(x.t)+'</strong><div class="small muted">'+esc(x.det)+'</div>'+(x.just?'<div class="small" style="white-space:pre-wrap">Justificativa: '+esc(x.just)+'</div>':'')+'</div><div class="row" style="gap:6px"><a class="btn sm" href="'+x.to+'">Abrir</a>'+(!x.ok&&!enc?'<button class="btn sm" data-act="enc-justificar" data-oid="'+oid+'" data-k="'+x.k+'" data-write>'+(x.just?'Editar justificativa':'Justificar')+'</button>':'')+'</div></div>';
+  }).join('')+'</section>';
+  var licHtml='<section class="card sec"><div class="card-h"><div><h2>Lições aprendidas</h2><p class="muted small">Causas dos desvios e o que mudar nas próximas obras.</p></div><button class="btn primary sm" data-act="licao-nova" data-oid="'+oid+'" data-write>+ Lições</button></div>'+(ls.length?ls.map(function(l){ return '<article class="entry"><div class="row spread"><strong>'+fmt(l.data)+'</strong><button class="btn sm ghost" data-act="licao-editar" data-id="'+l.id+'" data-write>Editar</button></div>'+((l.causasDesvio||[]).length?'<ul class="small" style="padding-left:18px">'+l.causasDesvio.map(function(c){ return '<li>'+(c.etapa?'Etapa '+c.etapa+' — ':'')+'<strong>'+CAUSAS_DESVIO[c.causa]+'</strong>'+(c.valor?' ('+brl(c.valor)+')':'')+(c.texto?': '+esc(c.texto):'')+'</li>'; }).join('')+'</ul>':'')+(l.oQueFuncionou?'<p class="small"><strong>Funcionou:</strong> '+esc(l.oQueFuncionou)+'</p>':'')+(l.oQueMudar?'<p class="small"><strong>Mudar:</strong> '+esc(l.oQueMudar)+'</p>':'')+(l.ajustesProtocolo?'<p class="small"><strong>Protocolo:</strong> '+esc(l.ajustesProtocolo)+'</p>':'')+anexosHtml(l.anexos)+'</article>'; }).join(''):'<p class="muted pad">Nenhuma lição registrada.</p>')+'</section>';
+  var p=p0Calc(o), fp=function(x){ return x==null?'—':brl(x); }, fpc=function(x){ return x==null?'—':(Math.round(x*1000)/10).toString().replace('.',',')+'%'; };
+  var p0='<section class="card sec"><div class="card-h"><div><h2>Ajuste do P0</h2><p class="muted small">Só o que já foi executado ou comprado entra. Economia: <strong>mantém</strong> o valor unitário do P0; déficit: <strong>ajusta</strong> (sugestão = custo real por m²). Área da obra: '+(p.area>0?p.area+' m²':'<span class="chip warn">não informada</span>')+'.</p></div><div class="row"><button class="btn sm" data-act="p0-mapa">Disciplinas</button><button class="btn sm" data-act="p0-ref">Referência (CSV)</button><button class="btn sm primary" data-act="p0-csv">Exportar P0 calibrado</button></div></div>'
+    +(p.linhas.length?'<div class="tbl-scroll"><table class="tbl"><thead><tr><th>Etapa</th><th class="num">Orçado</th><th class="num">Real</th><th class="num">Desvio</th><th class="num">R$/m² orçado</th><th class="num">R$/m² real</th><th>Ação</th><th class="num">R$/m² calibrado</th><th class="num">Incidência</th></tr></thead><tbody>'+p.linhas.map(function(l){ return '<tr><td>'+l.etapa+'. '+esc(etapaInfo(l.etapa).nome)+'<div class="tiny muted">'+esc(l.disciplina)+'</div></td><td class="num">'+brl(l.orcado)+'</td><td class="num">'+brl(l.real)+'</td><td class="num" style="color:'+(l.desvio>0?'var(--crit)':'var(--ok)')+'">'+brl(l.desvio)+'<div class="tiny">'+(l.desvioPct==null?'':(l.desvioPct>0?'+':'')+(Math.round(l.desvioPct*1000)/10).toString().replace('.',',')+'%')+'</div></td><td class="num">'+fp(l.m2Orcado)+'</td><td class="num">'+fp(l.m2Real)+'</td><td><span class="chip '+(l.acao==='ajustar'?'crit':'ok')+'">'+(l.acao==='ajustar'?'Ajustar':'Manter')+'</span></td><td class="num"><strong>'+fp(l.calibrado)+'</strong>'+(l.editado?' <span class="chip steel">editado</span>':'')+' <button class="btn sm ghost" data-act="p0-ajuste" data-oid="'+oid+'" data-n="'+l.etapa+'" data-write aria-label="Editar valor calibrado">✎</button></td><td class="num">'+fpc(l.incidencia)+'</td></tr>'; }).join('')+'</tbody></table></div>'
+      +'<div class="card-h" style="border-top:1px solid var(--line2)"><h3>Por disciplina</h3></div><div class="tbl-scroll"><table class="tbl"><thead><tr><th>Disciplina</th><th class="num">Orçado</th><th class="num">Real</th><th class="num">Desvio</th><th>Ação</th><th class="num">Incidência real</th><th>Faixa de referência</th></tr></thead><tbody>'+p.disciplinas.map(function(d){ return '<tr'+(d.fora?' style="background:var(--crit-soft)"':'')+'><td>'+esc(d.disciplina)+'</td><td class="num">'+brl(d.orcado)+'</td><td class="num">'+brl(d.real)+'</td><td class="num">'+brl(d.desvio)+'</td><td><span class="chip '+(d.acao==='ajustar'?'crit':'ok')+'">'+(d.acao==='ajustar'?'Ajustar':'Manter')+'</span></td><td class="num">'+fpc(d.incidencia)+'</td><td>'+(d.ref?String(d.ref.minimo).replace('.',',')+'% a '+String(d.ref.maximo).replace('.',',')+'%'+(d.fora?' <span class="chip crit">Fora da faixa</span>':' <span class="chip ok">Dentro</span>'):'—')+'</td></tr>'; }).join('')+'</tbody></table></div>'
+      :'<p class="muted pad">Nenhuma etapa executada ou comprada ainda.</p>')+'</section>';
+  var cr=curvaRealCusto(oid), curva=cr.length>1?'<section class="card sec pad"><h3 style="margin-bottom:8px">Curva real do custo (% acumulado por mês)</h3>'+svgGrafico({titulo:'Curva real de custo acumulado', labels:cr.map(function(x){ return mesCurto(x.mes); }), linhas:[{nome:'Custo apropriado acumulado',cor:'var(--steel)',v:cr.map(function(x){ return x.pct; })}], fmt:function(v){ return Math.round(v)+'%'; }})+'</section>':'';
+  return '<div class="sec-h"><div><h2>Encerramento e P0</h2><p class="muted small">Fechar a obra, guardar o que aprendemos e calibrar o preço inicial para as próximas.</p></div></div><div style="margin-top:14px">'+stat+'</div>'+check+licHtml+p0+curva;
+}
+Object.assign(A5,{
+  'obra-encerrar':function(d){ encerrarObra(d.oid); },
+  'obra-reabrir':async function(d){ var o=G('obras',d.oid); var ok=await confirmDlg('Reabrir a obra?','<p>A obra volta a aceitar lançamentos sem aviso.</p>','Reabrir',false); if(ok){ var rec=Object.assign({}, o, {situacao:'em_andamento', encerradaEm:''}); delete rec.id; await Store.set('obras', d.oid, rec); } },
+  'enc-justificar':function(d){ justItemForm(d.oid,d.k); },
+  'licao-nova':function(d){ licaoForm(d.oid); },
+  'licao-editar':function(d){ licaoForm(G('licoes',d.id).obraId, G('licoes',d.id)); },
+  'licao-excluir':async function(d){ var ok=await confirmDlg('Excluir lições?','<p>O registro será removido.</p>','Excluir',true); if(ok){ await Store.del('licoes',d.id); closeDlg(); } },
+  'p0-mapa':function(){ p0MapaForm(); },
+  'p0-mapa-padrao':async function(){ await Store.del('config','p0_mapa'); closeDlg(); toast('Mapeamento padrão restaurado.'); },
+  'p0-ref':function(){ p0RefDlg(); },
+  'p0-ajuste':function(d){ p0AjusteForm(d.oid, Number(d.n)); }
+});
+// exportação precisa da obra atual (vem da rota)
+A5['p0-csv']=function(){ var r=parseRoute(), o=r.oid?G('obras',r.oid):null; if(!o) return; baixar('p0-calibrado-'+chave(o.nome)+'.csv','﻿'+csvP0(o),'text/csv').then(function(ok){ if(ok) toast('P0 calibrado exportado.'); }); };
+
+/* obra encerrada: selo e aviso ao criar algo novo */
+var ACOES_NOVAS=/^(.+-nov[oa]s?|lanc-novo|rel-criar|adt-de-oc|adt-de-mat|loc-nova-eq|orc-importar|av-nova|sug-ok|sug-todas)$/;
+document.addEventListener('click', function(e){
+  var el=e.target.closest&&e.target.closest('[data-act]'); if(!el||!ACOES_NOVAS.test(el.dataset.act||'')||el.__confirmado) return;
+  var r=parseRoute(), oid=el.dataset.oid||r.oid, o=oid?G('obras',oid):null; if(!encerrada(o)||(ui.encOk&&ui.encOk[o.id])) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  confirmDlg('Obra encerrada','<p>“'+esc(o.nome)+'” foi encerrada em '+fmt(o.encerradaEm)+'. Registrar algo novo agora altera uma obra já fechada.</p>','Continuar mesmo assim',false).then(function(ok){ if(!ok) return; ui.encOk=ui.encOk||{}; ui.encOk[o.id]=true; setTimeout(function(){ el.click(); },30); });
+}, true);
 /* ================= VISÕES ================= */
 var ui={semana:{}, ocFiltro:'todas', det:{}, ganttScroll:0, agMes:hoje().slice(0,7), agDia:hoje(), agArea:'todas', docMes:{}, orcBusca:'', orcEtapa:'', orcTipo:'', finFiltro:'abertas'};
 var lastKey=null;
@@ -3702,7 +3872,7 @@ function vObra(r){
   var mapa=abaMapa(), tab=mapa[r.tab]?r.tab:'resumo', fn=mapa[tab];
   var meta=[o.cliente, o.endereco, o.tipologia, o.area?o.area+' m²':'', o.inicio?'início em '+fmt(o.inicio):''].filter(Boolean).map(esc).join(' · ');
   return '<div class="wrap"><a class="back" href="#/painel">← Todas as obras</a>'
-    +'<div class="ob-head"><div class="grow"><h1>'+esc(o.nome)+(o.codigo?' <span class="muted small num">'+esc(o.codigo)+'</span>':'')+'</h1><div class="meta">'+chipMod(o.modalidade)+'<span>'+meta+'</span></div></div>'
+    +'<div class="ob-head"><div class="grow"><h1>'+esc(o.nome)+(o.codigo?' <span class="muted small num">'+esc(o.codigo)+'</span>':'')+'</h1><div class="meta">'+chipMod(o.modalidade)+(o.situacao==='encerrada'?'<span class="chip ok">Encerrada em '+fmt(o.encerradaEm)+'</span>':'')+'<span>'+meta+'</span></div></div>'
     +'<div class="row"><button class="btn" data-act="obra-editar" data-oid="'+o.id+'" data-write>Editar obra</button></div></div>'
     +'<div class="no-print" style="margin-top:20px">'+regua(o.id,false)+legenda()+'</div>'
     +obraNav(o,tab)
@@ -3954,7 +4124,7 @@ async function excluirObra(oid){
   var ok=await confirmDlg('Excluir a obra “'+o.nome+'”?','<p>Isso apaga a obra e todos os registros dela: etapas, fichas, cronograma, pacotes, diário e ocorrências. Não dá para desfazer.</p>','Excluir obra',true);
   if(!ok) return;
   var tasks=[];
-  ['etapas','atividades','pacotes','diarios','fichas','ocorrencias','eventos','atas','acoes','docsLegais','docsPrest','rfis','materiais','locs','servicos','compras','movEstoque','locacoes','contratosPrest','termos','danos','orcamentos','orcItens','aditivos','medicoes','contasPagar','aportes'].forEach(function(c){ byObra(c,oid).forEach(function(x){ tasks.push(Store.del(c,x.id)); }); });
+  ['etapas','atividades','pacotes','diarios','fichas','ocorrencias','eventos','atas','acoes','docsLegais','docsPrest','rfis','materiais','locs','servicos','compras','movEstoque','locacoes','contratosPrest','termos','danos','orcamentos','orcItens','aditivos','medicoes','contasPagar','aportes','contratosCliente','lancamentos','relatorios','avaliacoes','licoes','config'].forEach(function(c){ byObra(c,oid).forEach(function(x){ tasks.push(Store.del(c,x.id)); }); });
   tasks.push(Store.del('obras',oid));
   await Promise.all(tasks); location.hash='#/painel'; toast('Obra excluída.');
 }
@@ -4252,7 +4422,7 @@ document.addEventListener('change', function(e){
 document.addEventListener('toggle', function(e){ var d=e.target; if(d&&d.matches&&d.matches('details.ex')) ui.det[d.dataset.k]=d.open; }, true);
 
 /* ================= NUVEM, LOGIN E HISTÓRICO ================= */
-var COL_NOMES={obras:'Obra', etapas:'Etapa', atividades:'Atividade', pacotes:'Pacote semanal', diarios:'Diário', fichas:'Ficha de verificação', ocorrencias:'Ocorrência', prestadores:'Prestador', eventos:'Agenda', atas:'Ata', acoes:'Ação', docsLegais:'Documento legal', docsPrest:'Documento de prestador', rfis:'Consulta técnica', materiais:'Material', locs:'Local', servicos:'Serviço', treinamentos:'Treinamento', fornecedores:'Fornecedor', compras:'Compra', movEstoque:'Estoque', locacoes:'Locação', contratosPrest:'Contrato', termos:'Termo', danos:'Dano', orcamentos:'Orçamento (versão)', orcItens:'Itens do orçamento', aditivos:'Aditivo', medicoes:'Medição', contasPagar:'Conta a pagar', aportes:'Aporte do cliente'};
+var COL_NOMES={obras:'Obra', etapas:'Etapa', atividades:'Atividade', pacotes:'Pacote semanal', diarios:'Diário', fichas:'Ficha de verificação', ocorrencias:'Ocorrência', prestadores:'Prestador', eventos:'Agenda', atas:'Ata', acoes:'Ação', docsLegais:'Documento legal', docsPrest:'Documento de prestador', rfis:'Consulta técnica', materiais:'Material', locs:'Local', servicos:'Serviço', treinamentos:'Treinamento', fornecedores:'Fornecedor', compras:'Compra', movEstoque:'Estoque', locacoes:'Locação', contratosPrest:'Contrato', termos:'Termo', danos:'Dano', orcamentos:'Orçamento (versão)', orcItens:'Itens do orçamento', aditivos:'Aditivo', medicoes:'Medição', contasPagar:'Conta a pagar', aportes:'Aporte do cliente', empresas:'Empresa', contratosCliente:'Contrato do cliente', lancamentos:'Lançamento', relatorios:'Relatório mensal', avaliacoes:'Avaliação de prestador', licoes:'Lição aprendida', config:'Configuração'};
 var hist={rows:null, carregando:false, erro:'', obra:'', colecao:''};
 
 function vLogin(){

@@ -9,7 +9,7 @@ const atual = (e, sel) => Array.from(e.doc.querySelectorAll(sel + ' [aria-curren
 test('fase 5 · passo 0 · grupos da obra e subabas', async () => {
   const e = await abrir({ seed: { obras: { o1: obra() } }, hash: '#/obra/o1/resumo' });
   const grupos = Array.from(e.doc.querySelectorAll('nav.grupos a')).map((a) => a.textContent);
-  assert.equal(grupos.join(' · '), 'Visão geral · Planejamento · Execução e qualidade · Suprimentos · Prestadores · Custo e financeiro · Gestão');
+  assert.equal(grupos.join(' · '), 'Visão geral · Planejamento · Execução e qualidade · Suprimentos · Prestadores · Custo e financeiro · Gestão · Encerramento');
   assert.equal(atual(e, 'nav.grupos'), 'Visão geral');
 });
 
@@ -33,7 +33,7 @@ test('fase 5 · passo 0 · aba desconhecida cai no resumo e o grupo sem subabas 
 test('fase 5 · passo 0 · cada grupo leva à primeira subaba', async () => {
   const e = await abrir({ seed: { obras: { o1: obra() } }, hash: '#/obra/o1/resumo' });
   const hrefs = Array.from(e.doc.querySelectorAll('nav.grupos a')).map((a) => a.getAttribute('href'));
-  assert.deepEqual(hrefs, ['#/obra/o1/resumo', '#/obra/o1/etapas', '#/obra/o1/diario', '#/obra/o1/compras', '#/obra/o1/contratos', '#/obra/o1/orcamento', '#/obra/o1/agenda']);
+  assert.deepEqual(hrefs, ['#/obra/o1/resumo', '#/obra/o1/etapas', '#/obra/o1/diario', '#/obra/o1/compras', '#/obra/o1/contratos', '#/obra/o1/orcamento', '#/obra/o1/agenda', '#/obra/o1/encerramento']);
 });
 
 /* ---------------- passo 1: empresas, empresa na obra e contrato do cliente ---------------- */
@@ -675,4 +675,190 @@ test('fase 5 · passo 5 · texto da avaliação é escapado', async () => {
   await e.go('#/prestadores');
   assert.equal(e.doc.querySelector('img[src="x"]'), null);
   assert.equal(e.win.__xss, undefined);
+});
+
+/* ---------------- passo 6: encerramento, lições e ajuste do P0 ---------------- */
+const conta = (o) => Object.assign({ obraId: 'o1', origem: 'outro', origemId: 'x', descricao: 'Conta', valor: 1000, vencimento: '', status: 'aberta', pagoEm: '' }, o || {});
+const seedEnc = (extra, adm) => Object.assign({ obras: { o1: (adm === false ? obra : obraAdm)({ nome: 'Casa Encerrar', area: 100 }) } }, extra || {});
+const docsEnc = () => { const d = {}; ['sero', 'cnd', 'habitese'].forEach((k) => { d['o1_' + k] = { obraId: 'o1', tipo: k, numero: '123', validade: '', anexos: [] }; }); return d; };
+const itemOk = (t, k) => t.find((x) => x.k === k).ok;
+
+test('fase 5 · passo 6 · checklist de encerramento reflete cada item', async () => {
+  const e = await abrir({ seed: seedEnc() });
+  let t = e.x.checklistEncerramento(e.x.G('obras', 'o1'));
+  assert.deepEqual(Array.from(t.map((x) => x.k)), ['docs', 'ocorrencias', 'danos', 'contas', 'termos', 'estoque', 'avaliacoes', 'relatorio', 'licoes']);
+  assert.equal(itemOk(t, 'docs'), false);
+  assert.equal(itemOk(t, 'ocorrencias'), true);
+  assert.equal(itemOk(t, 'licoes'), false);
+  const cheio = await abrir({ seed: seedEnc({ docsLegais: docsEnc(), ocorrencias: { c1: oc() }, danos: { d1: { obraId: 'o1', descricao: 'x', custo: 1, status: 'aberta' } }, contasPagar: { k1: conta({ obraId: 'o1', valor: 10 }) }, movEstoque: { m1: { obraId: 'o1', item: 'Cimento', un: 'saco', tipo: 'entrada', qtd: 5, data: dia(-1) } }, contratosPrest: { ct1: { obraId: 'o1', prestadorId: 'p1', escopo: 'x', valor: 1, inicio: dia(-9), fim: dia(9), status: 'ativo' } }, prestadores: { p1: { nome: 'P' } } }) });
+  t = cheio.x.checklistEncerramento(cheio.x.G('obras', 'o1'));
+  assert.equal(itemOk(t, 'docs'), true);
+  ['ocorrencias', 'danos', 'contas', 'termos', 'estoque', 'avaliacoes'].forEach((k) => assert.equal(itemOk(t, k), false, k));
+  const gestao = await abrir({ seed: seedEnc({}, false) });
+  assert.ok(!gestao.x.checklistEncerramento(gestao.x.G('obras', 'o1')).some((x) => x.k === 'contas'));   // contas só na Administração
+});
+
+test('fase 5 · passo 6 · encerrar exige o checklist completo ou justificativa por item pendente', async () => {
+  const e = await abrir({ seed: seedEnc(), hash: '#/obra/o1/encerramento' });
+  await e.click('[data-act="obra-encerrar"]');
+  assert.match(e.dlg(), /Não é possível encerrar a obra/);
+  assert.match(e.dlg(), /Documentos de encerramento/);
+  assert.equal(e.linhas('obras')[0].situacao, undefined);
+  await e.click('[data-close]');
+  for (const k of ['docs', 'relatorio', 'licoes']) {
+    await e.click('[data-act="enc-justificar"][data-k="' + k + '"]');
+    await e.submit({ texto: 'Justificativa de ' + k });
+  }
+  assert.match(e.app(), /Justificado/);
+  await e.click('[data-act="obra-encerrar"]');
+  assert.match(e.dlg(), /3 itens seguem pendentes, com justificativa/);
+  await e.click('[data-x="1"]');
+  const o = e.linhas('obras')[0];
+  assert.equal(o.situacao, 'encerrada');
+  assert.equal(o.encerradaEm, dia(0));
+  assert.match(e.app(), /Obra encerrada em/);
+  assert.match(e.app(), /Encerrada em/);                                  // selo no cabeçalho
+});
+
+test('fase 5 · passo 6 · obra encerrada pede confirmação ao criar algo novo e pode ser reaberta', async () => {
+  const e = await abrir({ seed: seedEnc({}), hash: '#/obra/o1/ocorrencias' });
+  await e.recarrega('obras', 'o1', Object.assign({}, e.x.G('obras', 'o1'), { situacao: 'encerrada', encerradaEm: dia(-3) }));
+  await e.click('[data-act="oc-nova"]');
+  assert.match(e.dlg(), /Obra encerrada/);
+  assert.equal(e.doc.querySelector('#dform'), null);                       // o formulário ainda não abriu
+  await e.click('[data-x="1"]');
+  await e.tick(200);
+  assert.ok(e.doc.querySelector('#dform'));                                // depois de confirmar, abre
+  await e.click('[data-close]');
+  await e.click('[data-act="oc-nova"]');                                   // só pergunta uma vez por sessão
+  assert.ok(e.doc.querySelector('#dform'));
+  await e.click('[data-close]');
+  await e.go('#/obra/o1/encerramento');
+  await e.click('[data-act="obra-reabrir"]');
+  await e.click('[data-x="1"]');
+  assert.equal(e.linhas('obras')[0].situacao, 'em_andamento');
+});
+
+test('fase 5 · passo 6 · lições aprendidas: causas, validação e snapshot do orçado × realizado', async () => {
+  const seed = seedEnc({ orcamentos: { b1: { obraId: 'o1', versao: 1, data: dia(-9), motivo: 'Base', total: 1000, nItens: 1, lotes: 1, porEtapa: { 5: 1000 }, porTipo: { material: 1000 } } }, orcItens: { b1_0: { obraId: 'o1', orcId: 'b1', lote: 0, itens: [{ codigo: '5.01', etapa: 5, descricao: 'x', unidade: 'un', quantidade: 1, precoUnitario: 1000, tipo: 'material', prestador: '', prestadorId: '', total: 1000 }] } } });
+  const e = await abrir({ seed, hash: '#/obra/o1/encerramento' });
+  await e.click('[data-act="licao-nova"]');
+  await e.submit({ causas: '5; chuva-de-verao; 100; x' });
+  assert.match(e.erroForm(), /causa “chuva-de-verao” inválida/);
+  await e.submit({ causas: '30; clima; 100' });
+  assert.match(e.erroForm(), /etapa de 1 a 22/);
+  await e.submit({ causas: '', oQueFuncionou: '', oQueMudar: '', ajustesProtocolo: '' });
+  assert.match(e.erroForm(), /Registre ao menos/);
+  await e.submit({ causas: '5; orçamento subdimensionado; 6.500,00; Contenção não prevista\n; clima; 800; Chuva em março', oQueFuncionou: 'Medição semanal', oQueMudar: 'Sondagem mais detalhada', ajustesProtocolo: 'Incluir ensaio de solo na etapa 1' });
+  const l = e.linhas('licoes')[0];
+  assert.equal(l.causasDesvio.length, 2);
+  assert.equal(l.causasDesvio[0].causa, 'orcamento_subdimensionado');
+  assert.equal(l.causasDesvio[0].valor, 6500);
+  assert.equal(l.causasDesvio[1].etapa, 0);
+  assert.equal(l.snapshotOrcadoRealizado[5].orcado, 1000);
+  assert.match(e.app(), /Orçamento subdimensionado.*Contenção não prevista/);
+  assert.equal(itemOk(e.x.checklistEncerramento(e.x.G('obras', 'o1')), 'licoes'), true);
+});
+
+/* --- P0: caso da especificação --- */
+function seedP0(extra) {
+  const it = (cod, et, v) => ({ codigo: cod, etapa: et, descricao: 'Serviço ' + cod, unidade: 'vb', quantidade: 1, precoUnitario: v, tipo: 'empreitada', prestador: '', prestadorId: '', total: v });
+  const pedido = (total) => ({ data: dia(-3), fornecedorId: 'f1', total, entregaPrevista: dia(-1) });
+  return Object.assign({
+    obras: { o1: obraAdm({ nome: 'Casa P0', area: 100 }) },
+    orcamentos: { b1: { obraId: 'o1', versao: 1, data: dia(-20), motivo: 'Base', total: 90000, nItens: 3, lotes: 1, porEtapa: { 5: 40000, 7: 20000, 9: 30000 }, porTipo: { empreitada: 90000 } } },
+    orcItens: { b1_0: { obraId: 'o1', orcId: 'b1', lote: 0, itens: [it('5', 5, 40000), it('7', 7, 20000), it('9', 9, 30000)] } },
+    compras: {
+      c5: { obraId: 'o1', item: 'Fundação', etapa: 5, un: 'vb', qtd: 1, status: 'pago', pedido: pedido(35000), conf: { data: dia(-9) }, pagoEm: dia(-5), cotacoes: [] },
+      c7: { obraId: 'o1', item: 'Alvenaria', etapa: 7, un: 'vb', qtd: 1, status: 'conferido', pedido: pedido(26000), conf: { data: dia(-2) }, cotacoes: [] }
+    }
+  }, extra || {});
+}
+test('fase 5 · passo 6 · P0: economia mantém, déficit ajusta, etapa sem custo fica de fora', async () => {
+  const e = await abrir({ seed: seedP0() });
+  const p = e.x.p0Calc(e.x.G('obras', 'o1')), L5 = p.linhas.find((l) => l.etapa === 5), L7 = p.linhas.find((l) => l.etapa === 7);
+  assert.equal(L5.m2Orcado, 400);  assert.equal(L5.m2Real, 350);
+  assert.equal(L5.desvio, -5000);  assert.equal(Math.round(L5.desvioPct * 1000) / 10, -12.5);
+  assert.equal(L5.acao, 'manter');  assert.equal(L5.sugestao, 400);
+  assert.equal(L7.m2Orcado, 200);  assert.equal(L7.m2Real, 260);
+  assert.equal(Math.round(L7.desvioPct * 1000) / 10, 30);
+  assert.equal(L7.acao, 'ajustar'); assert.equal(L7.sugestao, 260);
+  assert.equal(p.linhas.some((l) => l.etapa === 9), false);             // sem custo e não liberada: fora da comparação
+  assert.equal(p.linhas.length, 2);
+  assert.equal(p.totalReal, 61000);
+  assert.equal(Math.round(L5.incidencia * 1000) / 10, 57.4);            // 35.000 ÷ 61.000
+});
+
+test('fase 5 · passo 6 · P0: etapa liberada entra mesmo sem custo; área em branco avisa', async () => {
+  const e = await abrir({ seed: seedP0({ etapas: { o1_9: { obraId: 'o1', n: 9, status: 'liberada', liberadaEm: dia(-1), hist: [] } } }) });
+  const l9 = e.x.p0Calc(e.x.G('obras', 'o1')).linhas.find((l) => l.etapa === 9);
+  assert.equal(l9.real, 0);
+  assert.equal(l9.acao, 'manter');
+  const sem = await abrir({ seed: seedP0({ obras: { o1: obraAdm({ nome: 'Casa P0', area: null }) } }), hash: '#/obra/o1/encerramento' });
+  assert.equal(sem.x.p0Calc(sem.x.G('obras', 'o1')).linhas[0].m2Orcado, null);
+  assert.match(sem.app(), /não informada/);
+});
+
+test('fase 5 · passo 6 · P0: valor calibrado editável e exportação CSV em duas partes', async () => {
+  const e = await abrir({ seed: seedP0(), hash: '#/obra/o1/encerramento' });
+  assert.match(e.app(), /Ajuste do P0/);
+  await e.click('[data-act="p0-ajuste"][data-n="7"]');
+  await e.submit({ valor: '275' });
+  assert.equal(e.x.p0Calc(e.x.G('obras', 'o1')).linhas.find((l) => l.etapa === 7).calibrado, 275);
+  assert.match(e.app(), /editado/);
+  const csv = e.x.csvP0(e.x.G('obras', 'o1'));
+  const partes = csv.trim().split('\r\n\r\n');
+  assert.equal(partes.length, 2);
+  const a = partes[0].split('\r\n');
+  assert.equal(a[0], 'etapa;disciplina;rs_m2_p0_original;rs_m2_real;desvio_pct;acao;rs_m2_calibrado;incidencia_real_pct');
+  assert.equal(a[1], '5;Fundação e estrutura;400;350;-12,5;manter;400;57,38');
+  assert.equal(a[2], '7;Alvenaria e vedações;200;260;30;ajustar;275;42,62');
+  assert.equal(partes[1].split('\r\n')[0], 'mes;pct_acumulado');
+  await e.click('[data-act="p0-csv"]');
+  assert.deepEqual(e.erros, []);
+});
+
+test('fase 5 · passo 6 · P0: mapeamento etapa → disciplina editável e restaurável', async () => {
+  const e = await abrir({ seed: seedP0(), hash: '#/obra/o1/encerramento' });
+  assert.equal(e.x.p0Calc(e.x.G('obras', 'o1')).linhas[0].disciplina, 'Fundação e estrutura');
+  await e.click('[data-act="p0-mapa"]');
+  const campos = {}; for (let n = 1; n <= 22; n++) campos['d_' + n] = n === 5 ? 'Fundações profundas' : e.doc.querySelector('[name="d_' + n + '"]').value;
+  await e.submit(campos);
+  assert.equal(e.x.p0Calc(e.x.G('obras', 'o1')).linhas[0].disciplina, 'Fundações profundas');
+  await e.click('[data-act="p0-mapa"]');
+  await e.submit(Object.assign({}, campos, { d_5: '' }));
+  assert.match(e.erroForm(), /Toda etapa precisa de uma disciplina/);
+  await e.click('[data-act="p0-mapa-padrao"]');
+  assert.equal(e.x.p0Calc(e.x.G('obras', 'o1')).linhas[0].disciplina, 'Fundação e estrutura');
+});
+
+test('fase 5 · passo 6 · P0: referência CSV sinaliza incidência fora da faixa', async () => {
+  const e = await abrir({ seed: seedP0(), hash: '#/obra/o1/encerramento' });
+  const ruim = e.x.p0RefParse('servico;incidencia;minimo;maximo\nFundação e estrutura;50;60;40');
+  assert.match(ruim.erros[0], /mínimo ≤ máximo/);
+  await e.click('[data-act="p0-ref"]');
+  e.doc.querySelector('#p0_csv').value = 'servico;incidencia;minimo;maximo\nFundação e estrutura;20;30;50\nAlvenaria e vedações;35;30;50';
+  await e.click('[data-p0="validar"]');
+  assert.match(e.dlg(), /2 serviços válidos/);
+  await e.click('[data-p0="ok"]');
+  const d = e.x.p0Calc(e.x.G('obras', 'o1')).disciplinas;
+  assert.equal(d.find((x) => x.disciplina === 'Fundação e estrutura').fora, true);       // 57,4% fora de 30–50
+  assert.equal(d.find((x) => x.disciplina === 'Alvenaria e vedações').fora, false);      // 42,6% dentro
+  assert.match(e.app(), /Fora da faixa/);
+});
+
+test('fase 5 · passo 6 · curva real do custo chega a 100%', async () => {
+  const e = await abrir({ seed: seedP0() });
+  const c = e.x.curvaRealCusto('o1');
+  assert.ok(c.length >= 1);
+  assert.equal(Math.round(c[c.length - 1].pct), 100);
+  assert.equal(Math.round(c.reduce((s, x) => s + x.valor, 0)), 61000);
+});
+
+test('fase 5 · passo 6 · texto do encerramento é escapado', async () => {
+  const xss = '<img src=x onerror="window.__xss=13">';
+  const e = await abrir({ seed: seedEnc({ licoes: { l1: { obraId: 'o1', data: dia(0), causasDesvio: [{ etapa: 5, causa: 'clima', valor: 1, texto: xss }], oQueFuncionou: xss, oQueMudar: xss, ajustesProtocolo: xss, anexos: [], snapshotOrcadoRealizado: {} } }, obras: { o1: Object.assign(obraAdm({ nome: 'C', area: 10 }), { encerramentoJust: { docs: xss } }) } }), hash: '#/obra/o1/encerramento' });
+  assert.equal(e.doc.querySelector('img[src="x"]'), null);
+  assert.equal(e.win.__xss, undefined);
+  assert.match(e.app(), /<img src=x/);
 });

@@ -84,7 +84,7 @@ function vObra(r){
   var mapa=abaMapa(), tab=mapa[r.tab]?r.tab:'resumo', fn=mapa[tab];
   var meta=[o.cliente, o.endereco, o.tipologia, o.area?o.area+' m²':'', o.inicio?'início em '+fmt(o.inicio):''].filter(Boolean).map(esc).join(' · ');
   return '<div class="wrap"><a class="back" href="#/painel">← Todas as obras</a>'
-    +'<div class="ob-head"><div class="grow"><h1>'+esc(o.nome)+(o.codigo?' <span class="muted small num">'+esc(o.codigo)+'</span>':'')+'</h1><div class="meta">'+chipMod(o.modalidade)+'<span>'+meta+'</span></div></div>'
+    +'<div class="ob-head"><div class="grow"><h1>'+esc(o.nome)+(o.codigo?' <span class="muted small num">'+esc(o.codigo)+'</span>':'')+'</h1><div class="meta">'+chipMod(o.modalidade)+(o.situacao==='encerrada'?'<span class="chip ok">Encerrada em '+fmt(o.encerradaEm)+'</span>':'')+'<span>'+meta+'</span></div></div>'
     +'<div class="row"><button class="btn" data-act="obra-editar" data-oid="'+o.id+'" data-write>Editar obra</button></div></div>'
     +'<div class="no-print" style="margin-top:20px">'+regua(o.id,false)+legenda()+'</div>'
     +obraNav(o,tab)
@@ -336,7 +336,7 @@ async function excluirObra(oid){
   var ok=await confirmDlg('Excluir a obra “'+o.nome+'”?','<p>Isso apaga a obra e todos os registros dela: etapas, fichas, cronograma, pacotes, diário e ocorrências. Não dá para desfazer.</p>','Excluir obra',true);
   if(!ok) return;
   var tasks=[];
-  ['etapas','atividades','pacotes','diarios','fichas','ocorrencias','eventos','atas','acoes','docsLegais','docsPrest','rfis','materiais','locs','servicos','compras','movEstoque','locacoes','contratosPrest','termos','danos','orcamentos','orcItens','aditivos','medicoes','contasPagar','aportes'].forEach(function(c){ byObra(c,oid).forEach(function(x){ tasks.push(Store.del(c,x.id)); }); });
+  ['etapas','atividades','pacotes','diarios','fichas','ocorrencias','eventos','atas','acoes','docsLegais','docsPrest','rfis','materiais','locs','servicos','compras','movEstoque','locacoes','contratosPrest','termos','danos','orcamentos','orcItens','aditivos','medicoes','contasPagar','aportes','contratosCliente','lancamentos','relatorios','avaliacoes','licoes','config'].forEach(function(c){ byObra(c,oid).forEach(function(x){ tasks.push(Store.del(c,x.id)); }); });
   tasks.push(Store.del('obras',oid));
   await Promise.all(tasks); location.hash='#/painel'; toast('Obra excluída.');
 }

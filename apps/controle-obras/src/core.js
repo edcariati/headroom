@@ -105,7 +105,7 @@ var Supa={ cli:null, cfg:null, session:null,
 function blobUrl(id){ id=String(id||''); return id.indexOf('sb:')===0?Supa.publicUrl(id.slice(3)):'/_blob/'+id; }
 
 /* ---------- armazenamento ---------- */
-var COLS=['obras','etapas','atividades','pacotes','diarios','fichas','ocorrencias','prestadores','eventos','atas','acoes','docsLegais','docsPrest','rfis','materiais','locs','servicos','treinamentos','fornecedores','compras','movEstoque','locacoes','contratosPrest','termos','danos','orcamentos','orcItens','aditivos','medicoes','contasPagar','aportes','empresas','contratosCliente','lancamentos','relatorios','avaliacoes','licoes'];
+var COLS=['obras','etapas','atividades','pacotes','diarios','fichas','ocorrencias','prestadores','eventos','atas','acoes','docsLegais','docsPrest','rfis','materiais','locs','servicos','treinamentos','fornecedores','compras','movEstoque','locacoes','contratosPrest','termos','danos','orcamentos','orcItens','aditivos','medicoes','contasPagar','aportes','empresas','contratosCliente','lancamentos','relatorios','avaliacoes','licoes','config'];
 var Store={
   mode:'boot', db:null, data:{}, uid:null, writable:true, user:null, q:new Map(), unsubs:[],
   init:async function(){
