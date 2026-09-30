@@ -19,15 +19,17 @@ function parseRoute(){
 }
 function topbar(r){
   var cur=function(v){ return r.view===v?' aria-current="page"':''; };
-  var obraAtiva=(r.view==='obra'||r.view==='etapa');
+  var obraAtiva=(r.view==='obra'||r.view==='etapa'), cli=Store.papel==='cliente';
+  var nav=cli?'<a href="#/painel"'+(r.view==='painel'||obraAtiva?' aria-current="page"':'')+'>Minha obra</a>'
+    :'<a href="#/painel"'+(r.view==='painel'||obraAtiva?' aria-current="page"':'')+'>Obras</a><a href="#/agenda"'+cur('agenda')+'>Agenda</a><a href="#/prestadores"'+cur('prestadores')+'>Prestadores</a><a href="#/fornecedores"'+cur('fornecedores')+'>Fornecedores</a><a href="#/dre"'+cur('dre')+'>DRE</a>'+(Store.backend==='supabase'?'<a href="#/historico"'+cur('historico')+'>Histórico</a>':'')+'<a href="#/nuvem"'+cur('nuvem')+'>Nuvem</a>';
   return '<header class="top"><div class="top-in"><a class="brand" href="#/painel">Cariati<span>·Obras</span></a>'
-    +'<nav class="nav" aria-label="Principal"><a href="#/painel"'+(r.view==='painel'||obraAtiva?' aria-current="page"':'')+'>Obras</a><a href="#/agenda"'+cur('agenda')+'>Agenda</a><a href="#/prestadores"'+cur('prestadores')+'>Prestadores</a><a href="#/fornecedores"'+cur('fornecedores')+'>Fornecedores</a><a href="#/dre"'+cur('dre')+'>DRE</a>'+(Store.backend==='supabase'?'<a href="#/historico"'+cur('historico')+'>Histórico</a>':'')+'<a href="#/nuvem"'+cur('nuvem')+'>Nuvem</a></nav>'
-    +'<div class="tools">'+sinoAvisos(r)+'<button class="btn ghost sm" data-act="exportar" title="Baixar uma cópia dos dados">Exportar</button><button class="btn ghost sm" data-act="tema" title="Alternar tema claro e escuro" aria-label="Alternar tema">◐</button></div></div></header>';
+    +'<nav class="nav" aria-label="Principal">'+nav+'</nav>'
+    +'<div class="tools">'+sinoAvisos(r)+(cli?'<button class="btn ghost sm" data-act="nuvem-sair">Sair</button>':'<button class="btn ghost sm" data-act="exportar" title="Baixar uma cópia dos dados">Exportar</button>')+'<button class="btn ghost sm" data-act="tema" title="Alternar tema claro e escuro" aria-label="Alternar tema">◐</button></div></div></header>';
 }
 function banners(){
   var b='';
   if(Store.mode==='local') b+='<div class="banner">Modo local: os dados ficam só neste navegador e não são compartilhados com a equipe. <a href="#/nuvem">Conectar à nuvem</a></div>';
-  if(!Store.writable) b+='<div class="banner">Acesso somente leitura: você pode consultar, mas não editar.</div>';
+  if(!Store.writable && Store.papel!=='cliente') b+='<div class="banner">Acesso somente leitura: você pode consultar, mas não editar.</div>';
   return b;
 }
 function chipMod(m){ return '<span class="chip steel">'+esc(m||'—')+'</span>'; }
@@ -82,12 +84,12 @@ function vPainel(){
 /* ---- obra ---- */
 function vObra(r){
   var o=G('obras',r.oid); if(!o) return notFound();
-  var mapa=abaMapa(), tab=mapa[r.tab]?r.tab:'resumo', fn=mapa[tab];
+  var mapa=abaMapa(), tab=mapa[r.tab]?r.tab:(mapa.resumo?'resumo':'chamados'), fn=mapa[tab];
   var meta=[o.cliente, o.endereco, o.tipologia, o.area?o.area+' m²':'', o.inicio?'início em '+fmt(o.inicio):''].filter(Boolean).map(esc).join(' · ');
   return '<div class="wrap"><a class="back" href="#/painel">← Todas as obras</a>'
     +'<div class="ob-head"><div class="grow"><h1>'+esc(o.nome)+(o.codigo?' <span class="muted small num">'+esc(o.codigo)+'</span>':'')+'</h1><div class="meta">'+chipMod(o.modalidade)+(o.situacao==='encerrada'?'<span class="chip ok">Encerrada em '+fmt(o.encerradaEm)+'</span>':'')+'<span>'+meta+'</span></div></div>'
     +'<div class="row"><button class="btn" data-act="obra-editar" data-oid="'+o.id+'" data-write>Editar obra</button></div></div>'
-    +'<div class="no-print" style="margin-top:20px">'+regua(o.id,false)+legenda()+'</div>'
+    +(ehCliente()?'':'<div class="no-print" style="margin-top:20px">'+regua(o.id,false)+legenda()+'</div>')
     +obraNav(o,tab)
     +'<div style="margin-top:20px">'+fn(o)+'</div></div>';
 }
@@ -338,7 +340,7 @@ async function excluirObra(oid){
   var ok=await confirmDlg('Excluir a obra “'+o.nome+'”?','<p>Isso apaga a obra e todos os registros dela: etapas, fichas, cronograma, pacotes, diário e ocorrências. Não dá para desfazer.</p>','Excluir obra',true);
   if(!ok) return;
   var tasks=[];
-  ['etapas','atividades','pacotes','diarios','fichas','ocorrencias','eventos','atas','acoes','docsLegais','docsPrest','rfis','materiais','locs','servicos','compras','movEstoque','locacoes','contratosPrest','termos','danos','orcamentos','orcItens','aditivos','medicoes','contasPagar','aportes','contratosCliente','lancamentos','relatorios','avaliacoes','licoes','config'].forEach(function(c){ byObra(c,oid).forEach(function(x){ tasks.push(Store.del(c,x.id)); }); });
+  ['etapas','atividades','pacotes','diarios','fichas','ocorrencias','eventos','atas','acoes','docsLegais','docsPrest','rfis','materiais','locs','servicos','compras','movEstoque','locacoes','contratosPrest','termos','danos','orcamentos','orcItens','aditivos','medicoes','contasPagar','aportes','contratosCliente','lancamentos','relatorios','avaliacoes','licoes','config','garantias','chamadosGarantia','chamadosCustos','visitasPosObra','pesquisasSatisfacao'].forEach(function(c){ byObra(c,oid).forEach(function(x){ tasks.push(Store.del(c,x.id)); }); });
   tasks.push(Store.del('obras',oid));
   await Promise.all(tasks); location.hash='#/painel'; toast('Obra excluída.');
 }
@@ -530,14 +532,15 @@ function openOc(id){
 function waFone(s){ var d=String(s||'').replace(/\D/g,''); if(d.length>=12&&d.indexOf('55')===0) return d.length<=13?d:''; if(d.length===10||d.length===11) return '55'+d; return ''; }
 function waLink(fone,texto){ return 'https://wa.me/'+fone+'?text='+encodeURIComponent(texto); }
 function waTexto(col,o){
-  var ob=G('obras',o.obraId)||{}, nome=(col==='ocorrencias'?prestNome(o.prestadorId):o.responsavel)||'', prazo=o.prazo?fmt(o.prazo):'';
+  var ob=G('obras',o.obraId)||{}, nome=(col==='ocorrencias'||col==='chamadosGarantia'?prestNome(o.prestadorId):o.responsavel)||'', prazo=o.prazo?fmt(o.prazo):'';
+  if(col==='chamadosGarantia') return 'Olá'+(nome?', '+nome:'')+'! Aqui é da Cariati, obra '+(ob.nome||'')+'.\n\nPrecisamos de uma visita de assistência: '+short((o.sistema||'')+(o.ambiente?' — '+o.ambiente:'')+'. '+(o.descricao||''),160)+(o.visitaData?'\n\nVisita prevista para '+fmt(o.visitaData)+'.':'')+'\n\nPode confirmar a disponibilidade? Obrigado!';
   var assunto=col==='ocorrencias'?'o apontamento “'+short(o.descricao||o.tipo||'',120)+'”'+(o.local?' ('+o.local+')':''):'a pendência “'+short(o.descricao||'',120)+'”';
   var venc=o.prazo&&o.prazo<hoje();
   return 'Olá'+(nome?', '+nome:'')+'! Aqui é da Cariati, obra '+(ob.nome||'')+'.\n\nSobre '+assunto+(prazo?(venc?', que estava previsto para '+prazo+' e ainda está em aberto':', com prazo em '+prazo):'')+'.\n\nPode me confirmar quando será resolvido? Obrigado!';
 }
 function waForm(col,id){
   var o=G(col,id); if(!o) return;
-  var p=col==='ocorrencias'&&o.prestadorId?G('prestadores',o.prestadorId):null;
+  var p=(col==='ocorrencias'||col==='chamadosGarantia')&&o.prestadorId?G('prestadores',o.prestadorId):null;
   openForm({title:'Enviar pelo WhatsApp', intro:'O aplicativo abre o WhatsApp com a mensagem pronta; você confere e toca em enviar. O contato fica registrado no histórico. Mensagens não levam valores em R$.',
     fields:[{name:'fone',label:'WhatsApp de quem vai receber',value:(p&&p.contato)||'',ph:'(15) 99999-9999',required:true},{name:'texto',label:'Mensagem (pode editar)',type:'textarea',value:waTexto(col,o),required:true}],
     submit:'Abrir o WhatsApp',
@@ -653,7 +656,7 @@ var A={
 document.addEventListener('click', function(e){
   if(e.target.closest('[data-close]')){ closeDlg(); return; }
   var el=e.target.closest('[data-act]'); if(!el) return;
-  var f=A[el.dataset.act]||A2[el.dataset.act]||A3[el.dataset.act]||A4[el.dataset.act]||A5[el.dataset.act]||ANuvem[el.dataset.act]; if(f){ e.preventDefault(); f(el.dataset, el); }
+  var f=A[el.dataset.act]||A2[el.dataset.act]||A3[el.dataset.act]||A4[el.dataset.act]||A5[el.dataset.act]||A7[el.dataset.act]||ANuvem[el.dataset.act]; if(f){ e.preventDefault(); f(el.dataset, el); }
 });
 document.addEventListener('change', function(e){
   var el=e.target.closest('[data-chg="cond"]'); if(!el) return;

@@ -500,7 +500,7 @@ function eventosP3(o,add,b){
   byObra('contratosPrest',o.id).filter(function(c){return c.status!=='encerrado';}).forEach(function(c){ add(c.fim,'Fim do contrato: '+(prestNome(c.prestadorId)||'prestador'),'prestadores',b+'contratos'); });
   byObra('danos',o.id).filter(function(d){return d.status==='aberta';}).forEach(function(d){ add(d.prazo,'Reparo de dano: '+short(d.descricao,40),'prestadores',b+'contratos'); });
   eventosP4(o,add,b);
-  eventosP5(o,add,b);
+  eventosP5(o,add,b); eventosP7(o,add,b);
 }
 function alertasP3(o){
   var A=[], oid=o.id, base='#/obra/'+oid+'/', hj=hoje();
@@ -519,7 +519,7 @@ function alertasP3(o){
   if(la.length) A.push({k:'warn', t:plural(la.length,'locação com devolução atrasada','locações com devolução atrasada')+': cada dia extra é cobrado.', to:base+'locacoes'});
   var dn=byObra('danos',oid).filter(function(d){return d.status==='aberta';});
   if(dn.length) A.push({k:'warn', t:plural(dn.length,'dano em aberto','danos em aberto')+', somando '+brl(dn.reduce(function(s,d){return s+(Number(d.custo)||0);},0))+'.', to:base+'contratos'});
-  return A.concat(alertasP4(o)).concat(alertasP5(o));
+  return A.concat(alertasP4(o)).concat(alertasP5(o)).concat(alertasP7(o));
 }
 function indRowsP3(o){
   var oid=o.id, out='', cs=byObra('compras',oid), ls=byObra('locacoes',oid), ts=byObra('termos',oid), ds=byObra('danos',oid);
@@ -533,7 +533,7 @@ function indRowsP3(o){
   if(dev.length){ var real=dev.reduce(function(s,l){return s+(Number(l.valorDia)||0)*Math.max(1,diffDays(l.inicio,l.devolucao.data)+1);},0), prev=dev.reduce(function(s,l){return s+locTotalPrev(l);},0); if(prev>0) out+=indRow('Custo de locação','Locação real ÷ locação prevista', Math.round(real/prev*100)+'%', brl(real)+' contra '+brl(prev)+' previstos', real<=prev?'ok':'warn'); }
   if(ts.length){ var lp=ts.filter(function(t){return t.estado==='limpa';}).length; out+=indRow('Frentes entregues limpas e sem dano','Termos sem pendência ÷ termos de frente', pct(lp/ts.length), lp+' de '+ts.length+' termos', lp/ts.length>=0.9?'ok':'warn'); }
   if(ds.length){ var tot=ds.reduce(function(s,d){return s+(Number(d.custo)||0);},0), ab=ds.filter(function(d){return d.status==='aberta';}).length; out+=indRow('Danos e quebras','Número e valor', String(ds.length), brl(tot)+' no total · '+ab+' em aberto', ab?'warn':'ok'); }
-  return out+indRowsP4(o)+indRowsP5(o);
+  return out+indRowsP4(o)+indRowsP5(o)+indRowsP7(o);
 }
 
 var A3={

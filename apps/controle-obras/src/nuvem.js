@@ -1,5 +1,5 @@
 /* ================= NUVEM, LOGIN E HISTÓRICO ================= */
-var COL_NOMES={obras:'Obra', etapas:'Etapa', atividades:'Atividade', pacotes:'Pacote semanal', diarios:'Diário', fichas:'Ficha de verificação', ocorrencias:'Ocorrência', prestadores:'Prestador', eventos:'Agenda', atas:'Ata', acoes:'Ação', docsLegais:'Documento legal', docsPrest:'Documento de prestador', rfis:'Consulta técnica', materiais:'Material', locs:'Local', servicos:'Serviço', treinamentos:'Treinamento', fornecedores:'Fornecedor', compras:'Compra', movEstoque:'Estoque', locacoes:'Locação', contratosPrest:'Contrato', termos:'Termo', danos:'Dano', orcamentos:'Orçamento (versão)', orcItens:'Itens do orçamento', aditivos:'Aditivo', medicoes:'Medição', contasPagar:'Conta a pagar', aportes:'Aporte do cliente', empresas:'Empresa', contratosCliente:'Contrato do cliente', lancamentos:'Lançamento', relatorios:'Relatório mensal', avaliacoes:'Avaliação de prestador', licoes:'Lição aprendida', config:'Configuração'};
+var COL_NOMES={garantias:'Garantia', chamadosGarantia:'Chamado de garantia', chamadosCustos:'Custo de garantia', visitasPosObra:'Visita pós-obra', pesquisasSatisfacao:'Pesquisa de satisfação', obras:'Obra', etapas:'Etapa', atividades:'Atividade', pacotes:'Pacote semanal', diarios:'Diário', fichas:'Ficha de verificação', ocorrencias:'Ocorrência', prestadores:'Prestador', eventos:'Agenda', atas:'Ata', acoes:'Ação', docsLegais:'Documento legal', docsPrest:'Documento de prestador', rfis:'Consulta técnica', materiais:'Material', locs:'Local', servicos:'Serviço', treinamentos:'Treinamento', fornecedores:'Fornecedor', compras:'Compra', movEstoque:'Estoque', locacoes:'Locação', contratosPrest:'Contrato', termos:'Termo', danos:'Dano', orcamentos:'Orçamento (versão)', orcItens:'Itens do orçamento', aditivos:'Aditivo', medicoes:'Medição', contasPagar:'Conta a pagar', aportes:'Aporte do cliente', empresas:'Empresa', contratosCliente:'Contrato do cliente', lancamentos:'Lançamento', relatorios:'Relatório mensal', avaliacoes:'Avaliação de prestador', licoes:'Lição aprendida', config:'Configuração'};
 var hist={rows:null, carregando:false, erro:'', obra:'', colecao:''};
 
 function vLogin(){
@@ -134,7 +134,7 @@ var ANuvem={
     Supa.saveConfig(null); location.hash='#/nuvem'; location.reload();
   },
   'aviso-lido':function(d){ Notif.marcar([Number(d.id)]); },
-  'aviso-abrir':function(d){ Notif.marcar([Number(d.id)]); },
+  'aviso-abrir':function(d){ var n=Notif.rows.filter(function(x){ return String(x.id)===String(d.id); })[0]; Notif.marcar([Number(d.id)]); if(n&&n.link) location.hash=n.link; },
   'avisos-todos':function(){ Notif.marcar(Notif.rows.filter(function(n){ return !n.lida_em; }).map(function(n){ return n.id; })); },
   'nuvem-sair':async function(){ try{ await Supa.cli.auth.signOut(); }catch(e){} location.reload(); },
   'nuvem-enviar-local':function(){

@@ -57,6 +57,35 @@ const seed = () => ({
     p3: { obraId: 'a1', dataPrevista: dia(0) },
     p4: { obraId: 'g1', dataPrevista: dia(-5) }
   },
+  chamadosGarantia: {
+    h1: { obraId: 'a1', status: 'aberto', criadoEm: dia(-4) + 'T10:00:00Z', slaRespDias: 3, slaResDias: 30 },   // sem resposta há 4 dias
+    h2: { obraId: 'a1', status: 'aberto', criadoEm: dia(-3) + 'T10:00:00Z', slaRespDias: 3, slaResDias: 30 },   // exatamente 3: ainda não
+    h3: { obraId: 'a1', status: 'em_atendimento', criadoEm: dia(-16) + 'T10:00:00Z', slaRespDias: 3, slaResDias: 15 },
+    h4: { obraId: 'a1', status: 'em_atendimento', criadoEm: dia(-15) + 'T10:00:00Z', slaRespDias: 3, slaResDias: 15 },
+    h5: { obraId: 'a1', status: 'resolvido', criadoEm: dia(-90) + 'T10:00:00Z', slaResDias: 3 },
+    h6: { obraId: 'e1', status: 'aberto', criadoEm: dia(0) + 'T10:00:00Z' },                                    // obra encerrada também recebe pós-obra
+    h7: { obraId: 'a1', status: 'aberto', criadoEm: dia(-5) + 'T10:00:00Z' }                                    // sem SLA gravado: padrão 3/30
+  },
+  garantias: {
+    r1: { obraId: 'e1', sistema: 'A', fim: dia(0) },
+    r2: { obraId: 'e1', sistema: 'B', fim: dia(30) },
+    r3: { obraId: 'e1', sistema: 'C', fim: dia(31) },
+    r4: { obraId: 'e1', sistema: 'D', fim: dia(60) },
+    r5: { obraId: 'e1', sistema: 'E', fim: dia(61) },
+    r6: { obraId: 'e1', sistema: 'F', fim: dia(-1) }
+  },
+  visitasPosObra: {
+    w1: { obraId: 'e1', marco: 30, status: 'pendente', dataPrevista: dia(0) },
+    w2: { obraId: 'e1', marco: 90, status: 'pendente', dataPrevista: dia(7) },
+    w3: { obraId: 'e1', marco: 180, status: 'pendente', dataPrevista: dia(8) },
+    w4: { obraId: 'e1', marco: 30, status: 'realizada', dataPrevista: dia(3) },
+    w5: { obraId: 'e1', marco: 30, status: 'pendente', dataPrevista: dia(-1) }
+  },
+  pesquisasSatisfacao: {
+    s1: { obraId: 'e1', marco: 30, notas: { recomendacao: 6 } },
+    s2: { obraId: 'e1', marco: 90, notas: { recomendacao: 7 } },
+    s3: { obraId: 'e1', marco: 180, notas: { recomendacao: 0 } }
+  },
   acoes: {
     q1: { obraId: 'a1', status: 'aberta', prazo: dia(-1) },
     q2: { obraId: 'a1', status: 'aberta', prazo: dia(-8) },
@@ -97,7 +126,7 @@ test('equivalência · eventos do servidor (SQL) = eventos do app, nos mesmos da
   assert.equal(r.status, 0, 'consulta SQL falhou: ' + r.stderr);
   const sql = r.stdout.split('\n').map((x) => x.trim()).filter(Boolean).sort();
 
-  assert.ok(app.length >= 24, 'o cenário precisa ter eventos de verdade (' + app.length + ')');
+  assert.ok(app.length >= 39, 'o cenário precisa ter eventos de verdade (' + app.length + ')');
   assert.deepEqual(sql, app);
 });
 
@@ -108,5 +137,9 @@ test('equivalência · sanidade do cenário: limites exatos do app', async () =>
   assert.ok(!ev.includes('oc_escalada|a1|h7') && ev.includes('oc_escalada|a1|h8'), 'escala só acima de diasEscalar');
   assert.ok(ev.includes('oc_escalada|a2|t4') && !ev.includes('oc_escalada|a2|t3'), 'diasEscalar próprio da obra');
   assert.ok(!ev.some((x) => x.startsWith('conta_') && x.includes('|g1|')), 'Gestão não tem contas a pagar');
-  assert.ok(!ev.some((x) => x.includes('|e1|')), 'obra encerrada não notifica');
+  const pos = /^(chamado_|garantia_|visita_|satisfacao_)/;
+  assert.ok(!ev.some((x) => x.includes('|e1|') && !pos.test(x)), 'obra encerrada não notifica (só pós-obra)');
+  assert.ok(ev.some((x) => x.startsWith('chamado_novo|e1|')), 'pós-obra vale para obra encerrada');
+  assert.ok(!ev.includes('chamado_fora_sla|a1|h2') && ev.includes('chamado_fora_sla|a1|h1') && ev.includes('chamado_fora_sla|a1|h7'), 'SLA de resposta: exatamente o prazo ainda não vence; sem SLA usa 3/30');
+  assert.ok(ev.includes('garantia_30|e1|r2') && ev.includes('garantia_60|e1|r3') && !ev.includes('garantia_60|e1|r5') && !ev.includes('garantia_30|e1|r6'), 'janelas de garantia 0–30 e 31–60');
 });

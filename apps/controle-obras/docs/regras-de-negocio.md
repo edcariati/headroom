@@ -48,3 +48,11 @@ Checklist de 9 itens (pendência exige justificativa); lições; ajuste do P0: e
 
 ## Alertas e agenda (fase 5)
 Ver D-5.7.x em `DECISOES.md`.
+
+## Pós-obra (fase 7B)
+- Garantia só corre depois da entrega; prazos vêm do Termo da Cariati (tabela editável, sem valores assumidos).
+- Chamado: não coberto/negado exige justificativa; resolver exige parecer coberto ou parcial; o cliente confirma ou contesta; SLA por urgência (provisório) gravado no chamado.
+- Custo de garantia = custo direto do mês atual no DRE (sem reabrir meses emitidos).
+- Visitas de 30, 90 e 180 dias nascem da data de entrega; pendência vira chamado.
+- Satisfação: uma resposta por momento; nota de recomendação < 7 avisa a diretoria.
+- Cliente: só a própria obra; nunca vê custos, financeiro nem dados internos.

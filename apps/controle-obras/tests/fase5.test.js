@@ -9,7 +9,7 @@ const atual = (e, sel) => Array.from(e.doc.querySelectorAll(sel + ' [aria-curren
 test('fase 5 · passo 0 · grupos da obra e subabas', async () => {
   const e = await abrir({ seed: { obras: { o1: obra() } }, hash: '#/obra/o1/resumo' });
   const grupos = Array.from(e.doc.querySelectorAll('nav.grupos a')).map((a) => a.textContent);
-  assert.equal(grupos.join(' · '), 'Visão geral · Planejamento · Execução e qualidade · Suprimentos · Prestadores · Custo e financeiro · Gestão · Encerramento');
+  assert.equal(grupos.join(' · '), 'Visão geral · Planejamento · Execução e qualidade · Suprimentos · Prestadores · Custo e financeiro · Gestão · Pós-obra · Encerramento');
   assert.equal(atual(e, 'nav.grupos'), 'Visão geral');
 });
 
@@ -33,7 +33,7 @@ test('fase 5 · passo 0 · aba desconhecida cai no resumo e o grupo sem subabas 
 test('fase 5 · passo 0 · cada grupo leva à primeira subaba', async () => {
   const e = await abrir({ seed: { obras: { o1: obra() } }, hash: '#/obra/o1/resumo' });
   const hrefs = Array.from(e.doc.querySelectorAll('nav.grupos a')).map((a) => a.getAttribute('href'));
-  assert.deepEqual(hrefs, ['#/obra/o1/resumo', '#/obra/o1/etapas', '#/obra/o1/diario', '#/obra/o1/compras', '#/obra/o1/contratos', '#/obra/o1/orcamento', '#/obra/o1/agenda', '#/obra/o1/encerramento']);
+  assert.deepEqual(hrefs, ['#/obra/o1/resumo', '#/obra/o1/etapas', '#/obra/o1/diario', '#/obra/o1/compras', '#/obra/o1/contratos', '#/obra/o1/orcamento', '#/obra/o1/agenda', '#/obra/o1/garantias', '#/obra/o1/encerramento']);
 });
 
 /* ---------------- passo 1: empresas, empresa na obra e contrato do cliente ---------------- */

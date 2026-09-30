@@ -69,7 +69,7 @@ select tt.exige(not tt.tenta($$insert into public.notificacoes(user_id,tipo,titu
 select tt.exige(not tt.tenta($$select count(*) from public.notificacao_entregas$$), 'entregas só o servidor');
 select tt.exige(tt.conta('notificacao_regras')=0, 'gestor não vê regras');
 select tt.como(3); select tt.exige(tt.conta('notificacoes')=0, 'campo não vê notificações alheias');
-select tt.como(1); select tt.exige(tt.conta('notificacao_regras')=12, 'dono vê as regras');
+select tt.como(1); select tt.exige(tt.conta('notificacao_regras')=18, 'dono vê as regras');
 select tt.exige(tt.tenta($$update public.notificacao_regras set ativo=false where tipo='conta_a_vencer'$$), 'dono edita regra');
 reset role;
 

@@ -8,11 +8,17 @@ var NAV_GRUPOS=[
   ['prest','Prestadores',['contratos','avaliacoes']],
   ['custo','Custo e financeiro',['orcamento','medicao','financeiro','fisfin','dre']],
   ['gest','Gestão',['agenda','reunioes','documentos','relatorio']],
+  ['pos','Pós-obra',['garantias','chamados','visitas','satisfacao']],
   ['enc','Encerramento',['encerramento']]
 ];
-var NAV_ROTULO={resumo:'Resumo', etapas:'Etapas', cronograma:'Cronograma', balanco:'Balanço', semana:'Semana e PPC', diario:'Diário', ocorrencias:'Ocorrências', entrega:'Pré-entrega', projeto:'RFI e materiais', compras:'Compras', estoque:'Estoque', locacoes:'Locações', contratos:'Contratos e frentes', avaliacoes:'Avaliações', orcamento:'Orçamento', medicao:'Medição', financeiro:'Financeiro', fisfin:'Físico-financeiro', dre:'DRE', agenda:'Agenda', reunioes:'Reuniões', documentos:'Documentos', relatorio:'Relatório mensal', encerramento:'Encerramento e P0'};
+var NAV_ROTULO={resumo:'Resumo', etapas:'Etapas', cronograma:'Cronograma', balanco:'Balanço', semana:'Semana e PPC', diario:'Diário', ocorrencias:'Ocorrências', entrega:'Pré-entrega', projeto:'RFI e materiais', compras:'Compras', estoque:'Estoque', locacoes:'Locações', contratos:'Contratos e frentes', avaliacoes:'Avaliações', orcamento:'Orçamento', medicao:'Medição', financeiro:'Financeiro', fisfin:'Físico-financeiro', dre:'DRE', agenda:'Agenda', reunioes:'Reuniões', documentos:'Documentos', relatorio:'Relatório mensal', encerramento:'Encerramento e P0', garantias:'Garantias', chamados:'Chamados', visitas:'Visitas', satisfacao:'Satisfação'};
 function abaMapa(){
-  return {resumo:tResumo, etapas:tEtapas, cronograma:tCron, balanco:tBalanco, semana:tSemana, diario:tDiario, ocorrencias:tOcorr, entrega:tEntrega, projeto:tProjeto, compras:tCompras, estoque:tEstoque, locacoes:tLocacoes, contratos:tContratos, avaliacoes:tAvaliacoes, encerramento:tEncerramento, orcamento:tOrcamento, medicao:tMedicao, financeiro:tFinanceiro, fisfin:tFisFin, dre:tDRE, relatorio:tRelatorio, agenda:tAgenda, reunioes:tReunioes, documentos:tDocumentos};
+  var m=abaMapaTodas();
+  if(Store.papel!=='cliente') return m;
+  var ok={}; ['garantias','chamados','visitas','satisfacao','relatorio'].forEach(function(k){ ok[k]=m[k]; }); return ok;
+}
+function abaMapaTodas(){
+  return {garantias:tGarantias, chamados:tChamados, visitas:tVisitas, satisfacao:tSatisfacao, resumo:tResumo, etapas:tEtapas, cronograma:tCron, balanco:tBalanco, semana:tSemana, diario:tDiario, ocorrencias:tOcorr, entrega:tEntrega, projeto:tProjeto, compras:tCompras, estoque:tEstoque, locacoes:tLocacoes, contratos:tContratos, avaliacoes:tAvaliacoes, encerramento:tEncerramento, orcamento:tOrcamento, medicao:tMedicao, financeiro:tFinanceiro, fisfin:tFisFin, dre:tDRE, relatorio:tRelatorio, agenda:tAgenda, reunioes:tReunioes, documentos:tDocumentos};
 }
 function obraNav(o,tab){
   var mapa=abaMapa(), base='#/obra/'+o.id+'/', grupo=NAV_GRUPOS.filter(function(g){ return g[2].indexOf(tab)>=0; })[0]||NAV_GRUPOS[0];
@@ -141,7 +147,7 @@ Object.assign(A5,{
 /* ================= LANÇAMENTOS E DRE ================= */
 var LANC_CAT={receita:'Receita', imposto:'Imposto sobre a receita', custo_direto:'Custo direto', despesa_geral:'Despesa geral'};
 var LANC_SUG={receita:['Fee de gestão','Honorários','Remuneração conforme contrato'], imposto:['Impostos sobre a receita'], custo_direto:['Folha da equipe alocada','Deslocamento','Software da obra','Materiais de escritório da obra'], despesa_geral:['Aluguel do escritório','Contabilidade','Software','Folha administrativa']};
-var ORIGEM_LANC={manual:'Manual', contrato:'Contrato', imposto_auto:'Imposto automático'};
+var ORIGEM_LANC={manual:'Manual', contrato:'Contrato', imposto_auto:'Imposto automático', garantia:'Garantia (pós-obra)'};
 function mesesEntre(a,b){ var out=[]; for(var m=a; m<=b && out.length<240; m=mesAdd(m,1)) out.push(m); return out; }
 function perPadrao(){ var m=hoje().slice(0,7); return {ini:m, fim:m}; }
 function perAnterior(p){ var n=mesesEntre(p.ini,p.fim).length||1; return {ini:mesAdd(p.ini,-n), fim:mesAdd(p.ini,-1)}; }
@@ -488,6 +494,9 @@ function avSugestoes(oid,pid,ate){
     s.conformidade=r1(10*(1-Math.min(1,pts/10)));
     s.reincidencia=r1(10*(1-ocs.filter(function(x){ return (x.reabertas||0)>0; }).length/ocs.length));
   }
+  // Garantia: cada chamado coberto (total ou parcial) atribuído ao prestador tira 2 pontos da reincidência (valor provisório)
+  var gar=byObra('chamadosGarantia',oid).filter(function(c){ return c.prestadorId===pid && (c.parecer==='coberto'||c.parecer==='parcial'); });
+  if(gar.length) s.reincidencia=r1(Math.max(0,(s.reincidencia==null?10:s.reincidencia)-2*gar.length));
   var termos=byObra('termos',oid).filter(function(t){ return t.saiId===pid; });
   if(termos.length) s.limpeza=r1(10*termos.filter(function(t){ return t.estado==='limpa'; }).length/termos.length);
   var cts=avContratosDe(oid,pid), valor=cts.reduce(function(t,c){ return t+(Number(c.valor)||0); },0);
@@ -717,7 +726,7 @@ function tEncerramento(o){
       +'<div class="card-h" style="border-top:1px solid var(--line2)"><h3>Por disciplina</h3></div><div class="tbl-scroll"><table class="tbl"><thead><tr><th>Disciplina</th><th class="num">Orçado</th><th class="num">Real</th><th class="num">Desvio</th><th>Ação</th><th class="num">Incidência real</th><th>Faixa de referência</th></tr></thead><tbody>'+p.disciplinas.map(function(d){ return '<tr'+(d.fora?' style="background:var(--crit-soft)"':'')+'><td>'+esc(d.disciplina)+'</td><td class="num">'+brl(d.orcado)+'</td><td class="num">'+brl(d.real)+'</td><td class="num">'+brl(d.desvio)+'</td><td><span class="chip '+(d.acao==='ajustar'?'crit':'ok')+'">'+(d.acao==='ajustar'?'Ajustar':'Manter')+'</span></td><td class="num">'+fpc(d.incidencia)+'</td><td>'+(d.ref?String(d.ref.minimo).replace('.',',')+'% a '+String(d.ref.maximo).replace('.',',')+'%'+(d.fora?' <span class="chip crit">Fora da faixa</span>':' <span class="chip ok">Dentro</span>'):'—')+'</td></tr>'; }).join('')+'</tbody></table></div>'
       :'<p class="muted pad">Nenhuma etapa executada ou comprada ainda.</p>')+'</section>';
   var cr=curvaRealCusto(oid), curva=cr.length>1?'<section class="card sec pad"><h3 style="margin-bottom:8px">Curva real do custo (% acumulado por mês)</h3>'+svgGrafico({titulo:'Curva real de custo acumulado', labels:cr.map(function(x){ return mesCurto(x.mes); }), linhas:[{nome:'Custo apropriado acumulado',cor:'var(--steel)',v:cr.map(function(x){ return x.pct; })}], fmt:function(v){ return Math.round(v)+'%'; }})+'</section>':'';
-  return '<div class="sec-h"><div><h2>Encerramento e P0</h2><p class="muted small">Fechar a obra, guardar o que aprendemos e calibrar o preço inicial para as próximas.</p></div></div><div style="margin-top:14px">'+stat+'</div>'+check+licHtml+p0+benchHtml(o)+curva;
+  return '<div class="sec-h"><div><h2>Encerramento e P0</h2><p class="muted small">Fechar a obra, guardar o que aprendemos e calibrar o preço inicial para as próximas.</p></div></div><div style="margin-top:14px">'+stat+'</div>'+check+licHtml+p0+benchHtml(o)+garantiaIncHtml()+curva;
 }
 Object.assign(A5,{
   'obra-encerrar':function(d){ encerrarObra(d.oid); },
@@ -782,6 +791,13 @@ COBX.alertasP5=alertasP5; COBX.indRowsP5=indRowsP5;
    tests/equivalencia.test.js compara as duas listas com os mesmos dados. */
 function eventosNotificaveis(){
   var out=[], hj=hoje();
+  L('obras').forEach(function(o){ // pós-obra: vale também para obra encerrada
+    var oid=o.id;
+    byObra('chamadosGarantia',oid).forEach(function(c){ if(c.status==='aberto') out.push(['chamado_novo',oid,c.id]); if(chForaSLA(c)) out.push(['chamado_fora_sla',oid,c.id]); });
+    byObra('garantias',oid).forEach(function(g){ var d=diasAte(g.fim); if(d==null) return; if(d>=0&&d<=30) out.push(['garantia_30',oid,g.id]); else if(d>30&&d<=60) out.push(['garantia_60',oid,g.id]); });
+    byObra('visitasPosObra',oid).filter(visitaProxima).forEach(function(v){ out.push(['visita_proxima',oid,v.id]); });
+    byObra('pesquisasSatisfacao',oid).filter(pesqBaixa).forEach(function(p){ out.push(['satisfacao_baixa',oid,p.id]); });
+  });
   L('obras').forEach(function(o){
     if(encerrada(o)) return;
     var oid=o.id, dias=o.diasEscalar==null?7:o.diasEscalar;

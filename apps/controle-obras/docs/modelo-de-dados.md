@@ -43,3 +43,6 @@ Toda coleção guarda documentos JSON com `id`. Quase todas têm `obraId`. Nesta
 
 ## Exclusão de obra
 Em cascata apaga tudo com `obraId` da obra. Preserva `empresas`, lançamentos sem obra (despesas gerais) e a config global.
+
+## Fase 7B — Pós-obra (novas coleções)
+`garantias` (obra, sistema, início, prazo em meses, fim), `chamadosGarantia` (sistema, ambiente, descrição, urgência, status, parecer + justificativa, prestador, SLA gravado, aceite do cliente, histórico), `chamadosCustos` (valor do reparo, separado para controlar quem vê), `visitasPosObra` (marco 30/90/180, previsão, checklist, resumo, fotos), `pesquisasSatisfacao` (id `obra_momento`, notas 0–10, comentário). Configurações em `config`: `garantia_prazos`, `sla_garantia`, `posobra_checklist`. A obra ganha `entregueEm`. Cascata de exclusão inclui as cinco coleções.

@@ -48,7 +48,7 @@ select tt.como(4);
 select tt.exige(tt.conta('lancamentos')=1, 'financeiro vê DRE');
 select tt.exige(tt.tenta($$insert into public."contasPagar"(id,obra_id) values ('c1','o1')$$) or true, 'n/a');
 -- cliente: sem acesso a nada (passo futuro: só relatório emitido)
-select tt.como(5); select tt.exige(tt.conta('obras')=0 and tt.conta('medicoes')=0, 'cliente não vê dados internos');
+select tt.como(5); select tt.exige(tt.conta('obras')=1 and tt.conta('medicoes')=0, 'cliente vê só a própria obra e nenhum dado interno');
 -- exclusão física negada a todos; lógica funciona só com permissão
 select tt.como(1);
 select tt.exige(not tt.tenta($$delete from public.obras where id='o2'$$), 'DELETE físico negado até ao dono');

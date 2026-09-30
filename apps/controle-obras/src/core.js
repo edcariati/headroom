@@ -144,7 +144,7 @@ var Supa={ cli:null, cfg:null, session:null, vers:{}, papel:null,
 function blobUrl(id){ id=String(id||''); return id.indexOf('sb:')===0?Supa.publicUrl(id.slice(3)):'/_blob/'+id; }
 
 /* ---------- armazenamento ---------- */
-var COLS=['obras','etapas','atividades','pacotes','diarios','fichas','ocorrencias','prestadores','eventos','atas','acoes','docsLegais','docsPrest','rfis','materiais','locs','servicos','treinamentos','fornecedores','compras','movEstoque','locacoes','contratosPrest','termos','danos','orcamentos','orcItens','aditivos','medicoes','contasPagar','aportes','empresas','contratosCliente','lancamentos','relatorios','avaliacoes','licoes','config'];
+var COLS=['obras','etapas','atividades','pacotes','diarios','fichas','ocorrencias','prestadores','eventos','atas','acoes','docsLegais','docsPrest','rfis','materiais','locs','servicos','treinamentos','fornecedores','compras','movEstoque','locacoes','contratosPrest','termos','danos','orcamentos','orcItens','aditivos','medicoes','contasPagar','aportes','empresas','contratosCliente','lancamentos','relatorios','avaliacoes','licoes','config','garantias','chamadosGarantia','chamadosCustos','visitasPosObra','pesquisasSatisfacao'];
 var Store={
   mode:'boot', db:null, data:{}, uid:null, writable:true, user:null, q:new Map(), unsubs:[],
   init:async function(){
@@ -248,9 +248,10 @@ var Store={
     if(e&&e.code==='conflito'){ toast('Este registro foi alterado por outra pessoa. Sua alteração não foi gravada; a tela foi atualizada.', true); if(e.col) Supa.recarregar(e.col,e.rid); return; }
     if(e&&/row-level security|permission denied|42501/i.test((e.message||'')+(e.code||''))){ toast('Seu perfil não tem permissão para esta alteração.', true); return; }
     toast('Não foi possível salvar'+(e&&e.code?' ('+e.code+')':'')+'. Confira sua conexão e tente de novo.', true); },
+  cliPode:function(c){ return this.papel==='cliente' && (c==='chamadosGarantia'||c==='pesquisasSatisfacao'); },
   set:function(c,id,data){
     var self=this;
-    if(!this.writable){ toast('Seu acesso é somente leitura.', true); return Promise.resolve(); }
+    if(!this.writable && !this.cliPode(c)){ toast('Seu acesso é somente leitura.', true); return Promise.resolve(); }
     var rec=clone(data); delete rec.id;
     this.data[c].set(id,rec); scheduleRender();
     if(this.mode==='db'){ return this.enqueue(c+'/'+id, function(){ return self.db.doc(c+'/'+id).set(rec); }).catch(function(e){ self.fail(e); }); }
@@ -372,6 +373,7 @@ function validade(s){
 function prestBloqueado(p){ return validade(p.seguro).k==='crit' || validade(p.treinamento).k==='crit' || L('treinamentos').some(function(t){ return t.prestadorId===p.id && t.validade && validade(t.validade).k==='crit'; }); }
 
 function alertasObra(o){
+  if(Store.papel==='cliente') return [];
   var A=[], oid=o.id, base='#/obra/'+oid+'/';
   var meta=o.metaPPC==null?80:o.metaPPC, dias=o.diasEscalar==null?7:o.diasEscalar;
   var ocs=byObra('ocorrencias',oid).filter(ocAberta);
