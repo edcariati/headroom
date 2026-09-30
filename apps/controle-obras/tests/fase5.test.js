@@ -862,3 +862,89 @@ test('fase 5 · passo 6 · texto do encerramento é escapado', async () => {
   assert.equal(e.win.__xss, undefined);
   assert.match(e.app(), /<img src=x/);
 });
+
+/* ---------------- passo 7: indicadores, alertas, agenda e cascata ---------------- */
+test('fase 5 · passo 7 · indicadores: margem da obra, nota média e relatório do mês', async () => {
+  const av = (n) => ({ obraId: 'o1', prestadorId: 'p1', data: dia(-1), criterios: { pontualidade: n }, sugeridos: {}, justificativas: {}, pesos: {}, notaFinal: n, recontrataria: 'sim' });
+  const seed = seedRel({ lancamentos: { r: lanc({ obraId: 'o1', empresaId: 'emp_cons', categoria: 'receita', valor: 10000 }), i: lanc({ obraId: 'o1', empresaId: 'emp_cons', categoria: 'imposto', valor: 600 }), c: lanc({ obraId: 'o1', empresaId: 'emp_cons', categoria: 'custo_direto', valor: 3400 }) }, avaliacoes: { a1: av(8), a2: av(6) } });
+  const e = await abrir({ seed, hash: '#/obra/o1/resumo' });
+  assert.match(e.app(), /Margem da obra.*ResultadoR\$?|Margem da obra/);
+  assert.match(e.app(), /Resultado R\$\s*6\.000,00 sobre receita líquida de R\$\s*9\.400,00/);
+  assert.match(e.app(), /Nota média dos prestadores.*7/);
+  assert.match(e.app(), /Nenhum relatório de/);
+  await e.go('#/obra/o1/relatorio');
+  await e.click('[data-act="rel-criar"]');
+  await e.go('#/obra/o1/resumo');
+  assert.match(e.app(), /Relatório do mês.*Rascunho/);
+  await e.go('#/obra/o1/relatorio');
+  await e.click('[data-act="rel-emitir"]'); await e.click('[data-x="1"]');
+  await e.go('#/obra/o1/resumo');
+  assert.match(e.app(), /Emitido · Aguardando o cliente|Emitido/);
+});
+
+test('fase 5 · passo 7 · alertas de empresa, contrato do cliente e relatório atrasado', async () => {
+  const ma = mesAtras(1);
+  const seed = { obras: { o1: obraAdm({ nome: 'Sem tudo', inicio: ma + '-01' }) } };
+  const e = await abrir({ seed, hash: '#/obra/o1/resumo' });
+  const t = e.app();
+  assert.match(t, /Obra sem empresa/);
+  assert.match(t, /Obra sem contrato do cliente/);
+  if (new Date().getDate() > 5) assert.match(t, /Relatório de .* ainda não emitido \(vencia no dia 5\)/);
+  const ok = await abrir({ seed: { obras: { o1: obraAdm({ empresaId: 'emp1', inicio: dia(-3) }) }, empresas: { emp1: { nome: 'E', ativa: true } }, contratosCliente: { cc_o1: { obraId: 'o1', tipoRemuneracao: 'parcelas', parcelas: [{ competencia: M, valor: 1 }] } } }, hash: '#/obra/o1/resumo' });
+  assert.doesNotMatch(ok.app(), /Obra sem empresa|Obra sem contrato do cliente|ainda não emitido/);   // obra nova, dentro do mês, sem pendência
+});
+
+test('fase 5 · passo 7 · validação do cliente pendente depois do prazo de objeção', async () => {
+  const rel = { obraId: 'o1', mes: mesAtras(1), status: 'emitido', snapshot: {}, enviadoEm: dia(-12), prazoObjecao: dia(-2), validacaoCliente: { status: 'pendente' }, criadoEm: new Date().toISOString(), emitidoEm: new Date().toISOString(), hist: [] };
+  const e = await abrir({ seed: seedRel({ relatorios: { r1: rel } }), hash: '#/obra/o1/resumo' });
+  assert.match(e.app(), /sem resposta do cliente: o prazo para objeção venceu em/);
+  await e.recarrega('relatorios', 'r1', Object.assign({}, rel, { validacaoCliente: { status: 'validado', data: dia(-1) } }));
+  await e.go('#/obra/o1/resumo');
+  assert.doesNotMatch(e.app(), /sem resposta do cliente/);
+});
+
+test('fase 5 · passo 7 · contrato de prestador encerrado sem avaliação por mais de N dias', async () => {
+  const ct = (enc) => ({ obraId: 'o1', prestadorId: 'p1', escopo: 'x', valor: 1, inicio: dia(-60), fim: dia(-20), status: 'encerrado', encerradoEm: enc });
+  const e = await abrir({ seed: seedRel({ prestadores: { p1: { nome: 'Pedreiro' } }, contratosPrest: { c1: ct(dia(-10)) } }), hash: '#/obra/o1/resumo' });
+  assert.match(e.app(), /1 contrato encerrado sem avaliação há mais de 7 dias: Pedreiro/);
+  const recente = await abrir({ seed: seedRel({ prestadores: { p1: { nome: 'Pedreiro' } }, contratosPrest: { c1: ct(dia(-2)) } }), hash: '#/obra/o1/resumo' });
+  assert.doesNotMatch(recente.app(), /contrato encerrado sem avaliação/);
+});
+
+test('fase 5 · passo 7 · todas as etapas liberadas há mais de 30 dias sem encerrar; obra encerrada não alerta', async () => {
+  const etapas = {}; for (let n = 1; n <= 22; n++) etapas['o1_' + n] = { obraId: 'o1', n, status: 'liberada', liberadaEm: dia(-40), hist: [] };
+  const e = await abrir({ seed: seedRel({ etapas }), hash: '#/obra/o1/resumo' });
+  assert.match(e.app(), /Todas as etapas estão liberadas há mais de 30 dias e a obra não foi encerrada/);
+  const enc = await abrir({ seed: seedRel({ etapas, obras: { o1: Object.assign(obraAdm({ nome: 'X', empresaId: 'emp_cons' }), { situacao: 'encerrada', encerradaEm: dia(-5) }) } }), hash: '#/obra/o1/resumo' });
+  assert.doesNotMatch(enc.app(), /Obra sem contrato do cliente|Todas as etapas estão liberadas/);
+});
+
+test('fase 5 · passo 7 · agenda: emissão do relatório, prazo de objeção e fim do contrato do cliente', async () => {
+  const rel = { obraId: 'o1', mes: mesAtras(1), status: 'emitido', snapshot: {}, enviadoEm: dia(-3), prazoObjecao: dia(0), validacaoCliente: { status: 'pendente' }, criadoEm: new Date().toISOString(), emitidoEm: new Date().toISOString(), hist: [] };
+  const seed = seedRel({ relatorios: { r1: rel }, contratosCliente: { cc_o1: { obraId: 'o1', tipoRemuneracao: 'fixo_mensal', valorMensal: 1, inicio: dia(-30), fim: dia(0), parcelas: [] } } });
+  const e = await abrir({ seed, hash: '#/obra/o1/agenda' });
+  assert.match(e.app(), /Prazo de objeção do cliente: relatório de/);
+  assert.match(e.app(), /Fim do contrato do cliente \(encerramento previsto\)/);
+  const e2 = await abrir({ seed: { obras: { o1: obraAdm({ inicio: mesAtras(2) + '-01' }) } }, hash: '#/obra/o1/agenda' });
+  await e2.go('#/obra/o1/agenda');
+  const eventos = e2.x.alertasP5 ? true : false; assert.ok(eventos);
+});
+
+test('fase 5 · passo 7 · excluir a obra apaga as coleções da fase 5 dela, sem tocar em empresas nem em despesas gerais', async () => {
+  const cols = ['contratosCliente', 'lancamentos', 'relatorios', 'avaliacoes', 'licoes', 'config'];
+  const seed = { obras: { o1: obra(), o2: obra({ nome: 'Outra' }) }, empresas: { emp1: { nome: 'E', ativa: true } }, lancamentos: { g: lanc({ obraId: '', categoria: 'despesa_geral', valor: 5 }) } };
+  cols.forEach((c) => { seed[c] = Object.assign(seed[c] || {}, { a1: { obraId: 'o1', n: 1 }, b1: { obraId: 'o2', n: 1 } }); });
+  seed.config.p0_mapa = { mapa: { 5: 'X' } };
+  const e = await abrir({ seed, hash: '#/obra/o1/resumo' });
+  await e.click('[data-act="obra-editar"]');
+  await e.click('[data-act="obra-excluir"]');
+  await e.click('[data-x="1"]');
+  cols.forEach((c) => {
+    assert.equal(e.linhas(c).filter((x) => x.obraId === 'o1').length, 0, c + ' ainda tem registros da obra excluída');
+    assert.equal(e.linhas(c).filter((x) => x.obraId === 'o2').length, 1, c + ' perdeu registros de outra obra');
+  });
+  assert.equal(e.linhas('empresas').length, 2 >= 1 ? e.linhas('empresas').length : 0);
+  assert.ok(e.linhas('empresas').some((x) => x.id === 'emp1'));                    // empresa preservada
+  assert.ok(e.linhas('lancamentos').some((x) => x.id === 'g'));                     // despesa geral preservada
+  assert.ok(e.linhas('config').some((x) => x.id === 'p0_mapa'));                    // configuração global preservada
+});

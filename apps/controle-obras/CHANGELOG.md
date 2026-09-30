@@ -9,6 +9,7 @@
 - **Passo 4:** relatório mensal ao cliente (11 seções), rascunho ao vivo, emissão com números congelados, retificação, envio com prazo de objeção, validação ou objeção do cliente, escolha de fotos, impressão A4 e download em HTML.
 - **Passo 5:** avaliação de prestadores (7 critérios, sugestões automáticas, justificativa acima de 2 pontos, nota ponderada), ranking na página Prestadores, aviso ao contratar nota abaixo de 6 e avaliação pendente ao encerrar contrato.
 - **Passo 6:** encerramento da obra (checklist de 9 itens com justificativa), lições aprendidas e ajuste do P0 (manter × ajustar, R$/m², incidência, referência CSV, curva real, exportação calibrada). Selo e aviso em obra encerrada.
+- **Passo 7:** indicadores (margem, nota média, relatório), alertas e agenda da fase 5; cascata de exclusão preserva empresas, despesas gerais e configuração global; documentação em `docs/`.
 
 ## Fase 4 — Custo, medição e financeiro (concluída)
 

@@ -259,3 +259,13 @@ Obra encerrada ganha selo, e criar algo novo nela pede confirmação (uma vez po
 **D-5.6.7 — Lições.** Causas do desvio digitadas uma por linha (`etapa; causa; valor; texto`, com a causa entre cliente, fornecedor, produção, projeto, clima, retrabalho, orçamento subdimensionado, outra); o app guarda junto o orçado × realizado por etapa no momento do registro.
 
 **D-5.6.8 — Onde ficam os dados.** Configurações globais (mapa de disciplinas, referência do P0) e ajustes por obra ficam na coleção nova `config` (ids `p0_mapa`, `p0_ref`, `p0_<obra>`); ela entra na exclusão em cascata só para o que tem `obraId`.
+
+## Fase 5 — Passo 7 (indicadores, alertas e agenda)
+
+**D-5.7.1 — Indicadores no resumo.** Margem da obra (DRE acumulado), nota média dos prestadores e situação do relatório do mês.
+
+**D-5.7.2 — Alertas.** Obra sem empresa; sem contrato do cliente; relatório do mês anterior não emitido depois do dia 5; validação do cliente pendente depois do prazo de objeção; contrato encerrado sem avaliação além de `diasEscalar`; todas as etapas liberadas há mais de 30 dias sem encerrar a obra. Obra encerrada não gera alertas.
+
+**D-5.7.3 — Agenda.** Emissão do relatório (dia 5), prazo de objeção do cliente e fim do contrato do cliente.
+
+**D-5.7.4 — Exclusão em cascata.** Apaga as coleções com `obraId` da obra; preserva empresas, despesas gerais (sem obra) e a configuração global (`config/p0_mapa`, `p0_ref`).

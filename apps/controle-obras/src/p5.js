@@ -726,3 +726,37 @@ document.addEventListener('click', function(e){
   e.preventDefault(); e.stopImmediatePropagation();
   confirmDlg('Obra encerrada','<p>“'+esc(o.nome)+'” foi encerrada em '+fmt(o.encerradaEm)+'. Registrar algo novo agora altera uma obra já fechada.</p>','Continuar mesmo assim',false).then(function(ok){ if(!ok) return; ui.encOk=ui.encOk||{}; ui.encOk[o.id]=true; setTimeout(function(){ el.click(); },30); });
 }, true);
+
+/* ================= INDICADORES, ALERTAS E AGENDA DA FASE 5 ================= */
+function indRowsP5(o){
+  var oid=o.id, out='', ls=lancDaObra(oid);
+  if(ls.length){ var d=dreObra(oid,'0000-01',hoje().slice(0,7)); out+=indRow('Margem da obra','Resultado acumulado ÷ receita líquida (DRE gerencial)', d.margem==null?'—':(Math.round(d.margem*1000)/10).toString().replace('.',',')+'%', 'Resultado '+brl(d.resultado)+' sobre receita líquida de '+brl(d.receitaLiquida), d.margem==null?'':(d.margem>=0.2?'ok':(d.margem>=0?'warn':'crit'))); }
+  var avs=byObra('avaliacoes',oid).filter(function(a){ return a.notaFinal!=null; });
+  if(avs.length){ var m=r1(avs.reduce(function(s,a){ return s+a.notaFinal; },0)/avs.length); out+=indRow('Nota média dos prestadores','Média das avaliações da obra', String(m).replace('.',','), plural(avs.length,'avaliação','avaliações'), m>=7?'ok':(m>=6?'warn':'crit')); }
+  var mes=hoje().slice(0,7), rs=relDoMes(oid,mes), vig=relVigente(oid,mes), sit='Nenhum relatório de '+mesNome(mes), k='';
+  if(vig){ var v=(vig.validacaoCliente||{}).status||'pendente'; sit='Emitido'+(vig.enviadoEm?', enviado':'')+' · '+VALID_ST[v]; k=v==='validado'?'ok':(v==='objecao'?'crit':'warn'); }
+  else if(rs.length){ sit='Rascunho'; k='warn'; }
+  out+=indRow('Relatório do mês','Situação do relatório mensal ao cliente', vig?'Emitido':(rs.length?'Rascunho':'—'), sit, k);
+  return out;
+}
+function alertasP5(o){
+  var A=[], oid=o.id, base='#/obra/'+oid+'/', dias=o.diasEscalar==null?7:o.diasEscalar, hj=hoje(); if(encerrada(o)) return A;
+  if(!o.empresaId) A.push({k:'warn', t:'Obra sem empresa: o DRE agrupa os lançamentos dela à parte.', to:base+'dre'});
+  if(!contratoCliente(oid)) A.push({k:'warn', t:'Obra sem contrato do cliente: o DRE fica sem receita prevista.', to:base+'dre'});
+  var ma=mesAdd(hj.slice(0,7),-1), fimMa=addDays(hj.slice(0,7)+'-01',-1);
+  if(new Date().getDate()>5 && (!o.inicio||o.inicio<=fimMa) && !relVigente(oid,ma)) A.push({k:'warn', t:'Relatório de '+mesNome(ma)+' ainda não emitido (vencia no dia 5).', to:base+'relatorio'});
+  byObra('relatorios',oid).filter(function(r){ return r.status==='emitido'&&r.enviadoEm&&r.prazoObjecao&&r.prazoObjecao<hj&&((r.validacaoCliente||{}).status||'pendente')==='pendente'; }).forEach(function(r){ A.push({k:'warn', t:'Relatório de '+mesNome(r.mes)+' sem resposta do cliente: o prazo para objeção venceu em '+fmt(r.prazoObjecao)+'.', to:base+'relatorio'}); });
+  var semAv=avPendentes(oid).filter(function(c){ return diffDays((c.encerradoEm||c.fim||hj),hj)>dias; });
+  if(semAv.length) A.push({k:'warn', t:plural(semAv.length,'contrato encerrado sem avaliação','contratos encerrados sem avaliação')+' há mais de '+dias+' dias: '+semAv.map(function(c){ return prestNome(c.prestadorId)||'prestador'; }).join(', ')+'.', to:base+'avaliacoes'});
+  var libs=ETAPAS.map(function(e){ return etapaDoc(oid,e.n); });
+  if(libs.every(function(e){ return e.status==='liberada'; })){ var ult=libs.reduce(function(m,e){ return e.liberadaEm&&e.liberadaEm>m?e.liberadaEm:m; },''); if(ult&&diffDays(ult,hj)>30) A.push({k:'warn', t:'Todas as etapas estão liberadas há mais de 30 dias e a obra não foi encerrada.', to:base+'encerramento'}); }
+  return A;
+}
+function eventosP5(o,add,b){
+  var oid=o.id; if(encerrada(o)) return;
+  var mes=hoje().slice(0,7), ma=mesAdd(mes,-1);
+  if(!relVigente(oid,ma)&&(!o.inicio||o.inicio<=addDays(mes+'-01',-1))) add(mes+'-05','Emitir o relatório de '+mesNome(ma),'cliente',b+'relatorio');
+  byObra('relatorios',oid).filter(function(r){ return r.status==='emitido'&&r.prazoObjecao&&((r.validacaoCliente||{}).status||'pendente')==='pendente'; }).forEach(function(r){ add(r.prazoObjecao,'Prazo de objeção do cliente: relatório de '+mesNome(r.mes),'cliente',b+'relatorio'); });
+  var cc=contratoCliente(oid); if(cc&&cc.fim) add(cc.fim,'Fim do contrato do cliente (encerramento previsto)','cliente',b+'encerramento');
+}
+COBX.alertasP5=alertasP5; COBX.indRowsP5=indRowsP5;
