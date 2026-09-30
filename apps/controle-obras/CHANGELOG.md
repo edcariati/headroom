@@ -6,6 +6,7 @@
   e `build.py`, que gera o `index.html` único idêntico ao anterior. Bateria de testes das fases 1 a 3 com jsdom (`npm test`).
 
 - **Passo 1:** aba Orçamento: importação de CSV com validação, versões (v1 base imutável) e comparação entre versões. Modelo CSV para baixar.
+- **Passo 2:** aditivos (rascunho → enviado → assinado/recusado), orçamento revisado, botão “Gerar aditivo” na ocorrência e no material.
 
 ## Fase 3 — Suprimentos
 Fornecedores, compras, estoque, locações, contratos de prestador, termos de frente e danos.

@@ -123,14 +123,115 @@ function orcComparaVersoes(a,b){
 }
 COBX.orcComparaVersoes=orcComparaVersoes;
 
-/* ---------- orçamento revisado (completado no passo 2) ---------- */
+/* ---------- aditivos e orçamento revisado ---------- */
+function adtSinal(a){ return a.tipo==='supressao'?-1:1; }
+function adtItensTotal(a){ return r2((a.itens||[]).reduce(function(s,i){ return s+r2(i.total); },0)); }
+function adtValor(a){ return r2(adtSinal(a)*adtItensTotal(a)); }
+function adtDaObra(oid){ return byObra('aditivos',oid).sort(function(a,b){ return a.numero-b.numero; }); }
+function adtAssinados(oid){ return adtDaObra(oid).filter(function(a){ return a.status==='assinado'; }); }
+function adtEditavel(a){ return !a || a.status==='rascunho'; }
 function orcRevisado(oid){
-  var v=orcVigente(oid), itens=orcItensDe(v).map(function(i){ return Object.assign({}, i, {origem:'base'}); });
+  var v=orcVigente(oid), itens=orcItensDe(v).map(function(i){ return Object.assign({}, i, {origem:'base'}); }), adt=adtAssinados(oid);
+  adt.forEach(function(a){
+    (a.itens||[]).forEach(function(i,k){
+      itens.push({codigo:'A'+a.numero+'.'+(k+1), etapa:Number(i.etapa)||0, descricao:i.descricao, unidade:i.unidade, quantidade:i.quantidade, precoUnitario:i.precoUnitario, tipo:i.tipoItem||'empreitada', prestador:i.prestador||'', prestadorId:i.prestadorId||'', total:r2(adtSinal(a)*i.total), origem:'aditivo', aditivoId:a.id, sinal:adtSinal(a)});
+    });
+  });
   var porEtapa={}, porTipo={}, total=0;
   itens.forEach(function(i){ var e=i.etapa||0; porEtapa[e]=r2((porEtapa[e]||0)+i.total); porTipo[i.tipo]=r2((porTipo[i.tipo]||0)+i.total); total=r2(total+i.total); });
-  return {versao:v, itens:itens, porEtapa:porEtapa, porTipo:porTipo, total:total, base:v?v.total:0, aditivos:0};
+  var base=v?v.total:0;
+  return {versao:v, itens:itens, porEtapa:porEtapa, porTipo:porTipo, total:total, base:base, aditivos:r2(total-base), prazoDias:adt.reduce(function(s,a){ return s+(Number(a.impactoPrazoDias)||0); },0)};
 }
-function aditivosHtml(){ return ''; }
+COBX.orcRevisado=orcRevisado; COBX.adtValor=adtValor;
+
+var ADT_LINHA='descricao;unidade;quantidade;preco_unitario;etapa;tipo;prestador';
+function adtItensTexto(a){ return (a&&a.itens||[]).map(function(i){ return csvLinha([i.descricao,i.unidade,String(i.quantidade).replace('.',','),String(i.precoUnitario).replace('.',','),i.etapa||'',i.tipoItem||'',i.prestador||''],';'); }).join('\n'); }
+function adtParseItens(texto){
+  var rows=csvParse(ADT_LINHA+'\n'+String(texto||'').replace(/^\s+|\s+$/g,'')).slice(1), itens=[], erros=[];
+  var prest={}; L('prestadores').forEach(function(p){ prest[chave(p.nome)]=p; });
+  rows.forEach(function(r,k){
+    var ln='Item '+(k+1)+': ', c=function(i){ return String(r[i]==null?'':r[i]).trim(); };
+    var q=numBR(c(2)), pu=numBR(c(3)), et=c(4)===''?0:numBR(c(4)), tp=c(5)===''?'empreitada':tipoItemNorm(c(5)), pn=c(6), e=[];
+    if(!c(0)) e.push('falta a descrição');
+    if(!c(1)) e.push('falta a unidade');
+    if(!(q>0)) e.push('quantidade deve ser maior que zero');
+    if(!(pu>=0)) e.push('preço unitário inválido');
+    if(!(et>=0&&et<=22&&et===Math.floor(et))) e.push('etapa deve ser de 1 a 22 (ou vazia)');
+    if(!tp) e.push('tipo inválido');
+    if(e.length){ erros.push(ln+e.join('; ')+'.'); return; }
+    var p=pn?prest[chave(pn)]:null;
+    itens.push({descricao:c(0), unidade:c(1), quantidade:q, precoUnitario:pu, total:r2(q*pu), etapa:et, tipoItem:tp, prestador:pn, prestadorId:p?p.id:''});
+  });
+  return {itens:itens, erros:erros};
+}
+COBX.adtParseItens=adtParseItens;
+function origemAdt(a){
+  if(!a.origem) return '';
+  if(a.origem.col==='ocorrencias'){ var o=G('ocorrencias',a.origem.id); return 'Ocorrência: '+(o?short(o.descricao,50):'removida'); }
+  if(a.origem.col==='materiais'){ var m=G('materiais',a.origem.id); return 'Material: '+(m?m.item:'removido'); }
+  return '';
+}
+function aditivosHtml(o){
+  var oid=o.id, lista=adtDaObra(oid), dias=o.diasEscalar==null?7:o.diasEscalar, hj=hoje();
+  var linhas=lista.length?lista.map(function(a){
+    var esp=a.status==='aguardando_cliente' && a.enviadoEm && diffDays(a.enviadoEm.slice(0,10),hj)>dias;
+    var acts='<button class="btn sm ghost" data-act="adt-ver" data-id="'+a.id+'">Ver</button>';
+    if(a.status==='rascunho') acts+='<button class="btn sm" data-act="adt-editar" data-id="'+a.id+'" data-write>Editar</button><button class="btn sm primary" data-act="adt-enviar" data-id="'+a.id+'" data-write>Enviar ao cliente</button>';
+    if(a.status==='aguardando_cliente') acts+='<button class="btn sm primary" data-act="adt-assinar" data-id="'+a.id+'" data-write>Registrar assinatura</button><button class="btn sm" data-act="adt-recusar" data-id="'+a.id+'" data-write>Recusado</button>';
+    return '<tr><td class="num">'+a.numero+'</td><td>'+esc(short(a.descricao,80))+(origemAdt(a)?'<div class="tiny muted">'+esc(origemAdt(a))+'</div>':'')+'</td><td>'+ADT_TIPO[a.tipo]+'</td><td class="num">'+brl(adtValor(a))+'</td><td class="num">'+(a.impactoPrazoDias?a.impactoPrazoDias+' d':'—')+'</td><td><span class="chip '+(a.status==='assinado'?'ok':(a.status==='recusado'?'crit':(esp?'crit':(a.status==='aguardando_cliente'?'warn':''))))+'">'+ADT_ST[a.status]+(esp?' há mais de '+dias+' dias':'')+'</span></td><td style="white-space:nowrap">'+acts+'</td></tr>';
+  }).join(''):'<tr><td colspan="7" class="muted" style="padding:16px">Nenhum aditivo. Solicitação do cliente ou imprevisto que muda escopo, prazo ou valor vira aditivo e só vale depois de assinado.</td></tr>';
+  return '<section class="card sec"><div class="card-h"><div><h2>Aditivos</h2><p class="muted small">Só aditivo assinado altera o orçamento revisado.</p></div><button class="btn primary sm" data-act="adt-novo" data-oid="'+oid+'" data-write>+ Aditivo</button></div><div class="tbl-scroll"><table class="tbl"><thead><tr><th>Nº</th><th>Descrição</th><th>Tipo</th><th class="num">Valor</th><th class="num">Prazo</th><th>Situação</th><th></th></tr></thead><tbody>'+linhas+'</tbody></table></div></section>';
+}
+function aditivoForm(oid, a, pre){
+  var novo=!a;
+  if(a && !adtEditavel(a)){ blockDlg('Aditivo não pode ser editado',['Aditivo '+ADT_ST[a.status].toLowerCase()+' é imutável. Para corrigir, crie um novo aditivo.'],'Edição bloqueada'); return; }
+  pre=pre||{};
+  openForm({title:novo?'Novo aditivo':'Editar aditivo nº '+a.numero, wide:true,
+    intro:(pre.origem?esc(origemAdt({origem:pre.origem}))+'. ':'')+'Um item por linha, separado por ponto e vírgula: <strong>descrição; unidade; quantidade; preço unitário; etapa; tipo; prestador</strong> (etapa, tipo e prestador são opcionais). Supressão: informe os itens que saem, com valores positivos.',
+    fields:[{name:'descricao',label:'Descrição do aditivo',type:'textarea',required:true,rows:2,value:a?a.descricao:(pre.descricao||'')},
+      [{name:'tipo',label:'Tipo',type:'radio',required:true,options:Object.keys(ADT_TIPO).map(function(k){ return [k,ADT_TIPO[k]]; }),value:a?a.tipo:(pre.tipo||'acrescimo')},{name:'impactoPrazoDias',label:'Impacto no prazo (dias)',type:'number',step:1,value:a?a.impactoPrazoDias:0}],
+      {name:'itens',label:'Itens (quantidade × preço unitário)',type:'textarea',rows:6,value:a?adtItensTexto(a):(pre.itens||''),ph:'Ex.: Contenção em gabião; m³; 42; 310,00; 4; empreitada; Terra Ltda',hint:'Aditivo de prazo puro pode ficar sem itens.'}],
+    extra:novo?'':'<button type="button" class="btn danger" data-act="adt-excluir" data-id="'+a.id+'" style="margin-right:auto">Excluir rascunho</button>',
+    onSubmit:async function(v){
+      if(!(v.descricao||'').trim()) return 'Descreva o aditivo.';
+      if(!v.tipo) return 'Escolha o tipo.';
+      var r=adtParseItens(v.itens);
+      if(r.erros.length) return r.erros[0]+(r.erros.length>1?' (e mais '+(r.erros.length-1)+')':'');
+      if(v.tipo!=='prazo' && !r.itens.length) return 'Informe ao menos um item com quantidade, unidade e preço unitário.';
+      if(v.tipo==='prazo' && !(Number(v.impactoPrazoDias)>0)) return 'Aditivo de prazo precisa informar os dias.';
+      var num=a?a.numero:adtDaObra(oid).reduce(function(m,x){ return Math.max(m,x.numero); },0)+1;
+      var rec=Object.assign({status:'rascunho', criadoEm:new Date().toISOString(), por:Store.uid||null}, a||{}, {obraId:oid, numero:num, descricao:v.descricao.trim(), tipo:v.tipo, origem:a?a.origem:(pre.origem||null), itens:r.itens, impactoPrazoDias:Number(v.impactoPrazoDias)||0});
+      rec.valor=adtValor(rec);
+      await Store.set('aditivos', a?a.id:nid(), rec);
+    }});
+}
+function aditivoVer(id){
+  var a=G('aditivos',id); if(!a) return;
+  openDlg('<div class="dlg-h"><h2>Aditivo nº '+a.numero+'</h2><button type="button" class="btn ghost ico" data-close aria-label="Fechar">✕</button></div><div class="dlg-b">'
+    +'<div class="row" style="margin-bottom:8px"><span class="chip '+(a.status==='assinado'?'ok':'')+'">'+ADT_ST[a.status]+'</span><span class="chip">'+ADT_TIPO[a.tipo]+'</span><strong>'+brl(adtValor(a))+'</strong>'+(a.impactoPrazoDias?'<span class="chip warn">+'+a.impactoPrazoDias+' dias de prazo</span>':'')+'</div>'
+    +'<p style="white-space:pre-wrap">'+esc(a.descricao)+'</p>'+(origemAdt(a)?'<p class="small muted">'+esc(origemAdt(a))+'</p>':'')
+    +((a.itens||[]).length?'<div class="tbl-scroll"><table class="tbl"><thead><tr><th>Item</th><th>Etapa</th><th class="num">Qtd</th><th class="num">Preço unit.</th><th class="num">Total</th></tr></thead><tbody>'+a.itens.map(function(i){ return '<tr><td>'+esc(i.descricao)+'<div class="tiny muted">'+esc(i.unidade)+' · '+TIPOS_ITEM[i.tipoItem||'empreitada']+(i.prestador?' · '+esc(i.prestador):'')+'</div></td><td>'+(i.etapa||'—')+'</td><td class="num">'+String(i.quantidade).replace('.',',')+'</td><td class="num">'+brl(i.precoUnitario)+'</td><td class="num">'+brl(i.total)+'</td></tr>'; }).join('')+'</tbody></table></div>':'')
+    +(a.assinatura?'<div class="callout ok" style="margin-top:12px"><strong>Assinado em '+fmt(a.assinatura.data)+'</strong><p class="small" style="white-space:pre-wrap">'+esc(a.assinatura.ref)+'</p>'+anexosHtml(a.assinatura.anexos)+'</div>':'')
+    +(a.status==='recusado'&&a.motivoRecusa?'<div class="callout crit" style="margin-top:12px"><strong>Recusado</strong><p class="small">'+esc(a.motivoRecusa)+'</p></div>':'')
+    +'</div><div class="dlg-f"><button class="btn primary" data-close>Fechar</button></div>', true);
+}
+function adtAssinarForm(id){
+  var a=G('aditivos',id);
+  openForm({title:'Registrar assinatura do cliente', intro:'Aditivo nº '+a.numero+' — '+esc(short(a.descricao,120))+'. <strong>'+brl(adtValor(a))+'</strong>. Depois de assinado, ele passa a valer no orçamento revisado e não pode mais ser alterado.',
+    fields:[{name:'data',label:'Data da assinatura',type:'date',required:true,value:hoje()},{name:'ref',label:'Como o cliente assinou',type:'textarea',required:true,rows:3,ph:'Ex.: aditivo assinado no escritório em 12/03, cópia anexada.'},{name:'anexos',label:'Documento assinado (foto ou PDF)',type:'anexos',value:[]}],
+    submit:'Registrar assinatura',
+    onSubmit:async function(v){
+      if(!(v.ref||'').trim()) return 'Registre como o cliente assinou (obrigatório).';
+      if(!v.data) return 'Informe a data.';
+      await Store.set('aditivos', id, Object.assign({}, a, {status:'assinado', valor:adtValor(a), assinatura:{data:v.data, ref:v.ref.trim(), anexos:v.anexos||[]}}));
+      toast('Aditivo assinado: o orçamento revisado foi atualizado.');
+    }});
+}
+function adtRecusarForm(id){
+  var a=G('aditivos',id);
+  openForm({title:'Aditivo recusado pelo cliente', fields:[{name:'motivo',label:'Motivo',type:'textarea',required:true,rows:2}], submit:'Registrar recusa',
+    onSubmit:async function(v){ if(!(v.motivo||'').trim()) return 'Registre o motivo.'; await Store.set('aditivos', id, Object.assign({}, a, {status:'recusado', motivoRecusa:v.motivo.trim()})); }});
+}
 
 /* ---------- aba Orçamento ---------- */
 function tOrcamento(o){
@@ -223,7 +324,16 @@ COBX.orcVigente=orcVigente; COBX.orcItensDe=orcItensDe;
 var A4={
   'orc-modelo':function(){ baixar('modelo-orcamento.csv','﻿'+ORC_MODELO.map(function(l){ return csvLinha(l,';'); }).join('\r\n')+'\r\n','text/csv').then(function(ok){ if(ok) toast('Modelo CSV baixado.'); }); },
   'orc-importar':function(d){ orcImportDlg(d.oid); },
-  'orc-comparar':function(d){ orcCompararDlg(d.id); }
+  'orc-comparar':function(d){ orcCompararDlg(d.id); },
+  'adt-novo':function(d){ aditivoForm(d.oid); },
+  'adt-editar':function(d){ var a=G('aditivos',d.id); aditivoForm(a.obraId,a); },
+  'adt-ver':function(d){ aditivoVer(d.id); },
+  'adt-enviar':async function(d){ var a=G('aditivos',d.id); if(!(a.itens||[]).length && a.tipo!=='prazo'){ blockDlg('Aditivo sem itens',['Inclua os itens com quantidade e preço unitário antes de enviar.'],'Não dá para enviar'); return; } var ok=await confirmDlg('Enviar ao cliente?','<p>Aditivo nº '+a.numero+': <strong>'+brl(adtValor(a))+'</strong>. Depois de enviado ele não pode mais ser editado.</p>','Marcar como enviado',false); if(ok){ await Store.set('aditivos', d.id, Object.assign({}, a, {status:'aguardando_cliente', enviadoEm:new Date().toISOString()})); toast('Aditivo aguardando o cliente.'); } },
+  'adt-assinar':function(d){ adtAssinarForm(d.id); },
+  'adt-recusar':function(d){ adtRecusarForm(d.id); },
+  'adt-excluir':async function(d){ var a=G('aditivos',d.id); if(!adtEditavel(a)) return; var ok=await confirmDlg('Excluir rascunho?','<p>Só rascunhos podem ser excluídos.</p>','Excluir',true); if(ok){ await Store.del('aditivos',d.id); closeDlg(); } },
+  'adt-de-oc':function(d){ var o=G('ocorrencias',d.id); closeDlg(); aditivoForm(o.obraId,null,{origem:{col:'ocorrencias',id:o.id}, descricao:o.descricao, tipo:'acrescimo'}); },
+  'adt-de-mat':function(d){ var m=G('materiais',d.id); aditivoForm(m.obraId,null,{origem:{col:'materiais',id:m.id}, descricao:'Material: '+m.item, tipo:'acrescimo'}); }
 };
 document.addEventListener('change', function(e){
   var el=e.target.closest('[data-chg="orc-filtro"]'); if(!el) return;

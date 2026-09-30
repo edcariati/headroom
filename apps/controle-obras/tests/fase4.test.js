@@ -118,3 +118,109 @@ test('fase 4 · passo 1 · modelo CSV e texto escapado', async () => {
   await e.click('[data-act="orc-modelo"]');
   assert.deepEqual(e.erros, []);
 });
+
+/* ---------------- passo 2: aditivos e orçamento revisado ---------------- */
+const seedOrc = (extra) => Object.assign({
+  obras: { o1: obraAdm() },
+  orcamentos: { b1: { obraId: 'o1', versao: 1, data: dia(-5), motivo: 'Orçamento base', total: 1000, nItens: 2, lotes: 1, porEtapa: { 5: 600, 7: 400 }, porTipo: { material: 600, mao_de_obra: 400 } } },
+  orcItens: { b1_0: { obraId: 'o1', orcId: 'b1', lote: 0, itens: [
+    { codigo: '5.01', etapa: 5, descricao: 'Concreto', unidade: 'm³', quantidade: 2, precoUnitario: 300, tipo: 'material', prestador: '', prestadorId: '', total: 600 },
+    { codigo: '7.01', etapa: 7, descricao: 'Alvenaria', unidade: 'm²', quantidade: 10, precoUnitario: 40, tipo: 'mao_de_obra', prestador: '', prestadorId: '', total: 400 }] } }
+}, extra || {});
+const adt = (o) => Object.assign({ obraId: 'o1', numero: 1, descricao: 'Aditivo', tipo: 'acrescimo', itens: [], status: 'rascunho', impactoPrazoDias: 0, criadoEm: new Date().toISOString() }, o);
+const it = (desc, q, pu, etapa) => ({ descricao: desc, unidade: 'un', quantidade: q, precoUnitario: pu, total: q * pu, etapa, tipoItem: 'empreitada' });
+
+test('fase 4 · passo 2 · só aditivo assinado altera o orçamento revisado; o base fica intacto', async () => {
+  const e = await abrir({ seed: seedOrc({ aditivos: {
+    a1: adt({ numero: 1, status: 'assinado', itens: [it('Contenção', 5, 100, 5)] }),
+    a2: adt({ numero: 2, status: 'assinado', tipo: 'supressao', itens: [it('Retirada de piso', 4, 50, 7)] }),
+    a3: adt({ numero: 3, status: 'rascunho', itens: [it('Não vale', 1, 999, 5)] }),
+    a4: adt({ numero: 4, status: 'aguardando_cliente', itens: [it('Ainda não', 1, 888, 5)] }),
+    a5: adt({ numero: 5, status: 'recusado', itens: [it('Recusado', 1, 777, 5)] })
+  } }), hash: '#/obra/o1/orcamento' });
+  const rev = e.x.orcRevisado('o1');
+  assert.equal(rev.base, 1000);
+  assert.equal(rev.aditivos, 300);            // +500 (acréscimo) −200 (supressão)
+  assert.equal(rev.total, 1300);
+  assert.equal(rev.porEtapa[5], 600 + 500);
+  assert.equal(rev.porEtapa[7], 400 - 200);
+  assert.equal(rev.itens.length, 4);
+  assert.equal(e.linhas('orcamentos')[0].total, 1000);   // base intacto
+  assert.match(e.app(), /Orçamento revisado.*R\$\s*1\.300,00/);
+});
+
+test('fase 4 · passo 2 · ciclo do aditivo: rascunho → enviado → assinado (com registro) e depois imutável', async () => {
+  const e = await abrir({ seed: seedOrc(), hash: '#/obra/o1/orcamento' });
+  await e.click('[data-act="adt-novo"]');
+  await e.submit({ descricao: 'Contenção extra por solo diferente', tipo: 'acrescimo', impactoPrazoDias: '5', itens: 'Contenção em gabião; m³; 42; 310,50; 5; empreitada\nEscavação adicional; m³; 30; 55,00; 5; empreitada' });
+  let a = e.linhas('aditivos')[0];
+  assert.equal(a.numero, 1);
+  assert.equal(a.status, 'rascunho');
+  assert.equal(a.valor, 42 * 310.5 + 30 * 55);
+  assert.equal(a.itens.length, 2);
+  assert.equal(e.x.orcRevisado('o1').total, 1000);        // rascunho não conta
+  await e.click('[data-act="adt-enviar"]');
+  await e.click('[data-x="1"]');
+  assert.equal(e.linhas('aditivos')[0].status, 'aguardando_cliente');
+  await e.click('[data-act="adt-assinar"]');
+  await e.submit({ data: dia(0), ref: '' });
+  assert.match(e.erroForm(), /Registre como o cliente assinou/);
+  await e.submit({ data: dia(0), ref: 'Assinado no escritório, cópia anexada' });
+  a = e.linhas('aditivos')[0];
+  assert.equal(a.status, 'assinado');
+  assert.equal(a.assinatura.ref, 'Assinado no escritório, cópia anexada');
+  assert.equal(e.x.orcRevisado('o1').total, 1000 + 42 * 310.5 + 30 * 55);
+  assert.equal(e.x.orcRevisado('o1').prazoDias, 5);
+  assert.equal(e.linhas('orcamentos')[0].total, 1000);
+  assert.doesNotMatch(e.app(), /Editar<\/button>.*Registrar assinatura/);
+  assert.equal(e.doc.querySelector('[data-act="adt-editar"]'), null);
+});
+
+test('fase 4 · passo 2 · aditivo assinado não pode ser editado nem excluído', async () => {
+  const e = await abrir({ seed: seedOrc({ aditivos: { a1: adt({ status: 'assinado', itens: [it('X', 1, 10, 5)], assinatura: { data: dia(0), ref: 'ok' } }) } }), hash: '#/obra/o1/orcamento' });
+  assert.equal(e.doc.querySelector('[data-act="adt-editar"]'), null);
+  assert.equal(e.doc.querySelector('[data-act="adt-excluir"]'), null);
+});
+
+test('fase 4 · passo 2 · validação dos itens do aditivo', async () => {
+  const e = await abrir({ seed: seedOrc(), hash: '#/obra/o1/orcamento' });
+  await e.click('[data-act="adt-novo"]');
+  await e.submit({ descricao: 'x', tipo: 'acrescimo', impactoPrazoDias: '0', itens: '' });
+  assert.match(e.erroForm(), /ao menos um item/);
+  await e.submit({ itens: 'Item sem preço; un; 3; abc' });
+  assert.match(e.erroForm(), /preço unitário inválido/);
+  await e.submit({ itens: 'Item; un; 3; 10; 40' });
+  assert.match(e.erroForm(), /etapa/);
+  assert.equal(e.linhas('aditivos').length, 0);
+});
+
+test('fase 4 · passo 2 · "Gerar aditivo" a partir de ocorrência e de material', async () => {
+  const seed = seedOrc({
+    ocorrencias: { c1: { obraId: 'o1', etapa: 5, tipo: 'imprevisto', gravidade: 'importante', descricao: 'Rocha na escavação', status: 'aberta', prazo: dia(5), interacoes: [], criadoEm: new Date().toISOString() } },
+    materiais: { m1: { obraId: 'o1', item: 'Porcelanato da sala', aprovador: 'Cliente', prazo: dia(5), resultado: 'pendente', nivel3: true, aditivo: true } }
+  });
+  const e = await abrir({ seed, hash: '#/obra/o1/ocorrencias' });
+  await e.click('[data-act="oc-abrir"]');
+  await e.click('[data-act="adt-de-oc"]');
+  assert.equal(e.doc.querySelector('[name="descricao"]').value, 'Rocha na escavação');
+  await e.submit({ tipo: 'acrescimo', impactoPrazoDias: '3', itens: 'Remoção de rocha; m³; 12; 200,00; 5' });
+  let a = e.linhas('aditivos')[0];
+  assert.equal(a.origem.col, 'ocorrencias');
+  assert.equal(a.origem.id, 'c1');
+  assert.equal(a.valor, 2400);
+  await e.go('#/obra/o1/projeto');
+  await e.click('[data-act="adt-de-mat"]');
+  await e.submit({ tipo: 'acrescimo', impactoPrazoDias: '0', itens: 'Diferença de porcelanato; m²; 30; 40,00; 14' });
+  a = e.linhas('aditivos').find((x) => x.origem.col === 'materiais');
+  assert.equal(a.numero, 2);
+  assert.equal(a.origem.id, 'm1');
+});
+
+test('fase 4 · passo 2 · texto do aditivo é escapado', async () => {
+  const xss = '<img src=x onerror="window.__xss=5">';
+  const e = await abrir({ seed: seedOrc({ aditivos: { a1: adt({ descricao: xss, itens: [it(xss, 1, 10, 5)] }) } }), hash: '#/obra/o1/orcamento' });
+  assert.equal(e.doc.querySelector('img[src="x"]'), null);
+  await e.click('[data-act="adt-ver"]');
+  assert.equal(e.doc.querySelector('img[src="x"]'), null);
+  assert.equal(e.win.__xss, undefined);
+});

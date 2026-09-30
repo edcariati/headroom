@@ -41,3 +41,17 @@ Aceita `;`, `,` ou tabulação, decimal com vírgula ou ponto, R$ e milhar com p
 **D1.4 — Ligação item → prestador.** Feita pelo nome, na importação, comparando sem acento e sem diferença de maiúsculas.
 *Por quê:* a medição só lista itens do prestador; guardar o id evita depender do texto depois.
 
+
+### Passo 2 — Aditivos e orçamento revisado
+
+**D2.1 — Itens do aditivo em texto.** O aditivo é digitado com um item por linha (`descrição; unidade; quantidade; preço unitário; etapa; tipo; prestador`),
+o mesmo formato de colunas do orçamento. *Por quê:* o formulário do app não tem lista dinâmica de itens e o aditivo costuma ter poucas linhas; ao colar da planilha o Edson usa o mesmo hábito.
+Tudo passa pela mesma validação do orçamento (quantidade > 0, preço ≥ 0, etapa 1–22).
+
+**D2.2 — Sinal.** Os itens do aditivo são sempre digitados positivos; o tipo (`acréscimo`, `supressão`, `prazo`) dá o sinal. Supressão entra no orçamento revisado com total negativo
+e **não aparece para medição**. Aditivo de prazo não tem itens, só dias.
+
+**D2.3 — Imutabilidade.** Rascunho é editável e excluível; depois de enviado ao cliente não se edita. Assinado e recusado são definitivos: para corrigir, cria-se outro aditivo.
+Assinar exige o registro de como o cliente assinou (texto obrigatório, anexo opcional).
+
+**D2.4 — Orçamento revisado.** Versão vigente do orçamento (a de maior número) + aditivos assinados. Cada item de aditivo entra com código `A<nº>.<item>`. O orçamento base nunca é reescrito.
