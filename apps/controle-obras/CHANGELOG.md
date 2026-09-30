@@ -10,6 +10,7 @@
 - **Passo 3:** aba Medição com as 5 travas (documentos do mês, avanço, ficha, aditivo assinado, apontamento crítico), retenção, descontos de dano e as duas modalidades. Campos novos na obra: tolerância de avanço e faixas da curva ABC.
 - **Passo 4:** aba Financeiro: contas a pagar (geradas por medição, compra e locação), aportes do cliente e fluxo de caixa mensal com gráfico. Na Gestão, desembolso previsto do cliente.
 - **Passo 5:** painel orçado × comprometido × apropriado × pago por etapa, com “Sem etapa”, “Sem orçamento” e “Acima do orçado”.
+- **Passo 6:** aba Físico-financeiro com BAC, PV, EV, AC, CPI, SPI, EAC, três curvas S em SVG e quadro físico × financeiro. Aprovação de medição com CPI/SPI abaixo de 1 exige análise.
 
 ## Fase 3 — Suprimentos
 Fornecedores, compras, estoque, locações, contratos de prestador, termos de frente e danos.

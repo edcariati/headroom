@@ -240,7 +240,7 @@ function seedMed(over, opts) {
       { codigo: '7.01', etapa: 7, descricao: 'Alvenaria de vedação', unidade: 'm²', quantidade: 100, precoUnitario: 60, tipo: 'mao_de_obra', prestador: 'Alvenaria Souza', prestadorId: 'p1', total: 6000 },
       { codigo: '7.02', etapa: 7, descricao: 'Reboco', unidade: 'm²', quantidade: 50, precoUnitario: 80, tipo: 'mao_de_obra', prestador: 'Alvenaria Souza', prestadorId: 'p1', total: 4000 }] } },
     contratosPrest: { ct1: { obraId: 'o1', prestadorId: 'p1', escopo: 'Alvenaria e reboco', valor: 10000, retencao: 5, inicio: dia(-20), fim: dia(60), status: 'ativo', regraDano: 'Reparo descontado da medição' } },
-    atividades: { a1: { obraId: 'o1', nome: 'Alvenaria', etapa: 7, prestadorId: 'p1', inicio: dia(-20), fim: dia(20), avanco: 50 } },
+    atividades: { a1: { obraId: 'o1', nome: 'Alvenaria', etapa: 7, prestadorId: 'p1', inicio: dia(-20), fim: dia(60), avanco: 50 } },
     docsPrest: docs,
     fichas: fichasOk('o1', 7, 1)
   };
@@ -653,4 +653,109 @@ test('fase 4 · passo 5 · repartir fecha o valor exato e o saldo sem itens vai 
   assert.equal(Math.round((p[5] + p[7] + p[9]) * 100) / 100, 100);
   const semItens = await abrir({ seed: seedMed({ contratosPrest: { ct2: { obraId: 'o1', prestadorId: 'p2', escopo: 'x', valor: 5000, status: 'ativo', inicio: dia(-1), fim: dia(30) } }, prestadores: { p1: { nome: 'A' }, p2: { nome: 'B' } } }) });
   assert.equal(linha(semItens.x.custoEtapa('o1'), 0).comprometido, 5000);
+});
+
+/* ---------------- passo 6: físico-financeiro, curvas S e indicadores ---------------- */
+function seedEV(opts) {
+  opts = opts || {};
+  const it = (cod, et, v) => ({ codigo: cod, etapa: et, descricao: 'Serviço ' + cod, unidade: 'vb', quantidade: 1, precoUnitario: v, tipo: 'empreitada', prestador: '', prestadorId: '', total: v });
+  const s = {
+    obras: { o1: (opts.gestao ? obra : obraAdm)({ area: 100 }) },
+    orcamentos: { b1: { obraId: 'o1', versao: 1, data: dia(-20), motivo: 'Orçamento base', total: 10000, nItens: 2, lotes: 1, porEtapa: { 7: 6000, 8: 4000 }, porTipo: { empreitada: 10000 } } },
+    orcItens: { b1_0: { obraId: 'o1', orcId: 'b1', lote: 0, itens: [it('7.01', 7, 6000), it('8.01', 8, 4000)] } },
+    atividades: {
+      a7: { obraId: 'o1', nome: 'Alvenaria', etapa: 7, inicio: dia(-9), fim: dia(10), avanco: 40 },     // 20 dias, hoje é o 10º
+      a8: { obraId: 'o1', nome: 'Cobertura', etapa: 8, inicio: dia(1), fim: dia(10), avanco: 0 }
+    }
+  };
+  if (!opts.gestao) s.compras = { c1: compraP({ etapa: 7, status: 'conferido', pedido: { data: dia(-3), fornecedorId: 'f1', total: 3000, entregaPrevista: dia(-1) }, conf: { data: dia(0), resultado: 'conferido' } }) };
+  return Object.assign(s, opts.extra || {});
+}
+
+test('fase 4 · passo 6 · BAC, PV, EV, AC, CPI, SPI e EAC conferidos à mão', async () => {
+  const e = await abrir({ seed: seedEV() });
+  const m = e.x.evm(e.x.G('obras', 'o1'));
+  assert.equal(m.bac, 10000);
+  assert.equal(m.pv, 3000);                     // etapa 7: 10 de 20 dias × 6000; etapa 8 ainda não começou
+  assert.equal(m.ev, 2400);                     // etapa 7: 40% × 6000
+  assert.equal(m.ac, 3000);                     // compra conferida
+  assert.ok(Math.abs(m.cpi - 0.8) < 1e-9);      // 2400 ÷ 3000
+  assert.ok(Math.abs(m.spi - 0.8) < 1e-9);      // 2400 ÷ 3000
+  assert.equal(m.eac, 12500);                   // 10000 ÷ 0,8
+  assert.ok(Math.abs(m.fisPct - 0.24) < 1e-9);
+  assert.ok(Math.abs(m.gastoPct - 0.30) < 1e-9);
+});
+
+test('fase 4 · passo 6 · etapa liberada conta 100% no físico', async () => {
+  const e = await abrir({ seed: seedEV({ extra: { etapas: { o1_8: { obraId: 'o1', n: 8, status: 'liberada', liberadaEm: dia(0), hist: [] } } } }) });
+  assert.equal(e.x.fisicoEtapa('o1', 8).v, 1);
+  assert.equal(e.x.evm(e.x.G('obras', 'o1')).ev, 2400 + 4000);
+});
+
+test('fase 4 · passo 6 · Gestão: só SPI (sem custo real, CPI e EAC)', async () => {
+  const e = await abrir({ seed: seedEV({ gestao: true }), hash: '#/obra/o1/fisfin' });
+  const m = e.x.evm(e.x.G('obras', 'o1'));
+  assert.equal(m.ac, null);
+  assert.equal(m.cpi, null);
+  assert.equal(m.eac, null);
+  assert.ok(Math.abs(m.spi - 0.8) < 1e-9);
+  assert.doesNotMatch(e.app(), /CPI \(EV/);
+  assert.match(e.app(), /SPI \(EV ÷ PV\)/);
+});
+
+test('fase 4 · passo 6 · orçamento sem cronograma e etapa sem atividades são avisados', async () => {
+  const seed = seedEV({ extra: { atividades: { a7: { obraId: 'o1', nome: 'Alvenaria', etapa: 7, inicio: dia(-9), fim: dia(10), avanco: 40 } } } });
+  const e = await abrir({ seed, hash: '#/obra/o1/fisfin' });
+  const m = e.x.evm(e.x.G('obras', 'o1'));
+  assert.equal(m.semCronograma.join(), '8');
+  assert.equal(m.semFisico.join(), '8');
+  assert.match(e.app(), /Orçamento sem cronograma nas etapas: 8/);
+});
+
+test('fase 4 · passo 6 · a distribuição planejada soma o orçado da etapa e a curva S fecha em 100%', async () => {
+  const e = await abrir({ seed: seedEV() });
+  const cv = e.x.curvasS(e.x.G('obras', 'o1'));
+  const totalPlan = cv.custoPlan[cv.custoPlan.length - 1];
+  assert.ok(Math.abs(totalPlan - 10000) < 0.05, 'planejado acumulado = ' + totalPlan);
+  assert.ok(Math.abs(cv.fisPlan[cv.fisPlan.length - 1] - 100) < 0.01);
+  // realizado só existe até o mês atual e, nele, é o EV ÷ BAC
+  const iAtual = cv.meses.indexOf(dia(0).slice(0, 7));
+  assert.ok(Math.abs(cv.fisReal[iAtual] - 24) < 1e-6);
+  assert.equal(cv.fisReal[cv.fisReal.length - 1] == null || cv.meses[cv.meses.length - 1] <= dia(0).slice(0, 7), true);
+  assert.ok(Math.abs(cv.apropriado[iAtual] - 3000) < 1e-6);
+});
+
+test('fase 4 · passo 6 · as três curvas S são desenhadas em SVG', async () => {
+  const e = await abrir({ seed: seedEV({ extra: { aportes: { a1: { obraId: 'o1', descricao: 'Aporte', valorPrevisto: 5000, dataPrevista: dia(0), valorRecebido: 5000, dataRecebida: dia(0) } } } }), hash: '#/obra/o1/fisfin' });
+  assert.equal(e.doc.querySelectorAll('svg.lob').length, 3);
+  assert.match(e.app(), /Curva S física/);
+  assert.match(e.app(), /Curva S de custo/);
+  assert.match(e.app(), /Aportes do cliente por mês/);
+  assert.match(e.app(), /CPI \(EV ÷ AC\)0,8/);
+});
+
+test('fase 4 · passo 6 · quadro: financeiro adiante do físico é sinalizado', async () => {
+  const seed = seedEV({ extra: { compras: { c1: compraP({ etapa: 7, status: 'conferido', pedido: { data: dia(-3), fornecedorId: 'f1', total: 4200, entregaPrevista: dia(-1) }, conf: { data: dia(0), resultado: 'conferido' } }) } } });
+  const e = await abrir({ seed, hash: '#/obra/o1/fisfin' });
+  const q = e.x.quadroAcompanhamento(e.x.G('obras', 'o1')).find((x) => x.etapa === 7);
+  assert.equal(Math.round(q.fis), 40);
+  assert.equal(Math.round(q.fin), 70);             // 4200 ÷ 6000
+  assert.equal(q.alerta, true);
+  assert.match(e.app(), /Financeiro adiante do físico/);
+});
+
+test('fase 4 · passo 6 · aprovar medição com CPI ou SPI abaixo de 1 exige a análise da causa', async () => {
+  const atrasado = seedMed({ atividades: { a1: { obraId: 'o1', nome: 'Alvenaria', etapa: 7, prestadorId: 'p1', inicio: dia(-20), fim: dia(0), avanco: 40 } }, medicoes: { m1: med() } });
+  const e = await abrir({ seed: atrasado, hash: '#/obra/o1/medicao' });
+  await e.click('[data-act="med-abrir"]');
+  await e.click('[data-act="med-aprovar"]');
+  assert.match(e.dlg(), /Desvio de custo ou prazo/);
+  assert.match(e.dlg(), /SPI/);
+  await e.submit({ analise: '' });
+  assert.match(e.erroForm(), /análise da causa/);
+  assert.equal(e.linhas('medicoes')[0].status, 'em_analise');
+  await e.submit({ analise: 'Chuva atrasou a alvenaria; cliente avisado por WhatsApp.' });
+  const m = e.linhas('medicoes')[0];
+  assert.equal(m.status, 'aprovada');
+  assert.match(m.analiseDesvio, /Chuva/);
 });

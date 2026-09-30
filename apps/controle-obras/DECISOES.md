@@ -108,3 +108,19 @@ prestador sem itens orçados cai em “Sem etapa”. Contrato encerrado não com
 **D5.3 — Medição paga por etapa.** O líquido pago é repartido entre as etapas na proporção do bruto medido, com a sobra de centavos no maior trecho, para o total bater exatamente.
 
 **D5.4 — Gestão.** Só contratos e medições entram (compras e locações são do cliente e não têm valor no app).
+
+### Passo 6 — Físico-financeiro e curvas S
+
+**D6.1 — Indicadores.** BAC = orçamento revisado. **PV** = Σ (orçado da etapa × fração do cronograma decorrida), com a etapa indo do menor início ao maior fim das atividades dela (distribuição linear por dia).
+**EV** = Σ (orçado da etapa × físico da etapa); físico = 100% se a etapa está liberada, senão o avanço das atividades ponderado pela duração, e 0 sem atividades (com aviso).
+**AC** = total apropriado (só Administração). CPI = EV ÷ AC; SPI = EV ÷ PV (as duas modalidades); EAC = BAC ÷ CPI. Cores: ≥ 1 ok, 0,9–1 atenção, < 0,9 crítico.
+Etapa com orçamento e sem atividades fica **fora do PV** (não dá para planejar sem cronograma) e é listada como “orçamento sem cronograma”.
+
+**D6.2 — Curva S física realizada.** O app não guarda o histórico do avanço mês a mês. A curva realizada soma as etapas **liberadas** no mês da liberação (`liberadaEm`) e, no mês atual, acrescenta o avanço parcial das etapas em andamento.
+Assim ela termina exatamente no EV de hoje; meses futuros ficam vazios. *Limitação:* o avanço parcial de meses passados não é reconstruído.
+
+**D6.3 — Curva S de custo.** Planejado = a mesma distribuição do físico em R$; apropriado e pago vêm das datas dos eventos (conferência da compra, aprovação e pagamento da medição, devolução e pagamento da locação).
+
+**D6.4 — Quadro de acompanhamento.** Físico (avanço da etapa) × financeiro (apropriado ÷ orçado) por etapa e por prestador (medido ÷ contrato × avanço no cronograma). Alerta quando o financeiro passa do físico em mais de 10 pontos (valor provisório).
+
+**D6.5 — Aprovação com desvio.** Se CPI ou SPI < 1 (Gestão: só SPI), aprovar a medição exige a análise da causa, guardada em `analiseDesvio`.
