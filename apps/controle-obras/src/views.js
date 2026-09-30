@@ -86,7 +86,7 @@ function vObra(r){
   return '<div class="wrap"><a class="back" href="#/painel">← Todas as obras</a>'
     +'<div class="ob-head"><div class="grow"><h1>'+esc(o.nome)+(o.codigo?' <span class="muted small num">'+esc(o.codigo)+'</span>':'')+'</h1><div class="meta">'+chipMod(o.modalidade)+'<span>'+meta+'</span></div></div>'
     +'<div class="row"><button class="btn" data-act="obra-editar" data-oid="'+o.id+'" data-write>Editar obra</button></div></div>'
-    +'<div style="margin-top:20px">'+regua(o.id,false)+legenda()+'</div>'
+    +'<div class="no-print" style="margin-top:20px">'+regua(o.id,false)+legenda()+'</div>'
     +obraNav(o,tab)
     +'<div style="margin-top:20px">'+fn(o)+'</div></div>';
 }

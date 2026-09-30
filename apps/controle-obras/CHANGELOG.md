@@ -6,6 +6,7 @@
 - **Passo 1:** empresas do grupo, empresa na obra, contrato do cliente e receita prevista por competência. Página DRE (menu do topo).
 - **Passo 2:** lançamentos, fechamento mensal com sugestões (receita e imposto), rateio de despesas gerais e DRE por obra com período, anterior e acumulado; repasse da Administração fora do resultado.
 - **Passo 3:** página DRE por empresa e consolidado, quadro por obra que fecha com a empresa, gráficos de 12 meses e ranking de margem, exportação CSV detalhada.
+- **Passo 4:** relatório mensal ao cliente (11 seções), rascunho ao vivo, emissão com números congelados, retificação, envio com prazo de objeção, validação ou objeção do cliente, escolha de fotos, impressão A4 e download em HTML.
 
 ## Fase 4 — Custo, medição e financeiro (concluída)
 

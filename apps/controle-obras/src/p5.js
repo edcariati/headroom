@@ -12,7 +12,7 @@ var NAV_GRUPOS=[
 ];
 var NAV_ROTULO={resumo:'Resumo', etapas:'Etapas', cronograma:'Cronograma', balanco:'Balanço', semana:'Semana e PPC', diario:'Diário', ocorrencias:'Ocorrências', entrega:'Pré-entrega', projeto:'RFI e materiais', compras:'Compras', estoque:'Estoque', locacoes:'Locações', contratos:'Contratos e frentes', avaliacoes:'Avaliações', orcamento:'Orçamento', medicao:'Medição', financeiro:'Financeiro', fisfin:'Físico-financeiro', dre:'DRE', agenda:'Agenda', reunioes:'Reuniões', documentos:'Documentos', relatorio:'Relatório mensal', encerramento:'Encerramento e P0'};
 function abaMapa(){
-  return {resumo:tResumo, etapas:tEtapas, cronograma:tCron, balanco:tBalanco, semana:tSemana, diario:tDiario, ocorrencias:tOcorr, entrega:tEntrega, projeto:tProjeto, compras:tCompras, estoque:tEstoque, locacoes:tLocacoes, contratos:tContratos, orcamento:tOrcamento, medicao:tMedicao, financeiro:tFinanceiro, fisfin:tFisFin, dre:tDRE, agenda:tAgenda, reunioes:tReunioes, documentos:tDocumentos};
+  return {resumo:tResumo, etapas:tEtapas, cronograma:tCron, balanco:tBalanco, semana:tSemana, diario:tDiario, ocorrencias:tOcorr, entrega:tEntrega, projeto:tProjeto, compras:tCompras, estoque:tEstoque, locacoes:tLocacoes, contratos:tContratos, orcamento:tOrcamento, medicao:tMedicao, financeiro:tFinanceiro, fisfin:tFisFin, dre:tDRE, relatorio:tRelatorio, agenda:tAgenda, reunioes:tReunioes, documentos:tDocumentos};
 }
 function obraNav(o,tab){
   var mapa=abaMapa(), base='#/obra/'+o.id+'/', grupo=NAV_GRUPOS.filter(function(g){ return g[2].indexOf(tab)>=0; })[0]||NAV_GRUPOS[0];
@@ -346,3 +346,129 @@ document.addEventListener('change', function(e){
   var s=e.target.closest('[data-chg="dre-emp"]'); if(s){ ui.dreEsc=s.value; render(); return; }
   var el=e.target.closest('[data-chg="dreg-per"]'); if(el){ var p=Object.assign({}, drePerGlobal()); p[el.dataset.k]=el.value; if(p.ini>p.fim){ if(el.dataset.k==='ini') p.fim=p.ini; else p.ini=p.fim; } ui.drePerG=p; render(); }
 });
+
+/* ================= RELATÓRIO MENSAL AO CLIENTE ================= */
+var REL_ST={rascunho:'Rascunho', emitido:'Emitido'};
+var VALID_ST={pendente:'Aguardando o cliente', validado:'Validado pelo cliente', objecao:'Objeção do cliente'};
+function relDoMes(oid,mes){ return byObra('relatorios',oid).filter(function(r){ return r.mes===mes; }).sort(function(a,b){ return (a.criadoEm||'')<(b.criadoEm||'')?-1:1; }); }
+function relVigente(oid,mes){ var l=relDoMes(oid,mes).filter(function(r){ return r.status==='emitido'; }).sort(function(a,b){ return (a.emitidoEm||'')<(b.emitidoEm||'')?1:-1; }); return l[0]||null; }
+function relDados(o,mes){
+  var oid=o.id, adm=modAdm(o), hj=hoje(), noMes=function(d){ return d&&String(d).slice(0,7)===mes; }, ev=evm(o), cv=curvasS(o), fimMes=addDays(mesAdd(mes,1)+'-01',-1);
+  var d={mes:mes, geradoEm:new Date().toISOString(), adm:adm};
+  d.capa={obra:o.nome, codigo:o.codigo||'', cliente:o.cliente||'', endereco:o.endereco||'', modalidade:o.modalidade, empresa:empresaNome(o.empresaId)||''};
+  var lib=ETAPAS.filter(function(e){ var x=etapaDoc(oid,e.n); return x.status==='liberada'&&noMes(x.liberadaEm); }).map(function(e){ return {n:e.n,nome:e.nome}; });
+  d.avanco={liberadasNoMes:lib, liberadasTotal:ETAPAS.filter(function(e){ return etapaDoc(oid,e.n).status==='liberada'; }).length, cronograma:avancoCron(oid), fisico:ev.fisPct, curva:{meses:cv.meses, plan:cv.fisPlan, real:cv.fisReal}};
+  var ocs=byObra('ocorrencias',oid), conf=conformidade(oid);
+  d.qualidade={conformidade:conf, abertasAgora:ocs.filter(ocAberta).length, criticasAgora:ocs.filter(function(x){ return ocAberta(x)&&x.gravidade==='critica'; }).length, abertasNoMes:ocs.filter(function(x){ return noMes(x.criadoEm); }).length, fechadasNoMes:ocs.filter(function(x){ return noMes(x.fechadaEm); }).length, retrabalho:ocs.reduce(function(s,x){ return s+(x.reabertas||0); },0)};
+  var sem=0, ok=0, tot=0, causas={};
+  for(var w=segunda(mes+'-01'); w<=fimMes; w=addDays(w,7)){ if(!noMes(w)&&w<mes+'-01') continue; var si=semanaInfo(oid,w); tot+=si.tot; ok+=si.ok; si.ps.forEach(function(p){ if(p.concluido===false&&p.causa) causas[p.causa]=(causas[p.causa]||0)+1; }); sem++; }
+  d.planejamento={ppc:tot?ok/tot:null, pacotes:tot, concluidos:ok, causas:causas, meta:o.metaPPC==null?80:o.metaPPC};
+  var meds=byObra('medicoes',oid).filter(function(m){ return noMes(m.periodoFim); });
+  if(adm){
+    var c=custoEtapa(oid), cs=byObra('contasPagar',oid), prox=[1,2,3].map(function(k){ var m=mesAdd(mes,k); return {mes:m, valor:r2(cs.filter(function(x){ return x.status==='aberta'&&x.vencimento&&x.vencimento.slice(0,7)===m; }).reduce(function(s,x){ return s+x.valor; },0))}; });
+    d.suprimentos={pedidosNoMes:byObra('compras',oid).filter(function(x){ return x.pedido&&noMes(x.pedido.data); }).map(function(x){ return {item:x.item,valor:x.pedido.total}; }), conferidasNoMes:byObra('compras',oid).filter(function(x){ return x.conf&&noMes(x.conf.data); }).length, locacoesAtivas:byObra('locacoes',oid).filter(function(x){ return x.status==='ativa'; }).map(function(x){ return x.equipamento; })};
+    d.financeiro={orcado:c.total.orcado, comprometido:c.total.comprometido, apropriado:c.total.apropriado, pago:c.total.pago, medicoes:meds.map(function(m){ return {numero:m.numero, prestador:prestNome(m.prestadorId), status:m.status, bruto:medBruto(m), liquido:m.valorLiquido!=null?m.valorLiquido:medCalc(m,o).liquido}; }), contasAbertas:r2(cs.filter(function(x){ return x.status==='aberta'; }).reduce(function(s,x){ return s+x.valor; },0)), contasVencidas:cs.filter(contaVencida).length, proximosMeses:prox, cpi:ev.cpi, spi:ev.spi, eac:ev.eac, bac:ev.bac, analise:(meds.filter(function(m){ return m.analiseDesvio; }).slice(-1)[0]||{}).analiseDesvio||''};
+  } else {
+    d.financeiro={medicoesAprovadas:meds.filter(function(m){ return m.status==='aprovada'||m.status==='paga'; }).map(function(m){ return {numero:m.numero, prestador:prestNome(m.prestadorId), liquido:m.valorLiquido!=null?m.valorLiquido:medCalc(m,o).liquido}; }), proximosMeses:[1,2,3].map(function(k){ var m=mesAdd(mes,k), x=desembolsoCliente(oid).filter(function(y){ return y.mes===m; })[0]; return {mes:m, valor:x?r2(x.aprovadas+x.aAprovar):0}; }), spi:ev.spi, bac:ev.bac};
+  }
+  d.aditivos={assinadosNoMes:adtAssinados(oid).filter(function(a){ return noMes(a.assinatura&&a.assinatura.data); }).map(function(a){ return {numero:a.numero, descricao:a.descricao, valor:adtValor(a)}; }), aguardando:adtDaObra(oid).filter(function(a){ return a.status==='aguardando_cliente'; }).map(function(a){ return {numero:a.numero, descricao:a.descricao, valor:adtValor(a), enviadoEm:(a.enviadoEm||'').slice(0,10)}; })};
+  d.pendencias=byObra('materiais',oid).filter(function(m){ return m.resultado==='pendente'&&m.nivel3; }).map(function(m){ return {tipo:'Escolha de material', descricao:m.item, prazo:m.prazo}; })
+    .concat(d.aditivos.aguardando.map(function(a){ return {tipo:'Aditivo nº '+a.numero, descricao:short(a.descricao,80), prazo:a.enviadoEm?addDays(a.enviadoEm,o.diasEscalar==null?7:o.diasEscalar):''}; }))
+    .concat(adm?byObra('compras',oid).filter(function(c){ var nv=c.status==='aprovacao'&&!c.aprov?nivelDaCompra(o,c):null; return nv&&nv.nivel===3; }).map(function(c){ return {tipo:'Compra fora do orçado ou da alçada', descricao:c.item, prazo:limiteCompra(c)}; }):[]);
+  d.documentos=DOC_LEGAIS.map(function(t){ var s=docStatusLegal(t,docLegal(oid,t.k),o); return {nome:t.n, situacao:s.t, k:s.k}; });
+  d.proximos30=eventosAuto(oid).filter(function(e){ return e.data>=hj&&e.data<=addDays(hj,30)&&e.status==='agendado'; }).sort(function(a,b){ return a.data<b.data?-1:1; }).slice(0,25).map(function(e){ return {data:e.data, titulo:e.titulo}; });
+  return d;
+}
+COBX.relDados=relDados;
+function relHtml(o,rel){
+  var d=rel.snapshot||rel.dados, adm=d.adm, pc=function(x){ return x==null?'—':(Math.round(x*1000)/10).toString().replace('.',',')+'%'; }, fm=function(x){ return x==null?'—':String(Math.round(x*100)/100).replace('.',','); };
+  var sec=function(n,t,b){ return '<section class="card sec pad rel-sec"><h2 style="margin-bottom:8px">'+n+'. '+t+'</h2>'+b+'</section>'; };
+  var lista=function(a,f,vazio){ return a.length?'<ul class="small" style="padding-left:18px">'+a.map(function(x){ return '<li>'+f(x)+'</li>'; }).join('')+'</ul>':'<p class="muted small">'+vazio+'</p>'; };
+  var h='<article class="rel-doc">';
+  h+='<section class="card sec pad rel-sec"><p class="small muted">Relatório mensal ao cliente'+(rel.retificacaoDe?' — <strong>retificação</strong>':'')+'</p><h1 style="margin:4px 0">'+esc(d.capa.obra)+'</h1><p>'+esc(mesNome(d.mes))+'</p><p class="small muted">'+[d.capa.cliente, d.capa.endereco, d.capa.modalidade, d.capa.empresa].filter(Boolean).map(esc).join(' · ')+(d.capa.codigo?' · '+esc(d.capa.codigo):'')+'</p></section>';
+  h+=sec(2,'Resumo da engenharia', rel.textoEngenharia?'<p style="white-space:pre-wrap">'+esc(rel.textoEngenharia)+'</p>':'<p class="muted small">Sem resumo escrito.</p>');
+  var cv=d.avanco.curva, g=(cv.meses||[]).length>1?svgGrafico({titulo:'Curva S física', labels:cv.meses.map(mesCurto), linhas:[{nome:'Físico planejado',cor:'var(--steel)',tracejado:true,v:cv.plan},{nome:'Físico realizado',cor:'var(--ok)',v:cv.real}], fmt:function(v){ return Math.round(v)+'%'; }}):'';
+  h+=sec(3,'Avanço físico','<p>Avanço do cronograma: <strong>'+pc(d.avanco.cronograma)+'</strong> · valor executado sobre o orçamento: <strong>'+pc(d.avanco.fisico)+'</strong> · etapas liberadas: <strong>'+d.avanco.liberadasTotal+' de 22</strong></p>'+lista(d.avanco.liberadasNoMes,function(x){ return 'Etapa '+x.n+' — '+esc(x.nome)+' liberada no mês'; },'Nenhuma etapa liberada neste mês.')+g);
+  h+=sec(4,'Qualidade','<p>Conformidade na primeira inspeção: <strong>'+pc(d.qualidade.conformidade)+'</strong> · ocorrências abertas: <strong>'+d.qualidade.abertasAgora+'</strong> ('+d.qualidade.criticasAgora+' crítica(s)) · abertas no mês: '+d.qualidade.abertasNoMes+' · fechadas no mês: '+d.qualidade.fechadasNoMes+' · reaberturas (retrabalho): '+d.qualidade.retrabalho+'</p>');
+  var cz=Object.keys(d.planejamento.causas).map(function(k){ return (CAUSAS[k]||k)+': '+d.planejamento.causas[k]; }).join(' · ');
+  h+=sec(5,'Planejamento','<p>PPC do mês: <strong>'+pc(d.planejamento.ppc)+'</strong> ('+d.planejamento.concluidos+' de '+d.planejamento.pacotes+' pacotes; meta '+d.planejamento.meta+'%)</p>'+(cz?'<p class="small muted">Causas de não cumprimento — '+esc(cz)+'</p>':''));
+  if(adm){
+    var f=d.financeiro, s=d.suprimentos;
+    h+=sec(6,'Suprimentos e financeiro',
+      '<h3>Suprimentos do mês</h3>'+lista(s.pedidosNoMes,function(x){ return 'Pedido: '+esc(x.item)+' — '+brl(x.valor); },'Nenhum pedido emitido no mês.')+'<p class="small">Recebimentos conferidos no mês: '+s.conferidasNoMes+(s.locacoesAtivas.length?' · locações ativas: '+esc(s.locacoesAtivas.join(', ')):'')+'</p>'
+      +'<h3 style="margin-top:12px">Financeiro</h3><div class="tbl-scroll"><table class="tbl"><thead><tr><th class="num">Orçado</th><th class="num">Comprometido</th><th class="num">Apropriado</th><th class="num">Pago</th></tr></thead><tbody><tr><td class="num">'+brl(f.orcado)+'</td><td class="num">'+brl(f.comprometido)+'</td><td class="num">'+brl(f.apropriado)+'</td><td class="num">'+brl(f.pago)+'</td></tr></tbody></table></div>'
+      +'<p class="small">Medições do mês:</p>'+lista(f.medicoes,function(m){ return 'Nº '+m.numero+' — '+esc(m.prestador||'')+' ('+MED_ST[m.status]+'): bruto '+brl(m.bruto)+', líquido '+brl(m.liquido); },'Nenhuma medição no mês.')
+      +'<p class="small">Contas a pagar em aberto: <strong>'+brl(f.contasAbertas)+'</strong> ('+f.contasVencidas+' vencida(s)). Desembolso previsto: '+f.proximosMeses.map(function(x){ return mesCurto(x.mes)+' '+brl(x.valor); }).join(' · ')+'</p>'
+      +'<p class="small">CPI '+fm(f.cpi)+' · SPI '+fm(f.spi)+' · custo final previsto '+(f.eac==null?'—':brl(f.eac))+(f.analise?'</p><div class="callout"><strong>Análise do desvio</strong><p class="small" style="white-space:pre-wrap">'+esc(f.analise)+'</p></div>':'</p>'));
+  } else {
+    var f2=d.financeiro;
+    h+=sec(6,'Medições e desembolso previsto',lista(f2.medicoesAprovadas,function(m){ return 'Medição nº '+m.numero+' — '+esc(m.prestador||'')+': '+brl(m.liquido)+' a pagar pelo cliente'; },'Nenhuma medição aprovada no mês.')+'<p class="small">Desembolso previsto do cliente: '+f2.proximosMeses.map(function(x){ return mesCurto(x.mes)+' '+brl(x.valor); }).join(' · ')+' · SPI '+fm(f2.spi)+'</p>');
+  }
+  h+=sec(7,'Aditivos','<p class="small"><strong>Assinados no mês</strong></p>'+lista(d.aditivos.assinadosNoMes,function(a){ return 'Nº '+a.numero+' — '+esc(short(a.descricao,80))+': '+brl(a.valor); },'Nenhum.')+'<p class="small"><strong>Aguardando o cliente</strong></p>'+lista(d.aditivos.aguardando,function(a){ return 'Nº '+a.numero+' — '+esc(short(a.descricao,80))+': '+brl(a.valor); },'Nenhum.'));
+  h+=sec(8,'Pendências de decisão do cliente',lista(d.pendencias,function(p){ return '<strong>'+esc(p.tipo)+'</strong>: '+esc(p.descricao)+(p.prazo?' — decidir até <strong>'+fmt(p.prazo)+'</strong>':''); },'Nenhuma decisão pendente.'));
+  h+=sec(9,'Documentos e conformidade',lista(d.documentos,function(x){ return esc(x.nome)+': <span class="chip '+x.k+'">'+esc(x.situacao)+'</span>'; },''));
+  h+=sec(10,'Próximos 30 dias',lista(d.proximos30,function(e){ return fmt(e.data)+' — '+esc(e.titulo); },'Nada agendado.'));
+  h+=sec(11,'Fotos do mês',(rel.fotos&&rel.fotos.length)?thumbs(rel.fotos):'<p class="muted small">Sem fotos selecionadas.</p>');
+  return h+'</article>';
+}
+function relHtmlDocumento(o,rel){
+  var css=(document.querySelector('style')||{}).textContent||'';
+  return '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Relatório mensal — '+esc(o.nome)+' — '+esc(rel.mes)+'</title><style>'+css+'\nbody{padding:16px}.rel-doc{max-width:900px;margin:0 auto}</style></head><body><div class="rel-doc-wrap">'+relHtml(o,rel)+'</div></body></html>';
+}
+function relSelecionado(o,mes){ var l=relDoMes(o.id,mes), id=ui.relSel; return l.filter(function(r){ return r.id===id; })[0]||relVigente(o.id,mes)||l[l.length-1]||null; }
+function tRelatorio(o){
+  var oid=o.id, mes=ui.relMes||hoje().slice(0,7), lista=relDoMes(oid,mes), rel=relSelecionado(o,mes), emit=rel&&rel.status==='emitido';
+  var head='<div class="sec-h no-print"><div><h2>Relatório mensal</h2><p class="muted small">Prestação de contas ao cliente: números ao vivo no rascunho, congelados ao emitir. Para corrigir um relatório emitido, crie uma retificação.</p></div><label class="small muted">Mês <input type="month" data-chg="rel-mes" value="'+mes+'" aria-label="Mês do relatório" style="padding:6px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--ink)"></label></div>';
+  if(!lista.length) return head+'<div class="card empty no-print" style="margin-top:14px"><h3>Nenhum relatório de '+mesNome(mes)+'</h3><p>O rascunho junta avanço, qualidade, PPC, financeiro, aditivos e pendências do cliente.</p><p style="margin-top:14px"><button class="btn primary" data-act="rel-criar" data-oid="'+oid+'" data-mes="'+mes+'" data-write>Criar relatório de '+mesNome(mes)+'</button></p></div>';
+  var vig=relVigente(oid,mes);
+  var versoes='<div class="row no-print" style="gap:6px;margin:12px 0">'+lista.map(function(r,i){ return '<button class="btn sm'+(rel&&r.id===rel.id?' primary':'')+'" data-act="rel-abrir" data-id="'+r.id+'">'+(r.retificacaoDe?'Retificação':'Relatório')+' '+(i+1)+' · '+REL_ST[r.status]+(r.status==='emitido'&&vig&&r.id!==vig.id?' (substituído)':'')+'</button>'; }).join('')+'</div>';
+  var v=rel.validacaoCliente, prazo=rel.prazoObjecao;
+  var estado=emit?'<div class="callout ok no-print"><strong>Emitido em '+fmt((rel.emitidoEm||'').slice(0,10))+' por '+esc(Names.get(rel.emitidoPor))+'.</strong> Os números estão congelados.'+(rel.enviadoEm?'<br>Enviado ao cliente em '+fmt(rel.enviadoEm)+(prazo?' · prazo para objeção: <strong>'+fmt(prazo)+'</strong>':''):'<br>Ainda não registrado como enviado ao cliente.')+'<br>Cliente: <span class="chip '+(v&&v.status==='validado'?'ok':(v&&v.status==='objecao'?'crit':'warn'))+'">'+VALID_ST[(v&&v.status)||'pendente']+'</span>'+(v&&v.data?' em '+fmt(v.data):'')+(v&&v.ref?' — '+esc(v.ref):'')+(v&&v.texto?'<div class="small" style="white-space:pre-wrap">'+esc(v.texto)+'</div>':'')+'</div>':'<div class="callout no-print"><strong>Rascunho.</strong> Os números mudam junto com os dados da obra até você emitir.'+(rel.retificacaoDe?' Este relatório retifica um já emitido.':'')+'</div>';
+  var acts='<div class="row no-print" style="gap:6px;margin:12px 0">'
+    +(!emit?'<button class="btn" data-act="rel-texto" data-id="'+rel.id+'" data-write>Escrever resumo</button><button class="btn" data-act="rel-fotos" data-id="'+rel.id+'" data-write>Escolher fotos</button><button class="btn primary" data-act="rel-emitir" data-id="'+rel.id+'" data-write>Emitir relatório</button><button class="btn danger" data-act="rel-excluir" data-id="'+rel.id+'" data-write>Excluir rascunho</button>'
+      :'<button class="btn" data-act="rel-enviar" data-id="'+rel.id+'" data-write>Registrar envio ao cliente</button><button class="btn" data-act="rel-valid" data-id="'+rel.id+'" data-write>Registrar validação ou objeção</button><button class="btn" data-act="rel-retificar" data-id="'+rel.id+'" data-write>Criar retificação</button>')
+    +'<button class="btn" data-act="rel-imprimir">Imprimir / salvar como PDF</button><button class="btn" data-act="rel-html" data-id="'+rel.id+'">Baixar relatório em HTML</button></div>';
+  var rr=emit?rel:Object.assign({}, rel, {dados:relDados(o,mes)});
+  return head+versoes+estado+acts+relHtml(o,rr);
+}
+function relCriar(oid,mes,de){
+  var base=de?G('relatorios',de):null;
+  return Store.add('relatorios',{obraId:oid, mes:mes, status:'rascunho', textoEngenharia:base?base.textoEngenharia:'', fotos:base?(base.fotos||[]).slice():[], prazoObjecao:'', validacaoCliente:{status:'pendente'}, retificacaoDe:de||'', criadoEm:new Date().toISOString(), por:Store.uid||null, hist:[]});
+}
+function relFotosDlg(id){
+  var r=G('relatorios',id), o=G('obras',r.obraId), sel=(r.fotos||[]).slice();
+  var cand=[]; byObra('diarios',r.obraId).filter(function(x){ return String(x.data).slice(0,7)===r.mes; }).forEach(function(x){ (x.fotos||[]).forEach(function(f){ if(cand.indexOf(f)<0) cand.push(f); }); });
+  sel.forEach(function(f){ if(cand.indexOf(f)<0) cand.push(f); });
+  var d=openDlg('<div class="dlg-h"><h2>Fotos do relatório</h2><button type="button" class="btn ghost ico" data-close aria-label="Fechar">✕</button></div><div class="dlg-b"><p class="muted small">Até 12 fotos, escolhidas entre as do diário de '+mesNome(r.mes)+'. <strong id="rf_n"></strong></p>'
+    +(cand.length?'<div class="thumbs" id="rf_grid">'+cand.map(function(f){ return '<button type="button" data-rf="'+esc(f)+'" aria-pressed="false" style="border:3px solid transparent;border-radius:6px"><img loading="lazy" src="'+esc(blobUrl(f))+'" alt="Foto do diário"></button>'; }).join('')+'</div>':'<p class="muted">Nenhuma foto no diário deste mês.</p>')+'<div class="err-msg hide" id="rf_err" role="alert"></div></div><div class="dlg-f"><button class="btn" data-close>Cancelar</button><button class="btn primary" id="rf_ok">Salvar seleção</button></div>', true);
+  var pinta=function(){ Array.prototype.forEach.call(d.querySelectorAll('[data-rf]'), function(b){ var on=sel.indexOf(b.dataset.rf)>=0; b.setAttribute('aria-pressed',on?'true':'false'); b.style.borderColor=on?'var(--steel)':'transparent'; }); $('#rf_n',d).textContent=sel.length+' de 12 selecionadas.'; }; pinta();
+  d.addEventListener('click', async function(e){
+    var b=e.target.closest('[data-rf]');
+    if(b){ var i=sel.indexOf(b.dataset.rf); if(i>=0) sel.splice(i,1); else if(sel.length>=12){ var er=$('#rf_err',d); er.textContent='O limite é de 12 fotos.'; er.classList.remove('hide'); return; } else sel.push(b.dataset.rf); pinta(); return; }
+    if(e.target.closest('#rf_ok')){ await Store.set('relatorios', id, Object.assign({}, r, {fotos:sel})); closeDlg(); }
+  });
+}
+Object.assign(A5,{
+  'rel-criar':async function(d){ var id=await relCriar(d.oid,d.mes); ui.relSel=id; render(); },
+  'rel-abrir':function(d){ ui.relSel=d.id; render(); },
+  'rel-texto':function(d){ var r=G('relatorios',d.id); openForm({title:'Resumo da engenharia', wide:true, fields:[{name:'texto',label:'Resumo do mês para o cliente',type:'textarea',rows:8,value:r.textoEngenharia,hint:'O que aconteceu no mês, em linguagem simples.'}], onSubmit:async function(v){ if(r.status!=='rascunho') return 'Relatório emitido não pode ser alterado. Crie uma retificação.'; await Store.set('relatorios', d.id, Object.assign({}, r, {textoEngenharia:(v.texto||'').trim()})); }}); },
+  'rel-fotos':function(d){ relFotosDlg(d.id); },
+  'rel-emitir':async function(d){
+    var r=G('relatorios',d.id), o=G('obras',r.obraId); if(r.status!=='rascunho') return;
+    var ok=await confirmDlg('Emitir o relatório de '+mesNome(r.mes)+'?','<p>Os números de hoje ficam <strong>congelados</strong>: depois de emitido o relatório não muda. Para corrigir, você cria uma retificação.</p>','Emitir',false); if(!ok) return;
+    await Store.set('relatorios', d.id, Object.assign({}, r, {status:'emitido', snapshot:relDados(o,r.mes), emitidoPor:Store.uid||null, emitidoEm:new Date().toISOString(), hist:(r.hist||[]).concat([{acao:'emitido', data:new Date().toISOString(), por:Store.uid||null}]).slice(-20)}));
+    ui.relSel=d.id; toast('Relatório emitido.');
+  },
+  'rel-enviar':function(d){ var r=G('relatorios',d.id); openForm({title:'Envio ao cliente', fields:[[{name:'data',label:'Data do envio',type:'date',required:true,value:r.enviadoEm||hoje()},{name:'prazo',label:'Prazo para objeção',type:'date',required:true,value:r.prazoObjecao||addDays(hoje(),5)}]], submit:'Registrar envio',
+      onSubmit:async function(v){ if(!v.data||!v.prazo) return 'Informe a data do envio e o prazo para objeção.'; if(v.prazo<v.data) return 'O prazo para objeção não pode ser antes do envio.'; await Store.set('relatorios', d.id, Object.assign({}, r, {enviadoEm:v.data, prazoObjecao:v.prazo})); }}); },
+  'rel-valid':function(d){ var r=G('relatorios',d.id); openForm({title:'Validação ou objeção do cliente', intro:'A rotina financeira dentro do orçado é validada pelo cliente na prestação de contas (nível 2).',
+      fields:[{name:'status',label:'Resposta do cliente',type:'radio',required:true,options:[['validado','Validou'],['objecao','Fez objeção']],value:r.validacaoCliente&&r.validacaoCliente.status!=='pendente'?r.validacaoCliente.status:''},[{name:'data',label:'Data da resposta',type:'date',required:true,value:hoje()},{name:'ref',label:'Como respondeu',ph:'Ex.: e-mail de 12/03'}],{name:'texto',label:'O que o cliente disse',type:'textarea',rows:3,hint:'Obrigatório se houver objeção.'}], submit:'Registrar',
+      onSubmit:async function(v){ if(!v.status) return 'Escolha se o cliente validou ou fez objeção.'; if(v.status==='objecao'&&!(v.texto||'').trim()) return 'Descreva a objeção do cliente.'; await Store.set('relatorios', d.id, Object.assign({}, r, {validacaoCliente:{status:v.status, data:v.data, ref:(v.ref||'').trim(), texto:(v.texto||'').trim()}})); }}); },
+  'rel-retificar':async function(d){ var r=G('relatorios',d.id), id=await relCriar(r.obraId,r.mes,d.id); ui.relSel=id; toast('Retificação criada como rascunho.'); render(); },
+  'rel-excluir':async function(d){ var r=G('relatorios',d.id); if(r.status!=='rascunho') return; var ok=await confirmDlg('Excluir rascunho?','<p>Só rascunhos podem ser excluídos; relatórios emitidos ficam para sempre.</p>','Excluir',true); if(ok){ await Store.del('relatorios',d.id); ui.relSel=''; } },
+  'rel-imprimir':function(){ try{ window.print(); }catch(e){ toast('A impressão está bloqueada neste ambiente. Use “Baixar relatório em HTML” e imprima o arquivo.', true); } },
+  'rel-html':function(d){ var r=G('relatorios',d.id), o=G('obras',r.obraId), rr=r.status==='emitido'?r:Object.assign({}, r, {dados:relDados(o,r.mes)}); baixar('relatorio-'+r.mes+'-'+chave(o.nome)+'.html', relHtmlDocumento(o,rr), 'text/html').then(function(ok){ if(ok) toast('Relatório baixado.'); }); }
+});
+document.addEventListener('change', function(e){ var el=e.target.closest('[data-chg="rel-mes"]'); if(el&&el.value){ ui.relMes=el.value; ui.relSel=''; render(); } });
+
+COBX.relHtml=relHtml; COBX.relHtmlDocumento=relHtmlDocumento; COBX.relVigente=relVigente;

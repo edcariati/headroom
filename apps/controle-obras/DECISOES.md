@@ -189,3 +189,21 @@ Os centavos de sobra vão para a obra de maior peso, então a soma das partes é
 
 **D-5.3.3 — CSV detalhado.** Uma linha por lançamento do período e da empresa escolhida, colunas `empresa;obra;competencia;categoria;subcategoria;descricao;valor;origem`, separador `;`, valor com vírgula decimal e BOM para abrir direto no Excel brasileiro.
 *Desenho conforme a especificação; como o app gera o arquivo na hora a partir dos lançamentos, nenhum arquivo de exemplo foi criado no repositório.*
+
+### Passo 4 — Relatório mensal ao cliente
+
+**D-5.4.1 — Rascunho ao vivo, emitido congelado.** O rascunho recalcula os números a cada abertura; **emitir** guarda uma fotografia (`snapshot`) e daí em diante o relatório é montado só dela: mudar dados, renomear a obra ou lançar novas ocorrências não altera nada. Resumo e fotos também não se editam depois de emitido.
+Correção = **retificação**: novo rascunho ligado ao anterior (`retificacaoDe`), com o resumo e as fotos copiados e números novos. O original continua intacto e é marcado “substituído” quando uma retificação é emitida. Só rascunho pode ser excluído.
+
+**D-5.4.2 — Conteúdo.** As 11 seções da especificação; a Administração mostra suprimentos e financeiro (orçado × comprometido × apropriado × pago, medições do mês, contas em aberto, desembolso dos 3 meses seguintes, CPI/SPI/EAC e a análise do desvio, se houver) e a Gestão mostra medições aprovadas e desembolso previsto do cliente.
+*Avanço e indicadores refletem a data da emissão*, não uma reconstrução do fim do mês (o app não guarda histórico mês a mês do avanço). “Retrabalho” = reaberturas de ocorrência.
+
+**D-5.4.3 — Pendências do cliente com data-limite.** Materiais de nível 3 pendentes (prazo do material), aditivos aguardando assinatura (data-limite = envio + dias de escalonamento da obra, padrão 7) e, na Administração, compras que dependem do cliente (data-limite de pedido).
+
+**D-5.4.4 — Envio, prazo de objeção e validação.** Registra-se a data de envio e o prazo para objeção; depois a resposta do cliente: “validou” ou “fez objeção” (com texto obrigatório). A validação é registro manual da equipe; o cliente ainda não acessa o app.
+
+**D-5.4.5 — PDF sem biblioteca.** “Imprimir / salvar como PDF” usa `window.print()` com folha de estilo de impressão (A4, sem menus, blocos sem quebra no meio). Dentro do claude.ai o app roda num quadro isolado onde a impressão pode ser bloqueada: nesse caso o app avisa
+e oferece **“Baixar relatório em HTML”**, arquivo único com o estilo embutido, que se imprime no navegador. *Ponto que só uma pessoa confere:* como a impressão sai no papel/PDF.
+Fotos no HTML baixado são links para o armazenamento; com o Supabase configurado abrem normalmente.
+
+**D-5.4.6 — Fotos.** Até 12, escolhidas entre as do diário do mês.

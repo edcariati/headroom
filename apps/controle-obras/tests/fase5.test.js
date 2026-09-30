@@ -394,3 +394,151 @@ test('fase 5 · passo 3 · texto do DRE é escapado', async () => {
   assert.equal(e.doc.querySelector('img[src="x"]'), null);
   assert.equal(e.win.__xss, undefined);
 });
+
+/* ---------------- passo 4: fechamento mensal e relatório ao cliente ---------------- */
+const oc = (o) => Object.assign({ obraId: 'o1', etapa: 5, tipo: 'apontamento', gravidade: 'simples', descricao: 'Ocorrência', status: 'aberta', prazo: dia(5), interacoes: [], criadoEm: new Date().toISOString(), reabertas: 0 }, o || {});
+const seedRel = (extra, adm) => Object.assign({ obras: { o1: (adm === false ? obra : obraAdm)({ nome: 'Residência Jardim Europa', empresaId: 'emp_cons' }) }, empresas: { emp_cons: { nome: 'Cariati Construtora Ltda', ativa: true, criterioRateio: 'receita' } }, ocorrencias: { c1: oc(), c2: oc({ gravidade: 'critica' }) } }, extra || {});
+
+test('fase 5 · passo 4 · o rascunho junta as seções do relatório (Administração)', async () => {
+  const e = await abrir({ seed: seedRel(), hash: '#/obra/o1/relatorio' });
+  assert.match(e.app(), /Nenhum relatório de/);
+  await e.click('[data-act="rel-criar"]');
+  assert.equal(e.linhas('relatorios').length, 1);
+  assert.equal(e.linhas('relatorios')[0].status, 'rascunho');
+  const t = e.app();
+  ['Resumo da engenharia', 'Avanço físico', 'Qualidade', 'Planejamento', 'Suprimentos e financeiro', 'Aditivos', 'Pendências de decisão do cliente', 'Documentos e conformidade', 'Próximos 30 dias', 'Fotos do mês'].forEach((s) => assert.match(t, new RegExp(s)));
+  assert.match(t, /Residência Jardim Europa/);
+  assert.match(t, /Cariati Construtora Ltda/);
+  assert.match(t, /ocorrências abertas: 2 \(1 crítica/);
+  assert.match(t, /Rascunho\. Os números mudam/);
+});
+
+test('fase 5 · passo 4 · Gestão mostra medições e desembolso, sem suprimentos', async () => {
+  const e = await abrir({ seed: seedRel({}, false), hash: '#/obra/o1/relatorio' });
+  await e.click('[data-act="rel-criar"]');
+  assert.match(e.app(), /Medições e desembolso previsto/);
+  assert.doesNotMatch(e.app(), /Suprimentos e financeiro/);
+  assert.doesNotMatch(e.app(), /Contas a pagar em aberto/);
+  assert.match(e.app(), /Desembolso previsto do cliente/);
+});
+
+test('fase 5 · passo 4 · relatório emitido não muda quando os dados mudam; a retificação usa os dados novos', async () => {
+  const e = await abrir({ seed: seedRel(), hash: '#/obra/o1/relatorio' });
+  await e.click('[data-act="rel-criar"]');
+  await e.click('[data-act="rel-texto"]');
+  await e.submit({ texto: 'Mês de fundação concluída, sem imprevistos.' });
+  await e.click('[data-act="rel-emitir"]');
+  await e.click('[data-x="1"]');
+  let r = e.linhas('relatorios')[0];
+  assert.equal(r.status, 'emitido');
+  assert.equal(r.snapshot.qualidade.abertasAgora, 2);
+  assert.ok(r.emitidoEm);
+  // os dados mudam depois da emissão
+  await e.recarrega('ocorrencias', 'c3', oc({ descricao: 'Nova' }));
+  await e.recarrega('obras', 'o1', Object.assign({}, e.x.G('obras', 'o1'), { nome: 'Nome mudou depois' }));
+  await e.go('#/obra/o1/relatorio');
+  assert.match(e.app(), /ocorrências abertas: 2 \(1 crítica/);          // continua a foto da emissão
+  assert.match(e.app(), /Residência Jardim Europa/);
+  assert.doesNotMatch(e.app(), /Nome mudou depois<\/h1>/);
+  assert.match(e.app(), /Mês de fundação concluída/);
+  assert.equal(e.doc.querySelector('[data-act="rel-texto"]'), null);      // emitido não se edita
+  assert.equal(e.doc.querySelector('[data-act="rel-emitir"]'), null);
+  assert.equal(e.doc.querySelector('[data-act="rel-excluir"]'), null);
+  // retificação: novo rascunho ligado ao anterior, com os números novos
+  await e.click('[data-act="rel-retificar"]');
+  const todos = e.linhas('relatorios');
+  assert.equal(todos.length, 2);
+  const nova = todos.find((x) => x.id !== r.id);
+  assert.equal(nova.retificacaoDe, r.id);
+  assert.equal(nova.status, 'rascunho');
+  assert.equal(nova.textoEngenharia, 'Mês de fundação concluída, sem imprevistos.');
+  assert.match(e.app(), /ocorrências abertas: 3/);
+  assert.match(e.app(), /retificação/);
+  assert.equal(e.linhas('relatorios').find((x) => x.id === r.id).snapshot.qualidade.abertasAgora, 2);   // o original segue intacto
+  await e.click('[data-act="rel-emitir"]');
+  await e.click('[data-x="1"]');
+  assert.equal(e.x.relVigente('o1', dia(0).slice(0, 7)).id, nova.id);
+  assert.match(e.app(), /Relatório 1 · Emitido \(substituído\)/);
+});
+
+test('fase 5 · passo 4 · envio ao cliente, prazo de objeção e validação ou objeção', async () => {
+  const e = await abrir({ seed: seedRel(), hash: '#/obra/o1/relatorio' });
+  await e.click('[data-act="rel-criar"]');
+  await e.click('[data-act="rel-emitir"]');
+  await e.click('[data-x="1"]');
+  assert.match(e.app(), /Ainda não registrado como enviado/);
+  await e.click('[data-act="rel-enviar"]');
+  await e.submit({ data: dia(0), prazo: dia(-1) });
+  assert.match(e.erroForm(), /prazo para objeção não pode ser antes do envio/);
+  await e.submit({ data: dia(0), prazo: dia(5) });
+  let r = e.linhas('relatorios')[0];
+  assert.equal(r.enviadoEm, dia(0));
+  assert.equal(r.prazoObjecao, dia(5));
+  assert.match(e.app(), /prazo para objeção/);
+  await e.click('[data-act="rel-valid"]');
+  await e.submit({ status: 'objecao', data: dia(1), ref: 'e-mail', texto: '' });
+  assert.match(e.erroForm(), /Descreva a objeção/);
+  await e.submit({ status: 'objecao', texto: 'Discordo do valor do aditivo 2.' });
+  r = e.linhas('relatorios')[0];
+  assert.equal(r.validacaoCliente.status, 'objecao');
+  assert.match(e.app(), /Objeção do cliente/);
+  await e.click('[data-act="rel-valid"]');
+  await e.submit({ status: 'validado', data: dia(2), ref: 'WhatsApp', texto: '' });
+  assert.equal(e.linhas('relatorios')[0].validacaoCliente.status, 'validado');
+  assert.match(e.app(), /Validado pelo cliente/);
+});
+
+test('fase 5 · passo 4 · escolha de fotos do diário, no máximo 12', async () => {
+  const fotos = Array.from({ length: 14 }, (_, i) => 'foto' + i);
+  const seed = seedRel({ diarios: { d1: { obraId: 'o1', data: dia(0), atividades: 'x', fotos, efetivo: [] } } });
+  const e = await abrir({ seed, hash: '#/obra/o1/relatorio' });
+  await e.click('[data-act="rel-criar"]');
+  await e.click('[data-act="rel-fotos"]');
+  assert.equal(e.doc.querySelectorAll('[data-rf]').length, 14);
+  for (let i = 0; i < 12; i++) await e.doc.querySelectorAll('[data-rf]')[i].click();
+  await e.tick();
+  assert.match(e.dlg(), /12 de 12 selecionadas/);
+  await e.doc.querySelectorAll('[data-rf]')[12].click(); await e.tick();
+  assert.match(e.dlg(), /O limite é de 12 fotos/);
+  await e.click('#rf_ok');
+  assert.equal(e.linhas('relatorios')[0].fotos.length, 12);
+});
+
+test('fase 5 · passo 4 · visão de impressão A4, botão de imprimir e HTML autônomo', async () => {
+  const e = await abrir({ seed: seedRel(), hash: '#/obra/o1/relatorio' });
+  assert.match(e.doc.querySelector('style').textContent, /@media print/);
+  assert.match(e.doc.querySelector('style').textContent, /size:A4/);
+  assert.ok(e.doc.querySelector('.no-print'));                             // a barra de etapas some ao imprimir
+  await e.click('[data-act="rel-criar"]');
+  let impresso = 0; e.win.print = () => { impresso++; };
+  await e.click('[data-act="rel-imprimir"]');
+  assert.equal(impresso, 1);
+  const r = e.linhas('relatorios')[0], o = e.x.G('obras', 'o1');
+  const html = e.x.relHtmlDocumento(o, Object.assign({}, r, { dados: e.x.relDados(o, r.mes) }));
+  assert.match(html, /^<!doctype html>/);
+  assert.match(html, /<title>Relatório mensal — Residência Jardim Europa/);
+  assert.match(html, /@media print/);
+  assert.match(html, /Pendências de decisão do cliente/);
+  await e.click('[data-act="rel-html"]');
+  assert.deepEqual(e.erros, []);
+});
+
+test('fase 5 · passo 4 · pendências do cliente com data-limite e aditivos no relatório', async () => {
+  const seed = seedRel({ materiais: { m1: { obraId: 'o1', item: 'Porcelanato da sala', aprovador: 'Cliente', prazo: dia(6), resultado: 'pendente', nivel3: true } }, aditivos: { a1: { obraId: 'o1', numero: 1, descricao: 'Contenção extra', tipo: 'acrescimo', status: 'aguardando_cliente', enviadoEm: new Date().toISOString(), itens: [{ descricao: 'x', unidade: 'un', quantidade: 1, precoUnitario: 900, total: 900, etapa: 5, tipoItem: 'empreitada' }] } } });
+  const e = await abrir({ seed, hash: '#/obra/o1/relatorio' });
+  await e.click('[data-act="rel-criar"]');
+  const d = e.x.relDados(e.x.G('obras', 'o1'), dia(0).slice(0, 7));
+  assert.equal(d.pendencias.length, 2);
+  assert.match(e.app(), /Escolha de material.*Porcelanato da sala.*decidir até/);
+  assert.match(e.app(), /Aditivo nº 1.*Contenção extra/);
+  assert.match(e.app(), /Nº 1 — Contenção extra: R\$\s*900,00/);
+});
+
+test('fase 5 · passo 4 · texto do relatório é escapado', async () => {
+  const xss = '<img src=x onerror="window.__xss=11">';
+  const seed = seedRel({ relatorios: { r1: { obraId: 'o1', mes: dia(0).slice(0, 7), status: 'rascunho', textoEngenharia: xss, fotos: [], validacaoCliente: { status: 'pendente' }, criadoEm: new Date().toISOString(), hist: [] } }, materiais: { m1: { obraId: 'o1', item: xss, aprovador: 'C', prazo: dia(6), resultado: 'pendente', nivel3: true } } });
+  const e = await abrir({ seed, hash: '#/obra/o1/relatorio' });
+  assert.equal(e.doc.querySelector('img[src="x"]'), null);
+  assert.equal(e.win.__xss, undefined);
+  assert.match(e.app(), /<img src=x/);
+});
