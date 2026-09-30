@@ -4,6 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require('jsdom');
+const { supaFalso } = require('./supa-falso');
 
 const HTML = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 
@@ -46,6 +47,7 @@ async function abrir(opts) {
   const db = bancoFalso(opts.seed);
   const erros = [];
   const gancho = {};
+  const supa = opts.supa ? supaFalso(opts.supa) : null;
   const dom = new JSDOM(HTML, {
     url: 'http://localhost/' + (opts.hash || '#/painel'),
     runScripts: 'dangerously',
@@ -60,7 +62,8 @@ async function abrir(opts) {
       win.URL.createObjectURL = () => 'blob:teste';
       win.URL.revokeObjectURL = () => {};
       const user = { id: async () => 'u1', can: async () => opts.somenteLeitura ? false : true, profiles: async () => ({}) };
-      win.claude = { use: async (nome) => (nome === 'db' ? db.api : (nome === 'user' ? user : null)) };
+      if (supa) { win.supabase = { createClient: () => supa.cli }; win.COB_SUPABASE = { url: 'https://teste.supabase.co', key: 'anon-teste', esquema: 'v2' }; }
+      else win.claude = { use: async (nome) => (nome === 'db' ? db.api : (nome === 'user' ? user : null)) };
       win.addEventListener('error', (e) => erros.push(e.message));
       const ce = win.console.error; win.console.error = (...a) => { erros.push(a.join(' ')); ce.apply(win.console, a); };
     }
@@ -70,7 +73,7 @@ async function abrir(opts) {
   await tick(250);
 
   const env = {
-    win, doc, db, erros, tick,
+    win, doc, db, erros, tick, supa,
     get x() { return gancho.x; },
     app: () => doc.getElementById('app').textContent.replace(/\s+/g, ' '),
     dlg: () => doc.getElementById('dlg').textContent.replace(/\s+/g, ' '),

@@ -295,3 +295,14 @@ O Edson aprovou o passo 2. `supabase/migrations/0002_regras.sql` (testada em Pos
 - **D-6.3.4** Só o dono encerra ou reabre obra.
 - **D-6.3.5** Cliente lê **somente relatórios emitidos da própria obra** e valida/objeta pela função `validar_relatorio` (objeção exige motivo).
 - **Limite honesto:** o servidor ainda **não recalcula** as 5 travas da medição nem o CPI/SPI; ele só controla quem aprova e o congelamento. Recalcular no servidor exige portar `medTravas` e o EVM para SQL: fica como passo próprio, a confirmar com o Edson.
+
+## Fase 6 — Passo 4 (app ligado ao esquema novo, testado com Supabase simulado)
+
+- **D-6.4.1** O app fala o esquema novo quando `COB_SUPABASE.esquema==='v2'` (o padrão continua a ponte `registros` até o dev estar migrado). Uma tabela por coleção, `obra_id` e `dados jsonb`; o `id` do app é o id da linha.
+- **D-6.4.2** Concorrência: cada linha carregada guarda a `versao`; a edição só grava se a versão ainda for a mesma. Se outra pessoa gravou antes, **nada é sobrescrito**, o app avisa e recarrega a linha.
+- **D-6.4.3** Exclusão chama `excluir_registro` (nunca DELETE). Realtime: um canal com as 38 tabelas; linhas com `excluido_em` somem da tela.
+- **D-6.4.4** Login sem perfil ativo vê “Seu acesso ainda não foi liberado” e nenhum dado. Perfis `leitura` e `cliente` ficam somente leitura no app; a barreira real continua sendo a RLS.
+- **D-6.4.5** Histórico na nuvem v2 lê `auditoria` (só o dono vê); “Restaurar versão anterior” fica desligado no v2 até ser refeito com a regra de versão.
+- **Carregamento:** por ora carrega tudo que a RLS deixa o usuário ver (o painel e os alertas dependem de todas as obras). Carregar por obra e sob demanda fica como otimização.
+- **Nomes de quem alterou:** a RLS só deixa cada um ler o próprio perfil (e o dono ler todos); para os demais o app mostra “Alguém” até existir uma visão segura de nomes (proposta: view `perfis_publicos` com id e nome).
+- **Ainda simulado:** nada foi testado contra um Supabase real. Faltam: aplicar as migrações no `cariati-obras-dev`, script de migração dos dados da ponte `registros`, Storage com caminho por obra e políticas, e teste de login real.

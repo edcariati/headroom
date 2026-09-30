@@ -61,10 +61,18 @@ function histResumo(x){
 async function carregarHist(){
   if(hist.carregando) return; hist.carregando=true; hist.erro=''; scheduleRender();
   try{
-    var r=sbErr(await Supa.cli.from('registros_historico').select('*').order('feito_em',{ascending:false}).limit(500));
-    hist.rows=r.data||[];
+    if(Supa.v2()){
+      var ra=sbErr(await Supa.cli.from('auditoria').select('id,tabela,registro_id,acao,antes,depois,user_id,em').order('em',{ascending:false}).limit(500)), AC2={insert:'criado', update:'alterado', excluir:'excluido'};
+      hist.rows=(ra.data||[]).map(function(x){ return {hid:x.id, colecao:x.tabela, registro_id:x.registro_id, acao:AC2[x.acao]||'alterado', dados_antes:x.antes?x.antes.dados:null, dados_depois:x.depois?x.depois.dados:null, feito_em:x.em, feito_por_email:x.user_id?String(x.user_id).slice(0,8):'sistema'}; });
+    } else {
+      var r=sbErr(await Supa.cli.from('registros_historico').select('*').order('feito_em',{ascending:false}).limit(500));
+      hist.rows=r.data||[];
+    }
   }catch(e){ hist.erro=e.message||'erro'; hist.rows=hist.rows||[]; }
   hist.carregando=false; scheduleRender();
+}
+function vSemAcesso(){
+  return '<div class="wrap"><div class="login"><p class="brand" style="font-size:22px;margin-bottom:14px">Cariati<span>·Obras</span></p><div class="card empty"><h3>Seu acesso ainda não foi liberado</h3><p>Você entrou como '+esc(Supa.email())+', mas a diretoria ainda não definiu o seu perfil. Fale com a Cariati.</p><button class="btn" data-act="nuvem-sair">Sair</button></div></div></div>';
 }
 function vHistorico(){
   if(Store.backend!=='supabase') return '<div class="wrap"><div class="card empty"><h3>Histórico disponível na nuvem</h3><p>Conecte o aplicativo ao Supabase para registrar quem alterou o quê. <a href="#/nuvem">Conectar</a></p></div></div>';
@@ -87,7 +95,7 @@ function vHistorico(){
     var d=x.dados_depois||x.dados_antes||{}, ac=AC[x.acao]||['','?'], dt=new Date(x.feito_em);
     var quando=pad(dt.getDate())+'/'+pad(dt.getMonth()+1)+'/'+dt.getFullYear()+' '+pad(dt.getHours())+':'+pad(dt.getMinutes());
     var ob=d.obraId?G('obras',d.obraId):null, res=histResumo(x);
-    var pode=x.acao!=='criado' && x.dados_antes && Store.writable;
+    var pode=x.acao!=='criado' && x.dados_antes && Store.writable && !Supa.v2();
     return '<li><div class="q">'+quando+'<br>'+esc(x.feito_por_email||'sistema')+'</div>'
       +'<div><div class="row" style="gap:6px"><span class="chip '+ac[0]+'">'+ac[1]+'</span><span class="chip">'+esc(COL_NOMES[x.colecao]||x.colecao)+'</span></div>'
       +'<div style="margin-top:4px;font-weight:500">'+esc(short(histLabel(x.colecao,d,x.registro_id),90))+'</div>'
@@ -157,7 +165,7 @@ document.addEventListener('submit', async function(e){
     var url=f.url.value.trim().replace(/\/+$/,''), key=f.key.value.trim();
     if(!/^https:\/\/.+/.test(url)){ toast('A URL precisa começar com https://', true); return; }
     if(/service_role|sb_secret_/.test(key) || (function(){ try{ return JSON.parse(atob(key.split('.')[1])).role==='service_role'; }catch(x){ return false; } })()){ toast('Essa é a chave secreta. Use a chave pública (anon/publishable).', true); return; }
-    Supa.saveConfig({url:url, key:key}); location.hash='#/painel'; location.reload();
+    Supa.saveConfig({url:url, key:key, esquema:(Supa.config()||{}).esquema||'v1'}); location.hash='#/painel'; location.reload();
   }
 });
 document.addEventListener('change', function(e){

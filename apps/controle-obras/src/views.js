@@ -286,6 +286,7 @@ function render(){
   var r=parseRoute(), key=location.hash||'#/painel', y=window.scrollY;
   var gs=document.querySelector('.gantt-scroll'); if(gs) ui.ganttScroll=gs.scrollLeft;
   if(Store.mode==='login'){ app.innerHTML=vLogin(); lastKey=null; return; }
+  if(Store.mode==='sem_acesso'){ app.innerHTML=vSemAcesso(); lastKey=null; return; }
   if(r.view==='nuvem'||r.view==='historico'){
     document.body.classList.toggle('ro', !Store.writable);
     app.innerHTML=topbar(r)+banners()+(r.view==='nuvem'?vNuvem():vHistorico());

@@ -4,5 +4,6 @@ async function boot(){
   await Store.init();
   render();
 }
+COBX.Store=Store; COBX.Supa=Supa;
 if(window.__COB_TEST_HOOK) window.__COB_TEST_HOOK(COBX);
 boot();

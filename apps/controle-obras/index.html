@@ -391,11 +391,12 @@ function toast(msg, err){
 /* ---------- Supabase (nuvem) ---------- */
 var BUCKET='obras-arquivos';
 function sbErr(r){ if(r&&r.error){ var e=new Error(r.error.message||'erro'); e.code=r.error.code||r.error.statusCode||'supabase'; throw e; } return r; }
-var Supa={ cli:null, cfg:null, session:null,
+var Supa={ cli:null, cfg:null, session:null, vers:{}, papel:null,
+  v2:function(){ return !!(this.cfg&&this.cfg.esquema==='v2'); },
   config:function(){
     var c=null; try{ c=JSON.parse(localStorage.getItem('cob.supa')||'null'); }catch(e){}
     if(!c && window.COB_SUPABASE) c=window.COB_SUPABASE;
-    return (c && c.url && c.key)?{url:String(c.url).replace(/\/+$/,''), key:String(c.key)}:null;
+    return (c && c.url && c.key)?{url:String(c.url).replace(/\/+$/,''), key:String(c.key), esquema:c.esquema==='v2'?'v2':'v1'}:null;
   },
   saveConfig:function(c){ try{ if(c) localStorage.setItem('cob.supa', JSON.stringify(c)); else localStorage.removeItem('cob.supa'); }catch(e){} },
   start:async function(cfg){
@@ -405,6 +406,13 @@ var Supa={ cli:null, cfg:null, session:null,
     var r; try{ r=await this.cli.auth.getSession(); }catch(e){ return 'offline'; }
     this.session=r&&r.data&&r.data.session;
     if(!this.session) return 'login';
+    if(this.v2()){
+      var pr; try{ pr=await this.cli.from('perfis').select('nome,papel,ativo').eq('user_id', this.session.user.id); }catch(e){ return 'offline'; }
+      var row=pr&&pr.data&&pr.data[0];
+      if(!row||row.ativo===false) return 'sem_perfil';
+      this.papel=row.papel; this.nome=row.nome||'';
+      return 'ok';
+    }
     this.perfil();
     return 'ok';
   },
@@ -415,14 +423,45 @@ var Supa={ cli:null, cfg:null, session:null,
     this.cli.from('perfis').upsert({id:u.id, email:u.email, nome:md.nome||md.name||String(u.email||'').split('@')[0], atualizado_em:new Date().toISOString()}).then(function(){}, function(){});
   },
   adapter:function(){
+    if(this.v2()) return this.adapterV2();
     var cli=this.cli;
     return { doc:function(p){ var i=p.indexOf('/'), c=p.slice(0,i), id=p.slice(i+1); return {
       set:function(rec){ return cli.from('registros').upsert({colecao:c, id:id, dados:rec}).then(sbErr); },
       delete:function(){ return cli.from('registros').delete().match({colecao:c, id:id}).then(sbErr); }
     }; } };
   },
+  // Esquema novo (fase 6): uma tabela por coleção, controle de versão e exclusão lógica no servidor
+  adapterV2:function(){
+    var self=this, cli=this.cli;
+    return { doc:function(p){ var i=p.indexOf('/'), c=p.slice(0,i), id=p.slice(i+1), k=c+'/'+id; return {
+      set:async function(rec){
+        var oid=c==='obras'?id:(rec.obraId||null), v=self.vers[k], r;
+        if(v){
+          r=sbErr(await cli.from(c).update({dados:rec, obra_id:oid}).eq('id',id).eq('versao',v).select('versao'));
+          if(!r.data||!r.data.length){ var e=new Error('conflito'); e.code='conflito'; e.col=c; e.rid=id; throw e; }
+        } else {
+          r=sbErr(await cli.from(c).insert({id:id, obra_id:oid, dados:rec}).select('versao'));
+        }
+        if(r.data&&r.data[0]) self.vers[k]=r.data[0].versao;
+      },
+      delete:async function(){ sbErr(await cli.rpc('excluir_registro', {tab:c, rid:id})); delete self.vers[k]; }
+    }; } };
+  },
+  recarregar:async function(c,id){
+    var r=await this.cli.from(c).select('id,dados,versao,excluido_em').eq('id',id);
+    var x=r&&r.data&&r.data[0]; if(!r||r.error) return;
+    if(!x||x.excluido_em){ Store.data[c].delete(id); delete this.vers[c+'/'+id]; }
+    else { Store.data[c].set(id, x.dados||{}); this.vers[c+'/'+id]=x.versao; }
+    scheduleRender();
+  },
   userShim:function(){
     var self=this;
+    if(this.v2()) return { profiles:async function(ids){
+      var r=sbErr(await self.cli.from('perfis').select('user_id,nome').in('user_id', ids)), out={}, me=self.uid();
+      (r.data||[]).forEach(function(p){ out[p.user_id]={name:p.nome||'Alguém', isMe:p.user_id===me}; });
+      ids.forEach(function(i){ if(i===me&&!out[i]) out[i]={name:'você', isMe:true}; });
+      return out;
+    } };
     return { profiles:async function(ids){
       var r=sbErr(await self.cli.from('perfis').select('id,nome,email').in('id', ids)), out={}, me=self.uid();
       (r.data||[]).forEach(function(p){ out[p.id]={name:p.nome||p.email, isMe:p.id===me}; });
@@ -463,16 +502,43 @@ var Store={
     if(sc){
       var st=await Supa.start(sc);
       if(st==='login'){ this.mode='login'; return; }
+      if(st==='sem_perfil'){ this.mode='sem_acesso'; return; }
       if(st==='ok'){
         this.db=Supa.adapter(); this.mode='db'; this.backend='supabase';
         this.uid=Supa.uid(); this.user=Supa.userShim();
+        if(Supa.v2()){ this.papel=Supa.papel; this.writable=['dono','gestor','financeiro','campo'].indexOf(Supa.papel)>=0; }
         await this.subscribeSupa(); return;
       }
       this.supaErro=st;
     }
     this.mode='local'; this.backend='local'; this.loadLocal();
   },
+  subscribeSupaV2:async function(){
+    var self=this, ch=Supa.cli.channel('dados-app');
+    COLS.forEach(function(c){
+      ch=ch.on('postgres_changes', {event:'*', schema:'public', table:c}, function(p){
+        var n=p.new||{};
+        if(!n.id) return;
+        if(n.excluido_em){ self.data[c].delete(n.id); delete Supa.vers[c+'/'+n.id]; }
+        else { self.data[c].set(n.id, n.dados||{}); Supa.vers[c+'/'+n.id]=n.versao; }
+        scheduleRender();
+      });
+    });
+    ch.subscribe();
+    this.unsubs.push(function(){ Supa.cli.removeChannel(ch); });
+    var falhou=false;
+    for(var i=0;i<COLS.length;i++){
+      var c=COLS[i], from=0, step=1000;
+      while(true){
+        var r=await Supa.cli.from(c).select('id,dados,versao').is('excluido_em', null).order('id').range(from, from+step-1);
+        if(r.error){ if(!falhou) toast('Não foi possível carregar parte dos dados ('+(r.error.code||r.error.message)+').', true); falhou=true; break; }
+        (r.data||[]).forEach(function(x){ self.data[c].set(x.id, x.dados||{}); Supa.vers[c+'/'+x.id]=x.versao; });
+        if((r.data||[]).length<step) break; from+=step;
+      }
+    }
+  },
   subscribeSupa:async function(){
+    if(Supa.v2()) return this.subscribeSupaV2();
     var self=this;
     var ch=Supa.cli.channel('registros-app').on('postgres_changes', {event:'*', schema:'public', table:'registros'}, function(p){
       if(p.eventType==='DELETE'){ var o=p.old||{}; if(o.colecao && self.data[o.colecao]) self.data[o.colecao].delete(o.id); }
@@ -517,7 +583,10 @@ var Store={
     next.then(function(){ if(self.q.get(key)===next) self.q.delete(key); }, function(){ if(self.q.get(key)===next) self.q.delete(key); });
     return next;
   },
-  fail:function(e){ toast('Não foi possível salvar'+(e&&e.code?' ('+e.code+')':'')+'. Confira sua conexão e tente de novo.', true); },
+  fail:function(e){
+    if(e&&e.code==='conflito'){ toast('Este registro foi alterado por outra pessoa. Sua alteração não foi gravada; a tela foi atualizada.', true); if(e.col) Supa.recarregar(e.col,e.rid); return; }
+    if(e&&/row-level security|permission denied|42501/i.test((e.message||'')+(e.code||''))){ toast('Seu perfil não tem permissão para esta alteração.', true); return; }
+    toast('Não foi possível salvar'+(e&&e.code?' ('+e.code+')':'')+'. Confira sua conexão e tente de novo.', true); },
   set:function(c,id,data){
     var self=this;
     if(!this.writable){ toast('Seu acesso é somente leitura.', true); return Promise.resolve(); }
@@ -4127,6 +4196,7 @@ function render(){
   var r=parseRoute(), key=location.hash||'#/painel', y=window.scrollY;
   var gs=document.querySelector('.gantt-scroll'); if(gs) ui.ganttScroll=gs.scrollLeft;
   if(Store.mode==='login'){ app.innerHTML=vLogin(); lastKey=null; return; }
+  if(Store.mode==='sem_acesso'){ app.innerHTML=vSemAcesso(); lastKey=null; return; }
   if(r.view==='nuvem'||r.view==='historico'){
     document.body.classList.toggle('ro', !Store.writable);
     app.innerHTML=topbar(r)+banners()+(r.view==='nuvem'?vNuvem():vHistorico());
@@ -4537,10 +4607,18 @@ function histResumo(x){
 async function carregarHist(){
   if(hist.carregando) return; hist.carregando=true; hist.erro=''; scheduleRender();
   try{
-    var r=sbErr(await Supa.cli.from('registros_historico').select('*').order('feito_em',{ascending:false}).limit(500));
-    hist.rows=r.data||[];
+    if(Supa.v2()){
+      var ra=sbErr(await Supa.cli.from('auditoria').select('id,tabela,registro_id,acao,antes,depois,user_id,em').order('em',{ascending:false}).limit(500)), AC2={insert:'criado', update:'alterado', excluir:'excluido'};
+      hist.rows=(ra.data||[]).map(function(x){ return {hid:x.id, colecao:x.tabela, registro_id:x.registro_id, acao:AC2[x.acao]||'alterado', dados_antes:x.antes?x.antes.dados:null, dados_depois:x.depois?x.depois.dados:null, feito_em:x.em, feito_por_email:x.user_id?String(x.user_id).slice(0,8):'sistema'}; });
+    } else {
+      var r=sbErr(await Supa.cli.from('registros_historico').select('*').order('feito_em',{ascending:false}).limit(500));
+      hist.rows=r.data||[];
+    }
   }catch(e){ hist.erro=e.message||'erro'; hist.rows=hist.rows||[]; }
   hist.carregando=false; scheduleRender();
+}
+function vSemAcesso(){
+  return '<div class="wrap"><div class="login"><p class="brand" style="font-size:22px;margin-bottom:14px">Cariati<span>·Obras</span></p><div class="card empty"><h3>Seu acesso ainda não foi liberado</h3><p>Você entrou como '+esc(Supa.email())+', mas a diretoria ainda não definiu o seu perfil. Fale com a Cariati.</p><button class="btn" data-act="nuvem-sair">Sair</button></div></div></div>';
 }
 function vHistorico(){
   if(Store.backend!=='supabase') return '<div class="wrap"><div class="card empty"><h3>Histórico disponível na nuvem</h3><p>Conecte o aplicativo ao Supabase para registrar quem alterou o quê. <a href="#/nuvem">Conectar</a></p></div></div>';
@@ -4563,7 +4641,7 @@ function vHistorico(){
     var d=x.dados_depois||x.dados_antes||{}, ac=AC[x.acao]||['','?'], dt=new Date(x.feito_em);
     var quando=pad(dt.getDate())+'/'+pad(dt.getMonth()+1)+'/'+dt.getFullYear()+' '+pad(dt.getHours())+':'+pad(dt.getMinutes());
     var ob=d.obraId?G('obras',d.obraId):null, res=histResumo(x);
-    var pode=x.acao!=='criado' && x.dados_antes && Store.writable;
+    var pode=x.acao!=='criado' && x.dados_antes && Store.writable && !Supa.v2();
     return '<li><div class="q">'+quando+'<br>'+esc(x.feito_por_email||'sistema')+'</div>'
       +'<div><div class="row" style="gap:6px"><span class="chip '+ac[0]+'">'+ac[1]+'</span><span class="chip">'+esc(COL_NOMES[x.colecao]||x.colecao)+'</span></div>'
       +'<div style="margin-top:4px;font-weight:500">'+esc(short(histLabel(x.colecao,d,x.registro_id),90))+'</div>'
@@ -4633,7 +4711,7 @@ document.addEventListener('submit', async function(e){
     var url=f.url.value.trim().replace(/\/+$/,''), key=f.key.value.trim();
     if(!/^https:\/\/.+/.test(url)){ toast('A URL precisa começar com https://', true); return; }
     if(/service_role|sb_secret_/.test(key) || (function(){ try{ return JSON.parse(atob(key.split('.')[1])).role==='service_role'; }catch(x){ return false; } })()){ toast('Essa é a chave secreta. Use a chave pública (anon/publishable).', true); return; }
-    Supa.saveConfig({url:url, key:key}); location.hash='#/painel'; location.reload();
+    Supa.saveConfig({url:url, key:key, esquema:(Supa.config()||{}).esquema||'v1'}); location.hash='#/painel'; location.reload();
   }
 });
 document.addEventListener('change', function(e){
@@ -4653,6 +4731,7 @@ async function boot(){
   await Store.init();
   render();
 }
+COBX.Store=Store; COBX.Supa=Supa;
 if(window.__COB_TEST_HOOK) window.__COB_TEST_HOOK(COBX);
 boot();
 })();

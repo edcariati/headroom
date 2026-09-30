@@ -1,6 +1,11 @@
 # Changelog
 
-## Fase 5 — DRE, relatório ao cliente e avaliação (em andamento)
+## Fase 6 — Supabase com login e perfis (em andamento, sem projeto real ainda)
+
+- **Passos 1 a 3:** desenho (`docs/migracao-supabase/`), migrações `0001` (tabelas, perfis, RLS, exclusão lógica, auditoria) e `0002` (regras críticas e acesso do cliente), testadas em Postgres local (`npm run test:rls`).
+- **Passo 4:** app fala o esquema novo (`esquema: v2`): versão por linha com aviso de conflito, exclusão pela função do servidor, Realtime, tela de acesso não liberado; testado com Supabase simulado.
+
+## Fase 5 — DRE, relatório ao cliente e avaliação (concluída)
 
 - **Passo 0:** navegação da obra agrupada (8 grupos com subabas), URLs antigas preservadas.
 - **Passo 1:** empresas do grupo, empresa na obra, contrato do cliente e receita prevista por competência. Página DRE (menu do topo).
