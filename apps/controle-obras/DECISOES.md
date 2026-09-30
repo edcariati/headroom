@@ -275,3 +275,13 @@ Obra encerrada ganha selo, e criar algo novo nela pede confirmação (uma vez po
 **D-5.8.1 — Referência entre obras encerradas.** Na aba Encerramento: R$/m² real por etapa (mínimo, mediana, média, máximo e nº de obras) de **outras** obras encerradas da **mesma tipologia**, com área informada. Só entram etapas com custo apropriado. Sem obra comparável, o app avisa. A tipologia igual é decisão minha (provisória): dá para ampliar para todas as tipologias se o Edson preferir.
 
 **D-5.8.2 — Menu do topo no celular.** Os itens passam a quebrar linha em vez de rolar para o lado, para o DRE e a Nuvem não ficarem escondidos.
+
+## Fase 6 — Passo 2 (migração base, sem executar no Supabase)
+
+O Edson respondeu “pode fazer”. Interpretei como aprovação do desenho em `docs/migracao-supabase/` com as opções recomendadas (registrar aqui para ele corrigir se for diferente):
+- **D-6.2.1** Um escritório só (single-tenant). Tabelas no formato `id text` (os ids atuais são texto, ex.: `cc_<obra>`), `obra_id` tipado e `dados jsonb` com o restante; colunas tipadas adicionais entram quando uma consulta pedir.
+- **D-6.2.2** Perfis: dono, gestor, financeiro, campo, cliente, leitura. A matriz virou **dados** (tabelas `permissoes` e `colecoes`), fácil de ajustar sem mexer em código. Cliente ainda não lê nada; o acesso dele ao relatório emitido vem em passo próprio.
+- **D-6.2.3** Exclusão só lógica: `DELETE` negado a todos; a exclusão é a função `excluir_registro`, que confere permissão; `UPDATE` direto de `excluido_em` é bloqueado por gatilho.
+- **D-6.2.4** Versão (`versao`) e auditoria (antes/depois, quem, quando) por gatilho; auditoria só o dono lê.
+- **D-6.2.5** Validação: `npm run test:rls` sobe um Postgres local descartável, aplica `supabase/migrations/0001_base.sql` e roda `supabase/tests/teste_rls.sql`. **Nada foi aplicado no Supabase** (sem projeto/URL/chave `anon` ainda).
+- Ainda falta: RPCs das regras críticas (aprovar medição, assinar aditivo, congelar relatório, encerrar obra), política do cliente, e ligar o app (login, carregamento por obra, Realtime) — depende do projeto `cariati-obras-dev`.
