@@ -946,3 +946,59 @@ function tFisFin(o){
     +'<section class="card sec pad"><h3 style="margin-bottom:8px">Curva S de custo</h3>'+g2+'</section>'
     +'<section class="card sec pad"><h3 style="margin-bottom:8px">'+(adm?'Aportes do cliente por mês':'Desembolso previsto do cliente por mês')+'</h3>'+g3+'</section>'+quadro;
 }
+
+/* ================= INDICADORES, ALERTAS E AGENDA DA FASE 4 ================= */
+function indRowsP4(o){
+  var oid=o.id, out='', rev=orcRevisado(oid); if(!(rev.total>0)) return out;
+  var adm=modAdm(o), e=evm(o), c=custoEtapa(oid), fm=function(x){ return x==null?'—':String(Math.round(x*100)/100).replace('.',','); };
+  out+=indRow('Orçamento revisado','Orçamento base + aditivos assinados', brl(rev.total), 'Base '+brl(rev.base)+' · aditivos assinados '+brl(rev.aditivos)+(e.eac!=null?' · custo final previsto (EAC) '+brl(e.eac):''), e.eac!=null&&e.eac>rev.total?'warn':'');
+  if(adm) out+=indRow('CPI','Valor agregado (EV) ÷ custo real (AC)', fm(e.cpi), e.cpi==null?'Sem custo apropriado ainda':'EV '+brl(e.ev)+' · AC '+brl(e.ac), corIdx(e.cpi));
+  out+=indRow('SPI','Valor agregado (EV) ÷ valor planejado (PV)', fm(e.spi), e.spi==null?'Sem cronograma com orçamento':'EV '+brl(e.ev)+' · PV '+brl(e.pv), corIdx(e.spi));
+  if(adm&&e.fisPct!=null&&e.gastoPct>0) out+=indRow('Avanço físico × orçamento consumido','% físico ÷ % gasto', fm(e.fisPct/e.gastoPct), pct(e.fisPct)+' executado contra '+pct(e.gastoPct)+' gasto', corIdx(e.fisPct/e.gastoPct));
+  out+=indRow('Comprometido, apropriado e pago','Cada um ÷ orçamento revisado', pct(c.total.comprometido/rev.total)+' · '+pct(c.total.apropriado/rev.total)+' · '+pct(c.total.pago/rev.total), 'Comprometido '+brl(c.total.comprometido)+' · apropriado '+brl(c.total.apropriado)+' · pago '+brl(c.total.pago), c.etapas.some(function(x){ return x.acima; })?'warn':'');
+  var base=rev.base>0?rev.base:0; if(base>0&&adtAssinados(oid).length) out+=indRow('Aditivos ÷ valor contratado','Aditivos assinados ÷ orçamento base', pct(rev.aditivos/base), plural(adtAssinados(oid).length,'aditivo assinado','aditivos assinados')+' · '+brl(rev.aditivos), Math.abs(rev.aditivos/base)>0.1?'warn':'');
+  return out;
+}
+function ultimoDiaUtil(mes){
+  var d=parse(mesAdd(mes,1)+'-01'); d.setDate(d.getDate()-1);
+  while(d.getDay()===0||d.getDay()===6) d.setDate(d.getDate()-1);
+  return iso(d);
+}
+function alertasP4(o){
+  var A=[], oid=o.id, base='#/obra/'+oid+'/', dias=o.diasEscalar==null?7:o.diasEscalar, hj=hoje();
+  var par=byObra('medicoes',oid).filter(function(m){ return m.status==='em_analise' && m.analiseDesde && diffDays(m.analiseDesde.slice(0,10),hj)>dias; });
+  if(par.length) A.push({k:'warn', t:plural(par.length,'medição em análise','medições em análise')+' há mais de '+dias+' dias.', to:base+'medicao'});
+  var bloq=byObra('medicoes',oid).filter(function(m){ return (m.status==='rascunho'||m.status==='em_analise') && (m.itens||[]).length && medTravas(m,o).bloqueios.some(function(b){ return b.cod==='docs'; }); });
+  if(bloq.length) A.push({k:'warn', t:plural(bloq.length,'medição bloqueada','medições bloqueadas')+' por documentos do prestador não conferidos.', to:base+'medicao'});
+  if(modAdm(o)){
+    var cs=byObra('contasPagar',oid), venc=cs.filter(contaVencida), av=cs.filter(function(c){ return contaAVencer(c,7); });
+    if(venc.length) A.push({k:'crit', t:plural(venc.length,'conta a pagar vencida','contas a pagar vencidas')+', somando '+brl(r2(venc.reduce(function(s,c){ return s+c.valor; },0)))+'.', to:base+'financeiro'});
+    if(av.length) A.push({k:'warn', t:plural(av.length,'conta vence','contas vencem')+' em até 7 dias, somando '+brl(r2(av.reduce(function(s,c){ return s+c.valor; },0)))+'.', to:base+'financeiro'});
+    var ap=byObra('aportes',oid).filter(function(a){ return !a.dataRecebida && a.dataPrevista && a.dataPrevista<hj; });
+    if(ap.length) A.push({k:'warn', t:plural(ap.length,'aporte previsto e não recebido','aportes previstos e não recebidos')+': '+brl(r2(ap.reduce(function(s,a){ return s+(Number(a.valorPrevisto)||0); },0)))+'. Cobrar o cliente.', to:base+'financeiro'});
+  }
+  var ads=byObra('aditivos',oid).filter(function(a){ return a.status==='aguardando_cliente' && a.enviadoEm && diffDays(a.enviadoEm.slice(0,10),hj)>dias; });
+  if(ads.length) A.push({k:'warn', t:plural(ads.length,'aditivo aguardando','aditivos aguardando')+' o cliente há mais de '+dias+' dias.', to:base+'orcamento'});
+  if(orcVigente(oid)){
+    var e=evm(o), aviso=[];
+    if(modAdm(o)&&e.cpi!=null&&e.cpi<1) aviso.push('CPI '+String(Math.round(e.cpi*100)/100).replace('.',','));
+    if(e.spi!=null&&e.spi<1) aviso.push('SPI '+String(Math.round(e.spi*100)/100).replace('.',','));
+    if(aviso.length) A.push({k:(e.cpi!=null&&e.cpi<0.9)||(e.spi!=null&&e.spi<0.9)?'crit':'warn', t:aviso.join(' e ')+' abaixo de 1: avisar o cliente e registrar a causa do desvio.', to:base+'fisfin'});
+    if(e.semCronograma.length) A.push({k:'warn', t:'Orçamento sem cronograma nas etapas '+e.semCronograma.join(', ')+'.', to:base+'cronograma'});
+    var c=custoEtapa(oid), acima=c.etapas.filter(function(x){ return x.acima; }), semOrc=c.etapas.filter(function(x){ return x.semOrcamento; });
+    if(acima.length) A.push({k:'warn', t:'Comprometido e apropriado acima do orçado na(s) etapa(s) '+acima.map(function(x){ return x.etapa||'sem etapa'; }).join(', ')+'.', to:base+'financeiro'});
+    if(semOrc.length) A.push({k:'warn', t:'Custo lançado sem orçamento na(s) etapa(s) '+semOrc.map(function(x){ return x.etapa||'sem etapa'; }).join(', ')+'.', to:base+'financeiro'});
+  }
+  return A;
+}
+function eventosP4(o,add,b){
+  var oid=o.id;
+  if(modAdm(o)){
+    byObra('contasPagar',oid).filter(function(c){ return c.status==='aberta'&&c.vencimento; }).forEach(function(c){ add(c.vencimento,'Vence: '+short(c.descricao,44),'financeiro',b+'financeiro'); });
+    byObra('aportes',oid).filter(function(a){ return !a.dataRecebida&&a.dataPrevista; }).forEach(function(a){ add(a.dataPrevista,'Aporte previsto: '+short(a.descricao,40),'financeiro',b+'financeiro'); });
+  }
+  if(byObra('medicoes',oid).some(function(m){ return m.status==='rascunho'; })){
+    var mes=hoje().slice(0,7); [mes,mesAdd(mes,1)].forEach(function(m){ add(ultimoDiaUtil(m),'Fechamento mensal de medições','financeiro',b+'medicao'); });
+  }
+}
+COBX.ultimoDiaUtil=ultimoDiaUtil; COBX.alertasP4=alertasP4;

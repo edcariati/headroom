@@ -124,3 +124,14 @@ Assim ela termina exatamente no EV de hoje; meses futuros ficam vazios. *Limita�
 **D6.4 — Quadro de acompanhamento.** Físico (avanço da etapa) × financeiro (apropriado ÷ orçado) por etapa e por prestador (medido ÷ contrato × avanço no cronograma). Alerta quando o financeiro passa do físico em mais de 10 pontos (valor provisório).
 
 **D6.5 — Aprovação com desvio.** Se CPI ou SPI < 1 (Gestão: só SPI), aprovar a medição exige a análise da causa, guardada em `analiseDesvio`.
+
+### Passo 7 — Indicadores, alertas e agenda
+
+**D7.1 — Indicadores no resumo** (só aparecem com orçamento importado): orçamento revisado com EAC, CPI (só Administração), SPI, avanço físico × orçamento consumido (só Administração), comprometido/apropriado/pago ÷ orçado e aditivos ÷ contratado (base). Alerta amarelo de aditivos acima de 10% do base (valor provisório).
+
+**D7.2 — Alertas novos.** Medição em análise há mais de `diasEscalar` dias; medição bloqueada por documentos; conta vencida (crítico) e a vencer em 7 dias; aporte previsto e não recebido; aditivo aguardando o cliente há mais de `diasEscalar` dias;
+CPI/SPI < 1 (crítico se < 0,9); orçamento sem cronograma; exposição acima do orçado; custo sem orçamento. Todos entram no painel geral automaticamente.
+
+**D7.3 — Agenda (área Financeiro).** Vencimentos de contas abertas, aportes previstos ainda não recebidos e o **último dia útil do mês** (segunda a sexta; feriados não são considerados) quando há medição em rascunho, para o mês atual e o seguinte.
+
+**D7.4 — Exclusão em cascata.** Excluir a obra apaga também `orcamentos`, `orcItens`, `aditivos`, `medicoes`, `contasPagar` e `aportes` dela, sem tocar nos de outras obras.

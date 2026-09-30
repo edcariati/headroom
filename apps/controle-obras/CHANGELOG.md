@@ -11,6 +11,7 @@
 - **Passo 4:** aba Financeiro: contas a pagar (geradas por medição, compra e locação), aportes do cliente e fluxo de caixa mensal com gráfico. Na Gestão, desembolso previsto do cliente.
 - **Passo 5:** painel orçado × comprometido × apropriado × pago por etapa, com “Sem etapa”, “Sem orçamento” e “Acima do orçado”.
 - **Passo 6:** aba Físico-financeiro com BAC, PV, EV, AC, CPI, SPI, EAC, três curvas S em SVG e quadro físico × financeiro. Aprovação de medição com CPI/SPI abaixo de 1 exige análise.
+- **Passo 7:** indicadores de custo e prazo no resumo, alertas e agenda financeiros, cascata de exclusão das coleções novas.
 
 ## Fase 3 — Suprimentos
 Fornecedores, compras, estoque, locações, contratos de prestador, termos de frente e danos.

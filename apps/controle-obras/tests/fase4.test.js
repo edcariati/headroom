@@ -759,3 +759,95 @@ test('fase 4 · passo 6 · aprovar medição com CPI ou SPI abaixo de 1 exige a 
   assert.equal(m.status, 'aprovada');
   assert.match(m.analiseDesvio, /Chuva/);
 });
+
+/* ---------------- passo 7: indicadores, alertas, agenda e cascata ---------------- */
+test('fase 4 · passo 7 · indicadores no resumo da obra', async () => {
+  const ad = { a1: { obraId: 'o1', numero: 1, descricao: 'x', tipo: 'acrescimo', status: 'assinado', itens: [{ descricao: 'Extra', unidade: 'vb', quantidade: 1, precoUnitario: 500, total: 500, etapa: 7, tipoItem: 'empreitada' }], assinatura: { data: dia(0), ref: 'ok' } } };
+  const e = await abrir({ seed: seedEV({ extra: { aditivos: ad } }), hash: '#/obra/o1/resumo' });
+  const t = e.app();
+  assert.match(t, /Orçamento revisado.*R\$\s*10\.500,00/);
+  assert.match(t, /CPI.*Valor agregado \(EV\) ÷ custo real \(AC\)/);
+  assert.match(t, /SPI/);
+  assert.match(t, /Avanço físico × orçamento consumido/);
+  assert.match(t, /Comprometido, apropriado e pago/);
+  assert.match(t, /Aditivos ÷ valor contratado.*5%/);
+  const g = await abrir({ seed: seedEV({ gestao: true }), hash: '#/obra/o1/resumo' });
+  assert.doesNotMatch(g.app(), /Valor agregado \(EV\) ÷ custo real/);
+});
+
+test('fase 4 · passo 7 · alertas de medição, contas, aportes e aditivos', async () => {
+  const antigo = new Date(); antigo.setDate(antigo.getDate() - 10);
+  const seed = seedMed({
+    medicoes: { m1: med({ analiseDesde: antigo.toISOString() }) },
+    contasPagar: { c1: conta({ descricao: 'Vencida', valor: 800, vencimento: dia(-2) }), c2: conta({ descricao: 'Próxima', valor: 200, vencimento: dia(3) }), c3: conta({ descricao: 'Longe', valor: 999, vencimento: dia(40) }) },
+    aportes: { a1: { obraId: 'o1', descricao: 'Aporte', valorPrevisto: 5000, dataPrevista: dia(-4), valorRecebido: null, dataRecebida: '' } },
+    aditivos: { ad1: { obraId: 'o1', numero: 1, descricao: 'x', tipo: 'acrescimo', status: 'aguardando_cliente', enviadoEm: antigo.toISOString(), itens: [] } }
+  }, {});
+  const e = await abrir({ seed, hash: '#/obra/o1/resumo' });
+  const t = e.app();
+  assert.match(t, /1 medição em análise há mais de 7 dias/);
+  assert.match(t, /1 conta a pagar vencida, somando R\$\s*800,00/);
+  assert.match(t, /1 conta vence em até 7 dias, somando R\$\s*200,00/);
+  assert.match(t, /1 aporte previsto e não recebido: R\$\s*5\.000,00/);
+  assert.match(t, /1 aditivo aguardando o cliente há mais de 7 dias/);
+});
+
+test('fase 4 · passo 7 · medição bloqueada por documentos do prestador', async () => {
+  const e = await abrir({ seed: seedMed({ medicoes: { m1: med() } }, { docs: false }), hash: '#/obra/o1/resumo' });
+  assert.match(e.app(), /1 medição bloqueada por documentos do prestador não conferidos/);
+});
+
+test('fase 4 · passo 7 · alertas de CPI/SPI, orçamento sem cronograma, acima do orçado e sem orçamento', async () => {
+  const seed = seedEV({ extra: { atividades: { a7: { obraId: 'o1', nome: 'Alvenaria', etapa: 7, inicio: dia(-9), fim: dia(10), avanco: 40 } },
+    compras: { c1: compraP({ etapa: 7, status: 'conferido', pedido: { data: dia(-3), fornecedorId: 'f1', total: 7000, entregaPrevista: dia(-1) }, conf: { data: dia(0), resultado: 'conferido' } }), c2: compraP({ etapa: 15, status: 'pedido', pedido: { data: dia(-3), fornecedorId: 'f1', total: 100, entregaPrevista: dia(2) } }) } } });
+  const e = await abrir({ seed, hash: '#/obra/o1/resumo' });
+  const t = e.app();
+  assert.match(t, /CPI 0,34 e SPI 0,8 abaixo de 1: avisar o cliente e registrar a causa/);
+  assert.match(t, /Orçamento sem cronograma nas etapas 8/);
+  assert.match(t, /acima do orçado na\(s\) etapa\(s\) 7/);
+  assert.match(t, /Custo lançado sem orçamento na\(s\) etapa\(s\) 15/);
+});
+
+test('fase 4 · passo 7 · sem problemas, sem alertas novos; o painel geral reúne os alertas', async () => {
+  const limpo = await abrir({ seed: seedEV({ extra: { compras: {} } }), hash: '#/obra/o1/resumo' });
+  assert.doesNotMatch(limpo.app(), /conta a pagar vencida|acima do orçado|sem cronograma/);
+  const seed = seedFin({ contasPagar: { c1: conta({ descricao: 'Vencida', valor: 800, vencimento: dia(-2) }) } });
+  const e = await abrir({ seed, hash: '#/painel' });
+  assert.match(e.app(), /Casa Adm.*conta a pagar vencida/);
+});
+
+test('fase 4 · passo 7 · agenda: vencimentos, aportes e fechamento mensal', async () => {
+  const seed = seedMed({ medicoes: { m1: med({ status: 'rascunho' }) }, contasPagar: { c1: conta({ descricao: 'Concreteira', valor: 800, vencimento: dia(0) }) }, aportes: { a1: { obraId: 'o1', descricao: '2º aporte', valorPrevisto: 5000, dataPrevista: dia(0) } } });
+  const e = await abrir({ seed, hash: '#/obra/o1/agenda' });
+  assert.match(e.app(), /Vence: Concreteira/);
+  assert.match(e.app(), /Aporte previsto: 2º aporte/);
+  assert.equal(e.x.ultimoDiaUtil('2026-09'), '2026-09-30');
+  assert.equal(e.x.ultimoDiaUtil('2026-08'), '2026-08-31');
+  assert.equal(e.x.ultimoDiaUtil('2026-05'), '2026-05-29');    // 31/05 é domingo
+});
+
+test('fase 4 · passo 7 · excluir a obra também apaga orçamento, aditivos, medições, contas e aportes', async () => {
+  const cols = ['orcamentos', 'orcItens', 'aditivos', 'medicoes', 'contasPagar', 'aportes'];
+  const seed = { obras: { o1: obra(), o2: obra({ nome: 'Outra' }) } };
+  cols.forEach((c) => { seed[c] = { a1: { obraId: 'o1', n: 1 }, b1: { obraId: 'o2', n: 1 } }; });
+  const e = await abrir({ seed, hash: '#/obra/o1/resumo' });
+  await e.click('[data-act="obra-editar"]');
+  await e.click('[data-act="obra-excluir"]');
+  await e.click('[data-x="1"]');
+  cols.forEach((c) => {
+    assert.equal(e.linhas(c).filter((x) => x.obraId === 'o1').length, 0, c + ' ainda tem registros da obra excluída');
+    assert.equal(e.linhas(c).filter((x) => x.obraId === 'o2').length, 1, c + ' perdeu registros de outra obra');
+  });
+});
+
+test('fase 4 · passo 7 · campos novos da obra são editáveis e guardados', async () => {
+  const e = await abrir({ seed: { obras: { o1: obraAdm() } }, hash: '#/obra/o1/resumo' });
+  await e.click('[data-act="obra-editar"]');
+  assert.equal(e.doc.querySelector('[name="tolerAvanco"]').value, '5');
+  assert.equal(e.doc.querySelector('[name="abcA"]').value, '80');
+  await e.submit({ nome: 'Casa Adm', tolerAvanco: '8', abcA: '70', abcB: '90' });
+  const o = e.linhas('obras')[0];
+  assert.equal(o.tolerAvanco, 8);
+  assert.equal(o.abcA, 70);
+  assert.equal(o.abcB, 90);
+});
