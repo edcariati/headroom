@@ -3176,9 +3176,7 @@ function contratoClienteHtml(o){
     +'<div class="tbl-scroll"><table class="tbl"><thead><tr><th>Competência</th><th class="num">Receita prevista</th></tr></thead><tbody>'+ms.map(function(m){ return '<tr><td>'+mesNome(m)+'</td><td class="num">'+brl(receitaPrevista(o,m))+'</td></tr>'; }).join('')+'</tbody></table></div></section>';
 }
 
-/* ---------- aba DRE da obra (o DRE em si vem no passo 2) e página DRE ---------- */
-function tDRE(o){ ensureEmpresas(); return '<div class="sec-h"><div><h2>DRE da obra</h2></div></div>'+contratoClienteHtml(o); }
-function vDRE(){ ensureEmpresas(); return '<div class="wrap"><h1>DRE</h1><p class="muted small" style="margin-top:4px">Resultado gerencial por obra e por empresa.</p>'+empresasHtml()+'</div>'; }
+/* ---------- (aba e página DRE definidas mais adiante) ---------- */
 Object.assign(A5,{
   'emp-nova':function(){ empresaForm(); },
   'emp-editar':function(d){ empresaForm(G('empresas',d.id)); },
@@ -3186,6 +3184,152 @@ Object.assign(A5,{
   'cc-editar':function(d){ contratoClienteForm(d.oid); },
   'cc-excluir':async function(d){ var ok=await confirmDlg('Excluir o contrato do cliente?','<p>A receita prevista da obra deixa de existir. Lançamentos já feitos não são apagados.</p>','Excluir',true); if(ok){ await Store.del('contratosCliente','cc_'+d.oid); closeDlg(); } }
 });
+
+/* ================= LANÇAMENTOS E DRE ================= */
+var LANC_CAT={receita:'Receita', imposto:'Imposto sobre a receita', custo_direto:'Custo direto', despesa_geral:'Despesa geral'};
+var LANC_SUG={receita:['Fee de gestão','Honorários','Remuneração conforme contrato'], imposto:['Impostos sobre a receita'], custo_direto:['Folha da equipe alocada','Deslocamento','Software da obra','Materiais de escritório da obra'], despesa_geral:['Aluguel do escritório','Contabilidade','Software','Folha administrativa']};
+var ORIGEM_LANC={manual:'Manual', contrato:'Contrato', imposto_auto:'Imposto automático'};
+function mesesEntre(a,b){ var out=[]; for(var m=a; m<=b && out.length<240; m=mesAdd(m,1)) out.push(m); return out; }
+function perPadrao(){ var m=hoje().slice(0,7); return {ini:m, fim:m}; }
+function perAnterior(p){ var n=mesesEntre(p.ini,p.fim).length||1; return {ini:mesAdd(p.ini,-n), fim:mesAdd(p.ini,-1)}; }
+function perRotulo(p){ return p.ini===p.fim?mesNome(p.ini):mesNome(p.ini)+' a '+mesNome(p.fim); }
+function lancDaObra(oid){ return byObra('lancamentos',oid); }
+function lancDeEmpresa(eid){ return L('lancamentos').filter(function(l){ return (l.empresaId||'')===(eid||''); }); }
+function somaLanc(lista,cat,mes){ return r2(lista.filter(function(l){ return l.categoria===cat && (!mes||l.competencia===mes); }).reduce(function(s,l){ return s+(Number(l.valor)||0); },0)); }
+function receitaBrutaMes(oid,mes){ return somaLanc(lancDaObra(oid),'receita',mes); }
+function empresaOuPadrao(eid){ return (eid&&G('empresas',eid))||{id:eid||'', criterioRateio:'receita', rateioManual:{}}; }
+function rateioMes(eid,mes){
+  var emp=empresaOuPadrao(eid), obras=obrasDaEmpresa(eid);
+  var total=somaLanc(lancDeEmpresa(eid).filter(function(l){ return !l.obraId; }),'despesa_geral',mes);
+  if(!total) return {total:0, porObra:{}, naoRateado:0};
+  if(!obras.length) return {total:total, porObra:{}, naoRateado:total};
+  var crit=emp.criterioRateio||'receita', pesos={};
+  obras.forEach(function(o){ pesos[o.id]=crit==='receita'?receitaBrutaMes(o.id,mes):(crit==='manual'?(Number(emp.rateioManual&&emp.rateioManual[o.id])||0):1); });
+  if(!Object.keys(pesos).some(function(k){ return pesos[k]>0; })) obras.forEach(function(o){ pesos[o.id]=1; });   // sem base de cálculo: partes iguais
+  return {total:total, porObra:repartir(total,pesos), naoRateado:0};
+}
+COBX.rateioMes=rateioMes;
+function mesesRelevantes(oid){
+  var o=G('obras',oid), M={};
+  lancDaObra(oid).forEach(function(l){ M[l.competencia]=1; });
+  lancDeEmpresa(o?o.empresaId:'').forEach(function(l){ if(!l.obraId&&l.categoria==='despesa_geral') M[l.competencia]=1; });
+  return Object.keys(M).sort();
+}
+function dreObra(oid,ini,fim){
+  var o=G('obras',oid), ls=lancDaObra(oid), r={receita:0,impostos:0,custos:0,despesas:0};
+  mesesRelevantes(oid).filter(function(m){ return m>=ini&&m<=fim; }).forEach(function(m){
+    r.receita=r2(r.receita+somaLanc(ls,'receita',m)); r.impostos=r2(r.impostos+somaLanc(ls,'imposto',m)); r.custos=r2(r.custos+somaLanc(ls,'custo_direto',m));
+    r.despesas=r2(r.despesas+((rateioMes(o?o.empresaId:'',m).porObra[oid])||0));
+  });
+  return dreLinhas(r);
+}
+function dreLinhas(r){
+  r.receitaLiquida=r2(r.receita-r.impostos); r.resultadoBruto=r2(r.receitaLiquida-r.custos); r.resultado=r2(r.resultadoBruto-r.despesas);
+  r.margem=r.receitaLiquida>0?r.resultado/r.receitaLiquida:null; return r;
+}
+COBX.dreObra=dreObra; COBX.dreLinhas=dreLinhas;
+function repasseObra(oid,ini,fim){
+  var o=G('obras',oid), r={compras:0,medicoes:0,locacoes:0,total:0}; if(!o||!modAdm(o)) return r;
+  var no=function(d){ return d&&d.slice(0,7)>=ini&&d.slice(0,7)<=fim; };
+  byObra('compras',oid).forEach(function(c){ if(c.status==='pago'&&c.pedido&&no(c.pagoEm)) r.compras=r2(r.compras+c.pedido.total); });
+  byObra('medicoes',oid).forEach(function(m){ if(m.status==='paga'&&no(m.pagaEm)) r.medicoes=r2(r.medicoes+(m.valorLiquido!=null?m.valorLiquido:medBruto(m))); });
+  byObra('contasPagar',oid).forEach(function(c){ if(c.origem==='locacao'&&c.status==='paga'&&no(c.pagoEm)) r.locacoes=r2(r.locacoes+c.valor); });
+  r.total=r2(r.compras+r.medicoes+r.locacoes); return r;
+}
+COBX.repasseObra=repasseObra;
+
+/* ---------- sugestões de fechamento mensal ---------- */
+function lancExiste(oid,mes,origem){ return lancDaObra(oid).filter(function(l){ return l.competencia===mes && l.origem===origem; })[0]||null; }
+function sugestoesMes(o,mes){
+  var out=[], jaFeitas=[];
+  if(!o.empresaId) return {sugestoes:[], jaFeitas:[], erro:'Defina a empresa da obra para lançar receita e imposto.'};
+  var emp=G('empresas',o.empresaId), rp=receitaPrevista(o,mes), exc=lancExiste(o.id,mes,'contrato');
+  if(exc) jaFeitas.push(exc); else if(rp>0) out.push({categoria:'receita', subcategoria:'Remuneração conforme contrato', valor:rp, origem:'contrato', descricao:'Receita prevista do contrato: '+mesNome(mes)});
+  var exi=lancExiste(o.id,mes,'imposto_auto');
+  if(exi) jaFeitas.push(exi);
+  else if(emp&&emp.aliquotaImpostos>0){
+    var base=r2(receitaBrutaMes(o.id,mes)+(exc?0:(rp>0?rp:0)));
+    if(base>0) out.push({categoria:'imposto', subcategoria:'Impostos sobre a receita', valor:r2(base*emp.aliquotaImpostos/100), origem:'imposto_auto', descricao:'Imposto de '+String(emp.aliquotaImpostos).replace('.',',')+'% sobre a receita de '+mesNome(mes)});
+  }
+  return {sugestoes:out, jaFeitas:jaFeitas, erro:''};
+}
+COBX.sugestoesMes=sugestoesMes;
+async function confirmarSugestao(o,mes,s){
+  await Store.add('lancamentos',{empresaId:o.empresaId, obraId:o.id, competencia:mes, categoria:s.categoria, subcategoria:s.subcategoria, valor:s.valor, descricao:s.descricao, origem:s.origem, anexos:[], criadoEm:new Date().toISOString(), por:Store.uid||null});
+}
+
+/* ---------- lançamentos ---------- */
+function lancForm(l, fixo){
+  fixo=fixo||{};
+  var obraFixa=fixo.obraId?G('obras',fixo.obraId):(l&&l.obraId?G('obras',l.obraId):null), empId=obraFixa?obraFixa.empresaId:(fixo.empresaId||(l&&l.empresaId)||'');
+  if(obraFixa&&!obraFixa.empresaId){ blockDlg('Defina a empresa da obra',['O lançamento pertence a uma empresa. Edite a obra e escolha a empresa do grupo.'],'Obra sem empresa'); return; }
+  var obrasEmp=empId?obrasDaEmpresa(empId):[], cats=obraFixa?['receita','imposto','custo_direto']:Object.keys(LANC_CAT);
+  openForm({title:l?'Editar lançamento':'Novo lançamento', wide:true, intro:esc(empresaNome(empId)||'Sem empresa')+(obraFixa?' — '+esc(obraFixa.nome):''),
+    fields:[[{name:'categoria',label:'Categoria',type:'select',required:true,options:cats.map(function(k){ return [k,LANC_CAT[k]]; }),value:l?l.categoria:cats[0]},{name:'competencia',label:'Competência',type:'month',required:true,value:l?l.competencia:hoje().slice(0,7)}],
+      obraFixa?null:{name:'obraId',label:'Obra (vazio = despesa geral da empresa)',type:'select',options:selOpts(obrasEmp.map(function(o){ return [o.id,o.nome]; }),'Sem obra (despesa geral)'),value:l&&l.obraId},
+      {name:'subcategoria',label:'Subcategoria',value:l&&l.subcategoria,hint:'Sugestões: '+Object.keys(LANC_SUG).map(function(k){ return LANC_SUG[k].join(', '); }).join(' · ')},
+      [{name:'valor',label:'Valor (R$, sempre positivo)',type:'number',min:0,step:'0.01',required:true,value:l&&l.valor},{name:'descricao',label:'Descrição',value:l&&l.descricao}],
+      {name:'anexos',label:'Comprovante (foto ou PDF)',type:'anexos',value:(l&&l.anexos)||[]}].filter(Boolean),
+    extra:l?'<button type="button" class="btn danger" data-act="lanc-excluir" data-id="'+l.id+'" style="margin-right:auto">Excluir</button>':'',
+    onSubmit:async function(v){
+      if(!empId) return 'Escolha uma empresa: a obra precisa ter empresa.';
+      if(!/^\d{4}-\d{2}$/.test(v.competencia||'')) return 'Informe a competência (mês e ano).';
+      if(!(v.valor>0)) return 'Informe o valor, sempre positivo (o sinal vem da categoria).';
+      var obraId=obraFixa?obraFixa.id:(v.obraId||'');
+      if(v.categoria==='despesa_geral'&&obraId) return 'Despesa geral não tem obra: ela é rateada entre as obras da empresa.';
+      if(v.categoria!=='despesa_geral'&&!obraId) return 'Receita, imposto e custo direto precisam de uma obra.';
+      var rec=Object.assign({origem:'manual', criadoEm:new Date().toISOString(), por:Store.uid||null}, l||{}, {empresaId:empId, obraId:obraId, competencia:v.competencia, categoria:v.categoria, subcategoria:(v.subcategoria||'').trim(), valor:r2(v.valor), descricao:(v.descricao||'').trim(), anexos:v.anexos||[]});
+      delete rec.id; await Store.set('lancamentos', l?l.id:nid(), rec);
+    }});
+}
+
+/* ---------- aba DRE da obra ---------- */
+function drePeriodoObra(){ return ui.drePer||perPadrao(); }
+function dreTabelaHtml(cols){
+  var linhas=[['Receita bruta','receita',''],['(−) Impostos sobre a receita','impostos',''],['= Receita líquida','receitaLiquida','t'],['(−) Custos diretos','custos',''],['= Resultado bruto','resultadoBruto','t'],['(−) Despesas gerais rateadas','despesas',''],['= Resultado do período','resultado','t2'],['Margem líquida (sobre a receita líquida)','margem','m']];
+  return '<div class="tbl-scroll"><table class="tbl"><thead><tr><th></th>'+cols.map(function(c){ return '<th class="num">'+esc(c.t)+'</th>'; }).join('')+'</tr></thead><tbody>'+linhas.map(function(l){
+    return '<tr'+(l[2]==='t2'?' style="background:var(--surface2)"':'')+'><td'+(l[2]?' style="font-weight:600"':'')+'>'+l[0]+'</td>'+cols.map(function(c){ var v=c.d[l[1]]; return '<td class="num"'+(l[2]?' style="font-weight:600"':'')+(l[1]==='resultado'&&v<0?' style="color:var(--crit);font-weight:600"':'')+'>'+(l[1]==='margem'?(v==null?'—':(Math.round(v*1000)/10).toString().replace('.',',')+'%'):brl(v))+'</td>'; }).join('')+'</tr>';
+  }).join('')+'</tbody></table></div>';
+}
+function avisosDre(){ return '<div class="callout" style="margin:14px 0"><strong>Informação restrita à diretoria; o app ainda não separa perfis.</strong><p class="small">O DRE é gerencial, para acompanhar o resultado, e não é escrituração contábil. O tratamento correto do regime, do repasse e dos impostos deve ser confirmado com o contador.</p></div>'; }
+function tDRE(o){
+  ensureEmpresas();
+  var oid=o.id, per=drePeriodoObra(), ant=perAnterior(per), adm=modAdm(o);
+  var cols=[{t:perRotulo(per), d:dreObra(oid,per.ini,per.fim)},{t:'Período anterior', d:dreObra(oid,ant.ini,ant.fim)},{t:'Acumulado até '+mesCurto(per.fim), d:dreObra(oid,'0000-01',per.fim)}];
+  var presets='<div class="row" style="gap:6px"><button class="btn sm" data-act="dre-preset" data-p="mes">Mês atual</button><button class="btn sm" data-act="dre-preset" data-p="trimestre">Trimestre</button><button class="btn sm" data-act="dre-preset" data-p="ano">Ano</button><label class="small muted">de <input type="month" data-chg="dre-per" data-k="ini" value="'+per.ini+'" aria-label="Início do período" style="padding:6px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--ink)"></label><label class="small muted">até <input type="month" data-chg="dre-per" data-k="fim" value="'+per.fim+'" aria-label="Fim do período" style="padding:6px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--ink)"></label></div>';
+  var sm=ui.sugMes||hoje().slice(0,7), sg=sugestoesMes(o,sm), desc=ui.sugDescartadas||{};
+  var sugHtml='<section class="card sec"><div class="card-h"><div><h2>Fechamento do mês</h2><p class="muted small">O app sugere a receita do contrato e o imposto; nada é lançado sem você confirmar.</p></div><label class="small muted">Mês <input type="month" data-chg="dre-sug" value="'+sm+'" aria-label="Mês do fechamento" style="padding:6px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--ink)"></label></div><div class="pad">'
+    +(sg.erro?'<div class="callout">'+esc(sg.erro)+'</div>':'')
+    +sg.jaFeitas.map(function(l){ return '<p class="small"><span class="chip ok">Já lançado</span> '+LANC_CAT[l.categoria]+': '+brl(l.valor)+' ('+ORIGEM_LANC[l.origem]+')</p>'; }).join('')
+    +(sg.sugestoes.filter(function(x){ return !desc[o.id+sm+x.origem]; }).length?'<div class="row" style="margin:8px 0"><button class="btn primary sm" data-act="sug-todas" data-oid="'+oid+'" data-write>Confirmar todas</button></div>':'')
+    +sg.sugestoes.filter(function(x){ return !desc[o.id+sm+x.origem]; }).map(function(x){ return '<div class="ficha" style="grid-template-columns:1fr auto"><div><strong>'+LANC_CAT[x.categoria]+': '+brl(x.valor)+'</strong><div class="tiny muted">'+esc(x.descricao)+'</div></div><div class="row" style="gap:6px"><button class="btn sm primary" data-act="sug-ok" data-oid="'+oid+'" data-origem="'+x.origem+'" data-write>Confirmar</button><button class="btn sm" data-act="sug-editar" data-oid="'+oid+'" data-origem="'+x.origem+'" data-write>Editar</button><button class="btn sm ghost" data-act="sug-descartar" data-oid="'+oid+'" data-origem="'+x.origem+'">Descartar</button></div></div>'; }).join('')
+    +(!sg.erro&&!sg.sugestoes.length&&!sg.jaFeitas.length?'<p class="muted small">Nada a sugerir para '+mesNome(sm)+': sem contrato do cliente com receita nessa competência.</p>':'')+'</div></section>';
+  var ls=lancDaObra(oid).filter(function(l){ return l.competencia>=per.ini&&l.competencia<=per.fim; }).sort(function(a,b){ return a.competencia<b.competencia?1:-1; });
+  var lancHtml='<section class="card sec"><div class="card-h"><h2>Lançamentos do período</h2><button class="btn primary sm" data-act="lanc-novo" data-oid="'+oid+'" data-write>+ Lançamento</button></div>'+(ls.length?'<div class="tbl-scroll"><table class="tbl"><thead><tr><th>Competência</th><th>Categoria</th><th>Descrição</th><th class="num">Valor</th><th></th></tr></thead><tbody>'+ls.map(function(l){ return '<tr><td>'+mesCurto(l.competencia)+'</td><td>'+LANC_CAT[l.categoria]+'<div class="tiny muted">'+esc(l.subcategoria||'')+' · '+ORIGEM_LANC[l.origem||'manual']+'</div></td><td>'+esc(short(l.descricao,60))+anexosHtml(l.anexos)+'</td><td class="num">'+brl(l.valor)+'</td><td><button class="btn sm ghost" data-act="lanc-editar" data-id="'+l.id+'" data-write>Editar</button></td></tr>'; }).join('')+'</tbody></table></div>':'<p class="muted pad">Nenhum lançamento neste período.</p>')+'</section>';
+  var rp=adm?repasseObra(oid,per.ini,per.fim):null;
+  var repHtml=adm?'<section class="card sec"><div class="card-h"><div><h2>Recursos de terceiros movimentados (repasse)</h2><p class="muted small">Dinheiro do cliente que passou pela Cariati no período. <strong>Não é receita nem custo da Cariati e está fora do resultado acima.</strong></p></div></div><div class="tbl-scroll"><table class="tbl"><tbody><tr><td>Compras pagas</td><td class="num">'+brl(rp.compras)+'</td></tr><tr><td>Medições pagas (líquido)</td><td class="num">'+brl(rp.medicoes)+'</td></tr><tr><td>Locações pagas</td><td class="num">'+brl(rp.locacoes)+'</td></tr><tr style="font-weight:600"><td>Total movimentado</td><td class="num">'+brl(rp.total)+'</td></tr></tbody></table></div></section>':'';
+  return '<div class="sec-h"><div><h2>DRE da obra</h2><p class="muted small">'+esc(empresaNome(o.empresaId)||'Sem empresa')+' · '+perRotulo(per)+'</p></div>'+presets+'</div>'+avisosDre()
+    +'<section class="card">'+dreTabelaHtml(cols)+'</section>'+repHtml+sugHtml+lancHtml+contratoClienteHtml(o);
+}
+Object.assign(A5,{
+  'dre-preset':function(d){ var h=hoje().slice(0,7), y=h.slice(0,4); ui.drePer=d.p==='mes'?{ini:h,fim:h}:(d.p==='trimestre'?{ini:mesAdd(h,-2),fim:h}:{ini:y+'-01',fim:y+'-12'}); render(); },
+  'sug-ok':async function(d){ var o=G('obras',d.oid), sm=ui.sugMes||hoje().slice(0,7), s=sugestoesMes(o,sm).sugestoes.filter(function(x){ return x.origem===d.origem; })[0]; if(s){ await confirmarSugestao(o,sm,s); toast('Lançamento confirmado.'); } },
+  'sug-todas':async function(d){ var o=G('obras',d.oid), sm=ui.sugMes||hoje().slice(0,7), desc=ui.sugDescartadas||{}; var lista=sugestoesMes(o,sm).sugestoes.filter(function(x){ return !desc[o.id+sm+x.origem]; }); for(var i=0;i<lista.length;i++) await confirmarSugestao(o,sm,lista[i]); toast(plural(lista.length,'lançamento confirmado','lançamentos confirmados')+'.'); },
+  'sug-descartar':function(d){ var sm=ui.sugMes||hoje().slice(0,7); ui.sugDescartadas=ui.sugDescartadas||{}; ui.sugDescartadas[d.oid+sm+d.origem]=true; render(); },
+  'sug-editar':function(d){
+    var o=G('obras',d.oid), sm=ui.sugMes||hoje().slice(0,7), s=sugestoesMes(o,sm).sugestoes.filter(function(x){ return x.origem===d.origem; })[0]; if(!s) return;
+    openForm({title:'Editar antes de confirmar', intro:esc(s.descricao), fields:[{name:'valor',label:'Valor (R$)',type:'number',min:0,step:'0.01',required:true,value:s.valor}], submit:'Confirmar lançamento',
+      onSubmit:async function(v){ if(!(v.valor>0)) return 'Informe o valor.'; await confirmarSugestao(o,sm,Object.assign({}, s, {valor:r2(v.valor)})); }});
+  },
+  'lanc-novo':function(d){ lancForm(null,{obraId:d.oid}); },
+  'lanc-editar':function(d){ lancForm(G('lancamentos',d.id)); },
+  'lanc-excluir':async function(d){ var ok=await confirmDlg('Excluir lançamento?','<p>O valor sai do DRE.</p>','Excluir',true); if(ok){ await Store.del('lancamentos',d.id); closeDlg(); } }
+});
+document.addEventListener('change', function(e){
+  var el=e.target.closest('[data-chg="dre-per"]'); if(el){ var p=Object.assign({}, drePeriodoObra()); p[el.dataset.k]=el.value; if(p.ini>p.fim){ if(el.dataset.k==='ini') p.fim=p.ini; else p.ini=p.fim; } ui.drePer=p; render(); return; }
+  var s=e.target.closest('[data-chg="dre-sug"]'); if(s&&s.value){ ui.sugMes=s.value; render(); }
+});
+function vDRE(){ ensureEmpresas(); return '<div class="wrap"><h1>DRE</h1><p class="muted small" style="margin-top:4px">Resultado gerencial por obra e por empresa.</p>'+avisosDre()+empresasHtml()+'</div>'; }
 /* ================= VISÕES ================= */
 var ui={semana:{}, ocFiltro:'todas', det:{}, ganttScroll:0, agMes:hoje().slice(0,7), agDia:hoje(), agArea:'todas', docMes:{}, orcBusca:'', orcEtapa:'', orcTipo:'', finFiltro:'abertas'};
 var lastKey=null;

@@ -162,3 +162,20 @@ A **alíquota fica vazia** (valor provisório): sem ela o app não sugere impost
 percentual do custo × apropriado do mês (só Administração; na Gestão o app recusa).
 
 **D-5.1.3 — Rateio manual.** Digitado como “Nome da obra; percentual”, uma obra por linha, só obras da própria empresa, somando 100%. Fica guardado na empresa.
+
+### Passo 2 — Lançamentos, rateio e DRE por obra
+
+**D-5.2.1 — Lançamentos.** Valor sempre positivo; o sinal vem da categoria. Receita, imposto e custo direto **precisam de obra**; despesa geral **não tem obra** (é da empresa e é rateada). A empresa do lançamento vem da obra; obra sem empresa não aceita lançamento (o app pede para definir a empresa).
+
+**D-5.2.2 — Sugestão no fechamento do mês.** Nunca automática: o app lista a receita do contrato (competência do mês) e o imposto (alíquota da empresa × receita bruta do mês, incluindo a receita sugerida) e o usuário confirma todas, edita ou descarta.
+Se já existe lançamento de mesma origem (`contrato` ou `imposto_auto`) para a obra e a competência, ele é mostrado como “já lançado” e **não se sugere de novo**. O imposto é sugerido uma vez; se a receita mudar depois, ele não se recalcula sozinho (edite o lançamento).
+Descartar vale só na sessão atual (a sugestão volta ao reabrir), para o descarte nunca esconder receita de vez.
+
+**D-5.2.3 — Rateio das despesas gerais (calculado na hora, nunca gravado).** Por empresa: `receita` (proporcional à receita bruta do mês de cada obra), `igual` ou `manual` (percentuais da empresa). Quando o critério não tem base (receita zero no mês, ou manual sem percentuais), o app **cai para partes iguais** para não perder a despesa.
+Os centavos de sobra vão para a obra de maior peso, então a soma das partes é sempre igual à despesa. Empresa sem nenhuma obra: a despesa fica “não rateada” (aparece no DRE da empresa).
+
+**D-5.2.4 — Períodos.** Mês atual, trimestre (3 meses até o atual), ano ou intervalo livre; comparação com o período anterior de mesmo tamanho e acumulado desde o primeiro lançamento.
+
+**D-5.2.5 — Repasse (Administração).** Compras, medições (líquido) e locações **pagas no período**, mostradas num bloco separado, informativo, **fora do resultado**. Na Gestão o bloco não aparece.
+
+**D-5.2.6 — Avisos permanentes.** A tela do DRE mostra: “Informação restrita à diretoria; o app ainda não separa perfis” e o aviso de confirmação com o contador. **Risco registrado:** enquanto não houver perfis (fase 6), qualquer pessoa que abre o app vê o DRE.
