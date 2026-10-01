@@ -9,7 +9,8 @@ var CDN = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2';
 
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) {
-    return Promise.all([c.addAll(SHELL), c.add(new Request(CDN, { mode: 'no-cors' }))]);
+    // a biblioteca externa é guardada sem travar a instalação (se a rede falhar agora, entra no 1º uso)
+    return c.addAll(SHELL).then(function () { return c.add(new Request(CDN, { mode: 'no-cors' })).catch(function () {}); });
   }));
 });
 self.addEventListener('activate', function (e) {
@@ -24,6 +25,10 @@ self.addEventListener('fetch', function (e) {
   if (url.hostname.indexOf('supabase.co') >= 0 || url.pathname.indexOf('/_blob/') === 0) return;   // dados e arquivos: nunca do cache do app
   var mesmaOrigem = url.origin === self.location.origin, ehCdn = req.url === CDN;
   if (!mesmaOrigem && !ehCdn) return;
+  if (ehCdn) {   // rede primeiro (e guarda cópia); sem rede, usa a cópia guardada
+    e.respondWith(fetch(req).then(function (res) { var c = res.clone(); caches.open(CACHE).then(function (ch) { ch.put(req, c); }); return res; }).catch(function () { return caches.match(req); }));
+    return;
+  }
   e.respondWith(caches.match(req, { ignoreSearch: true }).then(function (r) {
     if (r) return r;
     return fetch(req).catch(function () {

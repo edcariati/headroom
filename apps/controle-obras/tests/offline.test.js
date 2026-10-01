@@ -10,7 +10,7 @@ const seedO = (extra) => Object.assign({ obras: { o1: { obra_id: 'o1', dados: ob
 const toast = (e) => e.doc.getElementById('toast').textContent;
 const Off = (e) => e.x.Off;
 // abre de novo o "mesmo aparelho": mesmo banco do navegador, mesmo servidor falso, mesma sessão guardada
-const reabrir = (e, opts) => abrir(Object.assign({ supa: { __falso: e.supa }, idb: e.idb, ls: { 'cob.off.sessao': e.ls('cob.off.sessao') }, hash: '#/painel' }, opts || {}));
+const reabrir = (e, opts) => { if (opts && opts.offline) e.supa.rede.ligada = false; return abrir(Object.assign({ supa: { __falso: e.supa }, idb: e.idb, ls: { 'cob.off.sessao': e.ls('cob.off.sessao') }, hash: '#/painel' }, opts || {})); };
 const idbSemLock = async (e, loja) => { await e.x.Off.abrir('u-123'); const v = await e.x.Off.todos(loja); e.x.Off.db.close(); return v; };
 
 /* ---------- aplicativo instalável (PWA) ---------- */
@@ -229,7 +229,7 @@ test('offline · recebimento de compra e apontamento de locação vão pela fun�
   const l = e.x.Store.data.locacoes.get('l1');
   e.x.Store.set('locacoes', 'l1', Object.assign({}, l, { apontamentos: { [dia(0)]: { u: 'uso' } } })); await e.tick(100);
   assert.deepEqual(Off(e).fila.map((o) => o.fn), ['campo_patch', 'campo_patch']);
-  assert.deepEqual(Off(e).fila[0].args.patch, { status: 'entregue', entrega: { data: dia(0), qtd: 10 } });
+  assert.deepEqual(JSON.parse(JSON.stringify(Off(e).fila[0].args.patch)), { status: 'entregue', entrega: { data: dia(0), qtd: 10 } });
   // preço e pedido: bloqueado
   await e.x.Store.set('compras', 'k1', Object.assign({}, e.x.Store.data.compras.get('k1'), { pedido: { total: 5 } }));
   assert.match(toast(e), /envolve valores em R\$/);
@@ -342,7 +342,7 @@ test('offline · faixa de versão nova do aplicativo: avisa e só atualiza quand
   assert.match(e.app(), /Há uma versão nova do aplicativo/);
   assert.equal(msgs.length, 0, 'não troca sozinho');
   await e.click('[data-act="off-atualizar"]');
-  assert.deepEqual(msgs, [{ tipo: 'ATUALIZAR' }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(msgs)), [{ tipo: 'ATUALIZAR' }]);
 });
 
 test('offline · modo local e modo claude.ai continuam iguais (sem fila, sem faixa)', async () => {
