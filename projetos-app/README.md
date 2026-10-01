@@ -35,4 +35,3 @@ para admin. Novos módulos entram como novas migrations em `supabase/migrations/
 ## Próximos passos sugeridos
 
 Notificações de prazo, permissões por setor e integração com o WhatsApp.
-permissões por setor e integração com o WhatsApp.
