@@ -1,6 +1,4 @@
-// Conexão padrão com o Supabase (opcional).
-// Preencha para que todos que abrirem o app já entrem conectados à nuvem.
-// A chave aqui deve ser a PÚBLICA (anon / publishable), nunca a secreta.
-window.COB_SUPABASE = null;
-// Exemplo:
-// window.COB_SUPABASE = { url: "https://xxxxxxxx.supabase.co", key: "sb_publishable_..." };
+// Conexão padrão com o Supabase: projeto cariati-obras-dev (DESENVOLVIMENTO).
+// A chave aqui é a PÚBLICA (publishable/anon), feita para ir no navegador. NUNCA coloque a chave secreta
+// (service_role / sb_secret_) neste arquivo: o teste de segurança do repositório reprova se ela aparecer.
+window.COB_SUPABASE = { url: "https://uqhdugageaxeghbuapud.supabase.co", key: "sb_publishable_5NrXr9JzAQfHuTWKpwbsSg_VpA95VG-", esquema: "v2" };
