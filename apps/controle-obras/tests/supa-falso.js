@@ -5,7 +5,9 @@ const clone = (x) => JSON.parse(JSON.stringify(x));
 
 function supaFalso(opts) {
   opts = opts || {};
-  const tabelas = {}, canais = [], log = [];
+  const tabelas = {}, canais = [], log = [], uploads = [], opsAplicadas = new Set();
+  const rede = { ligada: true, perdeRespostaUmaVez: false };
+  const semRede = () => ({ data: null, error: { message: 'TypeError: Failed to fetch' } });
   const tab = (n) => tabelas[n] || (tabelas[n] = new Map());
   const uid = 'u-123';
   Object.keys(opts.seed || {}).forEach((t) => Object.keys(opts.seed[t]).forEach((id) => {
@@ -32,6 +34,7 @@ function supaFalso(opts) {
     };
     function linhas() { return Array.from(tab(t).values()).filter((r) => q.filtros.every((f) => f(r))); }
     function exec() {
+      if (!rede.ligada) return semRede();
       log.push({ t, op: q.op, payload: q.payload && clone(q.payload) });
       if (opts.falhaEm && opts.falhaEm === t) return { data: null, error: { code: 'XX', message: 'falha simulada' } };
       if (q.op === 'select') return { data: clone(linhas().slice(q.ini, q.fim + 1)), error: null };
@@ -39,7 +42,9 @@ function supaFalso(opts) {
         const o = q.payload;
         if (tab(t).has(o.id)) return { data: null, error: { code: '23505', message: 'duplicate key' } };
         const r = { id: o.id, obra_id: o.obra_id || null, dados: clone(o.dados), versao: 1, excluido_em: null };
-        tab(t).set(o.id, r); return { data: q.retorna ? [{ versao: 1 }] : null, error: null };
+        tab(t).set(o.id, r);
+        if (rede.perdeRespostaUmaVez) { rede.perdeRespostaUmaVez = false; return semRede(); }
+        return { data: q.retorna ? [{ versao: 1 }] : null, error: null };
       }
       if (q.op === 'update') {
         const alvo = linhas(); alvo.forEach((r) => { Object.assign(r, clone(q.payload)); r.versao += 1; });
@@ -57,7 +62,23 @@ function supaFalso(opts) {
   const cli = {
     from: builder,
     async rpc(nome, args) {
+      if (!rede.ligada) return semRede();
       log.push({ t: 'rpc:' + nome, op: 'rpc', payload: clone(args) });
+      if (nome === 'campo_ler') return { data: Array.from(tab(args.tab).values()).filter((r) => !r.excluido_em).map(clone), error: null };
+      if (nome === 'campo_patch') {
+        if (opsAplicadas.has(args.p_op)) return { data: 0, error: null };
+        opsAplicadas.add(args.p_op);
+        const r = tab(args.tab).get(args.rid); if (!r) return { error: { message: 'Registro não encontrado' } };
+        const perm = args.tab === 'compras' ? ['status', 'entrega', 'conf', 'hist'] : ['status', 'apontamentos', 'entrada', 'devolucao'];
+        Object.keys(args.patch).filter((k) => perm.indexOf(k) >= 0).forEach((k) => { r.dados[k] = k === 'apontamentos' ? Object.assign({}, r.dados[k] || {}, args.patch[k]) : clone(args.patch[k]); });
+        r.versao += 1; return { data: 1, error: null };
+      }
+      if (nome === 'anexar_item') {
+        if (opsAplicadas.has(args.p_op)) return { data: 0, error: null };
+        opsAplicadas.add(args.p_op);
+        const r = tab(args.tab).get(args.rid); if (!r) return { error: { message: 'Registro não encontrado' } };
+        r.dados[args.campo] = (r.dados[args.campo] || []).concat([clone(args.item)]); r.versao += 1; return { data: 1, error: null };
+      }
       if (nome === 'excluir_registro') {
         const r = tab(args.tab).get(args.rid); if (!r) return { error: { message: 'Registro não encontrado' } };
         r.excluido_em = new Date().toISOString(); r.versao += 1; return { data: null, error: null };
@@ -75,11 +96,12 @@ function supaFalso(opts) {
       async signOut() { session = null; return {}; },
       async resetPasswordForEmail() { return { error: null }; }
     },
-    storage: { from: () => ({ upload: async () => ({ error: null }) }) }
+    storage: { from: () => ({ upload: async (path, blob, o) => { if (!rede.ligada) return semRede(); uploads.push({ path, size: blob && blob.size, upsert: o && o.upsert }); return { error: null }; } }) }
   };
 
   return {
-    cli, log, tabelas, uid,
+    cli, log, tabelas, uid, rede, uploads, opsAplicadas,
+    sessao: (v) => { session = v ? { user: { id: uid, email: 'edson@cariati.com', user_metadata: {} } } : null; },
     linhas: (t) => Array.from(tab(t).values()).map(clone),
     // simula uma mudança vinda de outra pessoa (Realtime)
     emite(t, linha) {

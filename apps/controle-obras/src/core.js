@@ -67,6 +67,7 @@ var Supa={ cli:null, cfg:null, session:null, vers:{}, papel:null,
     if(!this.session) return 'login';
     if(this.v2()){
       var pr; try{ pr=await this.cli.from('perfis').select('nome,papel,ativo').eq('user_id', this.session.user.id); }catch(e){ return 'offline'; }
+      if(pr&&pr.error&&(typeof Off!=='undefined'&&Off.redeFalhou(pr.error))) return 'offline';
       var row=pr&&pr.data&&pr.data[0];
       if(!row||row.ativo===false) return 'sem_perfil';
       this.papel=row.papel; this.nome=row.nome||'';
@@ -130,9 +131,11 @@ var Supa={ cli:null, cfg:null, session:null, vers:{}, papel:null,
   assets:function(){
     var self=this;
     return { upload:async function(blob){
+      if(typeof Off!=='undefined' && Off.ativo() && Off.semRede()) return await Off.guardarFoto(blob);
       var t=(blob&&blob.type)||'', ext=t==='application/pdf'?'pdf':(t==='image/png'?'png':(t==='image/webp'?'webp':'jpg'));
       var path=(self.uid()||'anon')+'/'+hoje().slice(0,7)+'/'+nid()+Math.random().toString(36).slice(2,8)+'.'+ext;
-      sbErr(await self.cli.storage.from(BUCKET).upload(path, blob, {contentType:t||'application/octet-stream', upsert:false}));
+      try{ sbErr(await self.cli.storage.from(BUCKET).upload(path, blob, {contentType:t||'application/octet-stream', upsert:false})); }
+      catch(e){ if(typeof Off!=='undefined' && Off.ativo() && Off.redeFalhou(e)) return await Off.guardarFoto(blob); throw e; }
       return {id:'sb:'+path};
     } };
   },
@@ -141,7 +144,7 @@ var Supa={ cli:null, cfg:null, session:null, vers:{}, papel:null,
     for(var i=0;i<rows.length;i+=400){ sbErr(await this.cli.from('registros').upsert(rows.slice(i,i+400))); }
   }
 };
-function blobUrl(id){ id=String(id||''); return id.indexOf('sb:')===0?Supa.publicUrl(id.slice(3)):'/_blob/'+id; }
+function blobUrl(id){ id=String(id||''); if(id.indexOf('off:')===0) return Off.fotoUrl(id); return id.indexOf('sb:')===0?Supa.publicUrl(id.slice(3)):'/_blob/'+id; }
 
 /* ---------- armazenamento ---------- */
 var COLS=['obras','etapas','atividades','pacotes','diarios','fichas','ocorrencias','prestadores','eventos','atas','acoes','docsLegais','docsPrest','rfis','materiais','locs','servicos','treinamentos','fornecedores','compras','movEstoque','locacoes','contratosPrest','termos','danos','orcamentos','orcItens','aditivos','medicoes','contasPagar','aportes','empresas','contratosCliente','lancamentos','relatorios','avaliacoes','licoes','config','garantias','chamadosGarantia','chamadosCustos','visitasPosObra','pesquisasSatisfacao'];
@@ -160,19 +163,39 @@ var Store={
     var sc=Supa.config();
     if(sc){
       var st=await Supa.start(sc);
-      if(st==='login'){ this.mode='login'; return; }
+      if(st==='offline' || (st==='login' && typeof navigator!=='undefined' && navigator.onLine===false)){
+        if(await this.bootOffline(sc)) return;
+        if(st==='offline'){ this.mode='login'; return; }
+      }
+      if(st==='login'){
+        if(typeof Off!=='undefined' && navigator.onLine!==false) await Off.sessaoExpirada(sc);
+        this.mode='login'; return;
+      }
       if(st==='sem_perfil'){ this.mode='sem_acesso'; return; }
       if(st==='ok'){
         this.db=Supa.adapter(); this.mode='db'; this.backend='supabase';
         this.uid=Supa.uid(); this.user=Supa.userShim();
         if(Supa.v2()){ this.papel=Supa.papel; this.writable=['dono','gestor','financeiro','campo'].indexOf(Supa.papel)>=0; }
         await this.subscribeSupa();
+        if(Supa.v2() && typeof Off!=='undefined' && await Off.iniciar(Supa.uid())){ await Off.sincronizar(); await Off.salvarCache(); }
         if(typeof Notif!=='undefined') Notif.iniciar();
         return;
       }
       this.supaErro=st;
     }
     this.mode='local'; this.backend='local'; this.loadLocal();
+  },
+  // abriu sem internet: usa o que está guardado no aparelho (até 14 dias sem sincronizar)
+  bootOffline:async function(sc){
+    var ses=Off.sessaoLocal();
+    if(!ses||!ses.uid||ses.url!==sc.url||!window.indexedDB) return false;
+    if(!(await Off.iniciar(ses.uid))) return false;
+    var em=await Off.restaurarCache();
+    if(!em||Date.now()-new Date(em).getTime()>OFF_CACHE_DIAS_MS){ this.avisoCacheVelho=true; return false; }
+    Supa.cfg=sc; Supa.papel=ses.papel; Supa.nome=ses.nome; Supa.session={user:{id:ses.uid, email:ses.email, user_metadata:{}}};
+    Off.offlineBoot=true; this.backend='supabase'; this.mode='db'; this.uid=ses.uid; this.papel=ses.papel;
+    this.writable=['dono','gestor','financeiro','campo'].indexOf(ses.papel)>=0; this.user=Supa.userShim();
+    return true;
   },
   subscribeSupaV2:async function(){
     var self=this, ch=Supa.cli.channel('dados-app');
@@ -182,20 +205,31 @@ var Store={
         if(!n.id) return;
         if(n.excluido_em){ self.data[c].delete(n.id); delete Supa.vers[c+'/'+n.id]; }
         else { self.data[c].set(n.id, n.dados||{}); Supa.vers[c+'/'+n.id]=n.versao; }
+        if(typeof Off!=='undefined') Off.sujo();
         scheduleRender();
       });
     });
     ch.subscribe();
     this.unsubs.push(function(){ Supa.cli.removeChannel(ch); });
+    await this.carregarTudoV2();
+  },
+  carregarTudoV2:async function(){
     var falhou=false;
-    for(var i=0;i<COLS.length;i++){
-      var c=COLS[i], from=0, step=1000;
-      while(true){
-        var r=await Supa.cli.from(c).select('id,dados,versao').is('excluido_em', null).order('id').range(from, from+step-1);
-        if(r.error){ if(!falhou) toast('Não foi possível carregar parte dos dados ('+(r.error.code||r.error.message)+').', true); falhou=true; break; }
-        (r.data||[]).forEach(function(x){ self.data[c].set(x.id, x.dados||{}); Supa.vers[c+'/'+x.id]=x.versao; });
-        if((r.data||[]).length<step) break; from+=step;
-      }
+    for(var i=0;i<COLS.length;i++){ try{ await this.carregarColecaoV2(COLS[i]); }catch(e){ if(!falhou) toast('Não foi possível carregar parte dos dados ('+(e.code||e.message)+').', true); falhou=true; } }
+  },
+  // campo lê as tabelas que têm valores só pelas funções do servidor (sem R$); os demais, direto
+  carregarColecaoV2:async function(c){
+    var self=this, from=0, step=1000, viaFuncao=(this.papel==='campo' && ['obras','compras','locacoes','contratosPrest','danos'].indexOf(c)>=0);
+    if(viaFuncao){
+      var rf=await Supa.cli.rpc('campo_ler',{tab:c}); if(rf.error){ var ef=new Error(rf.error.message); ef.code=rf.error.code; throw ef; }
+      var vistos={}; (rf.data||[]).forEach(function(x){ vistos[x.id]=1; self.data[c].set(x.id, x.dados||{}); Supa.vers[c+'/'+x.id]=x.versao; });
+      return;
+    }
+    while(true){
+      var r=await Supa.cli.from(c).select('id,dados,versao').is('excluido_em', null).order('id').range(from, from+step-1);
+      if(r.error){ var e=new Error(r.error.message); e.code=r.error.code; throw e; }
+      (r.data||[]).forEach(function(x){ self.data[c].set(x.id, x.dados||{}); Supa.vers[c+'/'+x.id]=x.versao; });
+      if((r.data||[]).length<step) break; from+=step;
     }
   },
   subscribeSupa:async function(){
@@ -253,8 +287,18 @@ var Store={
     var self=this;
     if(!this.writable && !this.cliPode(c)){ toast('Seu acesso é somente leitura.', true); return Promise.resolve(); }
     var rec=clone(data); delete rec.id;
+    var antes=this.data[c].get(id); antes=antes?clone(antes):antes;
+    if(this.mode==='db' && typeof Off!=='undefined' && this.backend==='supabase'){
+      var offline=Off.semRede(); var d0=this.data[c].get(id);
+      if(offline||(this.papel==='campo'&&(c==='compras'||c==='locacoes'))){
+        this.data[c].set(id,rec); scheduleRender();
+        var tratado=this.tentaOffline(c,id,rec,antes); if(tratado) return tratado;
+      }
+    }
     this.data[c].set(id,rec); scheduleRender();
-    if(this.mode==='db'){ return this.enqueue(c+'/'+id, function(){ return self.db.doc(c+'/'+id).set(rec); }).catch(function(e){ self.fail(e); }); }
+    if(this.mode==='db'){ return this.enqueue(c+'/'+id, function(){ return self.db.doc(c+'/'+id).set(rec); }).catch(function(e){
+      if(typeof Off!=='undefined' && Off.ativo() && Off.redeFalhou(e)){ var cl=Off.classificar(c,id,rec,antes); if(cl.ok) return Off.enfileirar(cl,c,id,rec,antes); if(antes) self.data[c].set(id,antes); else self.data[c].delete(id); scheduleRender(); toast('Sem internet: '+cl.motivo+'. Nada foi alterado.', true); return false; }
+      self.fail(e); }); }
     this.saveLocal(c); return Promise.resolve();
   },
   patch:function(c,id,fields){ var cur=this.data[c].get(id)||{}; return this.set(c,id,Object.assign({},cur,fields)); },
@@ -262,6 +306,7 @@ var Store={
   del:function(c,id){
     var self=this;
     if(!this.writable){ toast('Seu acesso é somente leitura.', true); return Promise.resolve(); }
+    if(typeof Off!=='undefined' && this.backend==='supabase' && Off.ativo() && Off.semRede()){ toast('Sem internet: excluir precisa de conexão, porque a exclusão é conferida pelo servidor. Nada foi alterado.', true); return Promise.resolve(false); }
     this.data[c].delete(id); scheduleRender();
     if(this.mode==='db'){ return this.enqueue(c+'/'+id, function(){ return self.db.doc(c+'/'+id).delete(); }).catch(function(e){ self.fail(e); }); }
     this.saveLocal(c); return Promise.resolve();

@@ -5,7 +5,7 @@ var hist={rows:null, carregando:false, erro:'', obra:'', colecao:''};
 function vLogin(){
   var c=Supa.cfg||{};
   return '<div class="wrap"><div class="login"><p class="brand" style="font-size:22px;margin-bottom:14px">Cariati<span>·Obras</span></p>'
-    +'<form class="card" id="flogin"><h2 style="margin-bottom:6px">Entrar</h2><p class="muted small" style="margin-bottom:16px">Use o e-mail e a senha cadastrados pela Cariati.</p>'
+    +'<form class="card" id="flogin"><h2 style="margin-bottom:6px">Entrar</h2><p class="muted small" style="margin-bottom:16px">Use o e-mail e a senha cadastrados pela Cariati.</p>'+(Store.avisoCacheVelho?'<div class="callout warn" style="margin-bottom:12px"><strong>Os dados guardados neste aparelho têm mais de '+OFF_VALIDADE_DIAS+' dias sem sincronizar.</strong> Conecte-se à internet e entre para atualizar. As alterações que você fez offline continuam guardadas.</div>':'')
     +'<div class="fld"><label for="lg_e">E-mail</label><input id="lg_e" name="email" type="email" autocomplete="username" required></div>'
     +'<div class="fld"><label for="lg_s">Senha</label><input id="lg_s" name="senha" type="password" autocomplete="current-password" required></div>'
     +'<div class="err-msg hide" id="lg_err" role="alert"></div>'
@@ -136,7 +136,14 @@ var ANuvem={
   'aviso-lido':function(d){ Notif.marcar([Number(d.id)]); },
   'aviso-abrir':function(d){ var n=Notif.rows.filter(function(x){ return String(x.id)===String(d.id); })[0]; Notif.marcar([Number(d.id)]); if(n&&n.link) location.hash=n.link; },
   'avisos-todos':function(){ Notif.marcar(Notif.rows.filter(function(n){ return !n.lida_em; }).map(function(n){ return n.id; })); },
-  'nuvem-sair':async function(){ try{ await Supa.cli.auth.signOut(); }catch(e){} location.reload(); },
+  'nuvem-sair':async function(){
+    if(typeof Off!=='undefined' && Off.db && Off.pendentes()){
+      var n=Off.pendentes(), ok=await confirmDlg('Há alterações que não foram enviadas', '<p>Há '+plural(n,'alteração','alterações')+' guardada'+(n===1?'':'s')+' neste aparelho e ainda não enviada'+(n===1?'':'s')+'. <strong>Sair agora apaga '+(n===1?'essa alteração':'essas alterações')+'.</strong></p>'+(Off.semRede()?'<p>Você está sem internet: volte quando houver sinal para enviar.</p>':'<p>Toque em “Voltar”, use “Sincronizar agora” e saia depois.</p>'), 'Sair e apagar', true);
+      if(!ok) return; closeDlg();
+    }
+    try{ await Supa.cli.auth.signOut(); }catch(e){}
+    if(typeof Off!=='undefined') await Off.limparTudo();
+    location.reload(); },
   'nuvem-enviar-local':function(){
     var cols={}; COLS.forEach(function(c){ try{ var raw=localStorage.getItem('cob.'+c); if(raw) cols[c]=JSON.parse(raw); }catch(e){} });
     importarDados(cols, 'este navegador');

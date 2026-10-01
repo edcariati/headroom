@@ -15,6 +15,7 @@ function parseRoute(){
   if(p[0]==='nuvem') return {view:'nuvem'};
   if(p[0]==='historico') return {view:'historico'};
   if(p[0]==='avisos') return {view:'avisos'};
+  if(p[0]==='pendencias') return {view:'pendencias'};
   return {view:'painel'};
 }
 function topbar(r){
@@ -29,6 +30,7 @@ function topbar(r){
 function banners(){
   var b='';
   if(Store.mode==='local') b+='<div class="banner">Modo local: os dados ficam só neste navegador e não são compartilhados com a equipe. <a href="#/nuvem">Conectar à nuvem</a></div>';
+  b+=(typeof bannerOffline==='function'?bannerOffline():'');
   if(!Store.writable && Store.papel!=='cliente') b+='<div class="banner">Acesso somente leitura: você pode consultar, mas não editar.</div>';
   return b;
 }
@@ -290,9 +292,9 @@ function render(){
   var gs=document.querySelector('.gantt-scroll'); if(gs) ui.ganttScroll=gs.scrollLeft;
   if(Store.mode==='login'){ app.innerHTML=vLogin(); lastKey=null; return; }
   if(Store.mode==='sem_acesso'){ app.innerHTML=vSemAcesso(); lastKey=null; return; }
-  if(r.view==='nuvem'||r.view==='historico'||r.view==='avisos'){
+  if(r.view==='nuvem'||r.view==='historico'||r.view==='avisos'||r.view==='pendencias'){
     document.body.classList.toggle('ro', !Store.writable);
-    app.innerHTML=topbar(r)+banners()+(r.view==='nuvem'?vNuvem():(r.view==='avisos'?vAvisos():vHistorico()));
+    app.innerHTML=topbar(r)+banners()+(r.view==='nuvem'?vNuvem():(r.view==='avisos'?vAvisos():(r.view==='pendencias'?vPendencias():vHistorico())));
     if(key!==lastKey) window.scrollTo(0,0); lastKey=key; return;
   }
   var body=r.view==='obra'?vObra(r):(r.view==='etapa'?vEtapa(r):(r.view==='prestadores'?vPrest():(r.view==='agenda'?vAgenda():(r.view==='fornecedores'?vForn():(r.view==='dre'?vDRE():vPainel())))));
@@ -656,7 +658,8 @@ var A={
 document.addEventListener('click', function(e){
   if(e.target.closest('[data-close]')){ closeDlg(); return; }
   var el=e.target.closest('[data-act]'); if(!el) return;
-  var f=A[el.dataset.act]||A2[el.dataset.act]||A3[el.dataset.act]||A4[el.dataset.act]||A5[el.dataset.act]||A7[el.dataset.act]||ANuvem[el.dataset.act]; if(f){ e.preventDefault(); f(el.dataset, el); }
+  if(offBloqueia(el.dataset.act)){ e.preventDefault(); return; }
+  var f=A[el.dataset.act]||A2[el.dataset.act]||A3[el.dataset.act]||A4[el.dataset.act]||A5[el.dataset.act]||A7[el.dataset.act]||AOff[el.dataset.act]||ANuvem[el.dataset.act]; if(f){ e.preventDefault(); f(el.dataset, el); }
 });
 document.addEventListener('change', function(e){
   var el=e.target.closest('[data-chg="cond"]'); if(!el) return;

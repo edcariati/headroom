@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require('jsdom');
 const { supaFalso } = require('./supa-falso');
+const { IDBFactory, IDBKeyRange } = require('fake-indexeddb');
 
 const HTML = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 
@@ -47,7 +48,8 @@ async function abrir(opts) {
   const db = bancoFalso(opts.seed);
   const erros = [];
   const gancho = {};
-  const supa = opts.supa ? supaFalso(opts.supa) : null;
+  const supa = opts.supa ? (opts.supa.__falso || supaFalso(opts.supa)) : null;
+  const idb = opts.idb || new IDBFactory();
   const dom = new JSDOM(HTML, {
     url: 'http://localhost/' + (opts.hash || '#/painel'),
     runScripts: 'dangerously',
@@ -58,6 +60,10 @@ async function abrir(opts) {
       Object.defineProperty(win.HTMLDialogElement.prototype, 'open', { configurable: true, get() { return this.hasAttribute('open'); } });
       win.__COB_TEST_HOOK = (x) => { gancho.x = x; };
       win.scrollTo = () => {};
+      win.indexedDB = idb; win.IDBKeyRange = IDBKeyRange;
+      win.__online = opts.offline ? false : true;
+      Object.defineProperty(win.navigator, 'onLine', { configurable: true, get: () => win.__online !== false });
+      Object.keys(opts.ls || {}).forEach((k) => { try { win.localStorage.setItem(k, opts.ls[k]); } catch (e) {} });
       win.matchMedia = win.matchMedia || (() => ({ matches: false, addListener() {}, removeListener() {} }));
       win.URL.createObjectURL = () => 'blob:teste';
       win.URL.revokeObjectURL = () => {};
@@ -73,7 +79,10 @@ async function abrir(opts) {
   await tick(250);
 
   const env = {
-    win, doc, db, erros, tick, supa,
+    win, doc, db, erros, tick, supa, idb,
+    async offline() { if (supa) supa.rede.ligada = false; win.__online = false; win.dispatchEvent(new win.Event('offline')); await tick(); },
+    async online() { if (supa) supa.rede.ligada = true; win.__online = true; win.dispatchEvent(new win.Event('online')); await tick(400); },
+    ls: (k) => win.localStorage.getItem(k),
     get x() { return gancho.x; },
     app: () => doc.getElementById('app').textContent.replace(/\s+/g, ' '),
     dlg: () => doc.getElementById('dlg').textContent.replace(/\s+/g, ' '),

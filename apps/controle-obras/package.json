@@ -8,6 +8,7 @@
     "test:rls": "bash supabase/tests/teste_local.sh"
   },
   "devDependencies": {
+    "fake-indexeddb": "^6.2.5",
     "jsdom": "^24.1.0"
   }
 }
