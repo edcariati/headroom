@@ -4,7 +4,7 @@
   "description": "Aplicativo de gestão de obras da Cariati (HTML único gerado a partir de src/)",
   "scripts": {
     "build": "python3 build.py",
-    "test": "python3 build.py --check && node --test tests/*.test.js",
+    "test": "python3 build.py --check && node --test --test-force-exit tests/*.test.js",
     "test:rls": "bash supabase/tests/teste_local.sh"
   },
   "devDependencies": {
