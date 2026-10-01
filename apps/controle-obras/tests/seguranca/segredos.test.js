@@ -28,7 +28,8 @@ test('segurança · o detector de segredos funciona (segredos plantados são enc
 
 test('segurança · nenhum arquivo versionado do app contém segredo', () => {
   const arquivos = execSync('git ls-files', { cwd: RAIZ, encoding: 'utf8' }).split('\n').filter(Boolean)
-    .filter((f) => !/package-lock\.json$|\.png$|\.ico$/.test(f));
+    .filter((f) => !/package-lock\.json$|\.png$|\.ico$/.test(f))
+    .filter((f) => f !== 'apps/controle-obras/tests/seguranca/segredos.test.js' && f !== 'tests/seguranca/segredos.test.js');   // contém segredos FALSOS plantados de propósito
   const achados = [];
   arquivos.forEach((f) => { try { varre(fs.readFileSync(path.join(RAIZ, f), 'utf8')).forEach((n) => achados.push(f + ': ' + n)); } catch (e) {} });
   assert.deepEqual(achados, []);
