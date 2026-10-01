@@ -78,3 +78,7 @@ dl{display:grid;grid-template-columns:90px 1fr;gap:4px 12px;margin:0;font-size:1
 .pilha{display:flex;flex-direction:column}
 .nota{display:flex;gap:8px;margin-bottom:12px}
 .hist{list-style:none;padding:0;margin:0}.hist li{padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+.docs{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:10px}
+.doc{display:flex;gap:10px;align-items:center;justify-content:space-between;font-size:14px}
+.upload{padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);cursor:pointer;font-size:13px;white-space:nowrap;align-self:flex-start;min-height:40px;display:inline-flex;align-items:center}
+.docs .link{color:var(--blue);text-align:left}
