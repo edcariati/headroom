@@ -12,11 +12,16 @@ $P -d t <<'SQL'
 create schema auth; create table auth.users(id uuid primary key);
 create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.uid', true),'')::uuid $$;
 create role anon nologin; create role authenticated nologin;
+grant usage on schema public to anon, authenticated;
+-- privilégios padrão PERMISSIVOS (pior caso, como em projetos Supabase antigos): a migração 0007 tem de neutralizar
+alter default privileges in schema public grant all on tables to anon, authenticated;
+alter default privileges in schema public grant all on sequences to anon, authenticated;
+alter default privileges in schema public grant all on functions to anon, authenticated;
 SQL
 $P -d t -f "$(dirname "$0")/../migrations/0001_base.sql"
 $P -d t -f "$(dirname "$0")/../migrations/0002_regras.sql"
 $P -d t -c "set role authenticated" >/dev/null
-for m in "$(dirname "$0")"/../migrations/000[3-9]*.sql; do $P -d t -f "$m"; done
-cat "$(dirname "$0")/teste_rls.sql" "$(dirname "$0")/teste_regras.sql" "$(dirname "$0")/teste_notif.sql" "$(dirname "$0")/teste_posobra.sql" "$(dirname "$0")/teste_campo.sql" > "$D/todos.sql"
+for m in "$(dirname "$0")"/../migrations/000[3-9]*.sql; do case "$m" in *"${PULAR_MIGRACAO:-__nenhuma__}"*) echo "(pulando $m para demonstrar o achado)";; *) $P -d t -f "$m";; esac; done
+cat "$(dirname "$0")/teste_rls.sql" "$(dirname "$0")/teste_regras.sql" "$(dirname "$0")/teste_notif.sql" "$(dirname "$0")/teste_posobra.sql" "$(dirname "$0")/teste_campo.sql" "$(dirname "$0")/teste_permissoes.sql" > "$D/todos.sql"
 $P -d t -f "$D/todos.sql"
 echo "RLS OK"
