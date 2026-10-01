@@ -130,21 +130,47 @@ var Supa={ cli:null, cfg:null, session:null, vers:{}, papel:null,
   },
   assets:function(){
     var self=this;
-    return { upload:async function(blob){
-      if(typeof Off!=='undefined' && Off.ativo() && Off.semRede()) return await Off.guardarFoto(blob);
+    return { upload:async function(blob,opts){
+      var zona=(opts&&opts.zona)||'campo', oid=Supa.obraDoContexto();
+      if(Supa.v2() && !oid){ var en=new Error('Abra a obra antes de enviar arquivos: eles ficam guardados na pasta da obra.'); en.code='sem_obra'; throw en; }
+      if(typeof Off!=='undefined' && Off.ativo() && Off.semRede()) return await Off.guardarFoto(blob,zona,oid);
       var t=(blob&&blob.type)||'', ext=t==='application/pdf'?'pdf':(t==='image/png'?'png':(t==='image/webp'?'webp':'jpg'));
-      var path=(self.uid()||'anon')+'/'+hoje().slice(0,7)+'/'+nid()+Math.random().toString(36).slice(2,8)+'.'+ext;
+      var path=Supa.v2()?Supa.caminho(oid,zona,ext):(self.uid()||'anon')+'/'+hoje().slice(0,7)+'/'+nid()+Math.random().toString(36).slice(2,8)+'.'+ext;
       try{ sbErr(await self.cli.storage.from(BUCKET).upload(path, blob, {contentType:t||'application/octet-stream', upsert:false})); }
-      catch(e){ if(typeof Off!=='undefined' && Off.ativo() && Off.redeFalhou(e)) return await Off.guardarFoto(blob); throw e; }
+      catch(e){ if(typeof Off!=='undefined' && Off.ativo() && Off.redeFalhou(e)) return await Off.guardarFoto(blob,zona,oid); if(/row-level security|violates|403|Unauthorized/i.test((e&&e.message)||'')){ var ep=new Error('Seu perfil não pode enviar este tipo de arquivo nesta obra.'); ep.code='sem_permissao'; throw ep; } throw e; }
       return {id:'sb:'+path};
     } };
   },
+  // caminho no Storage: <obra>/<zona>/<ano-mes>/<arquivo>; zona 'campo' (fotos) ou 'restrito' (documentos que podem ter valores)
+  caminho:function(oid,zona,ext){ return oid+'/'+zona+'/'+hoje().slice(0,7)+'/'+nid()+Math.random().toString(36).slice(2,8)+'.'+ext; },
+  obraDoContexto:function(){ try{ return parseRoute().oid||''; }catch(e){ return ''; } },
   publicUrl:function(path){ var c=this.cfg||this.config(); return c?c.url+'/storage/v1/object/public/'+BUCKET+'/'+path.split('/').map(encodeURIComponent).join('/'):''; },
   upsertMany:async function(rows){
     for(var i=0;i<rows.length;i+=400){ sbErr(await this.cli.from('registros').upsert(rows.slice(i,i+400))); }
   }
 };
-function blobUrl(id){ id=String(id||''); if(id.indexOf('off:')===0) return Off.fotoUrl(id); return id.indexOf('sb:')===0?Supa.publicUrl(id.slice(3)):'/_blob/'+id; }
+// Storage privado: o endereço de cada arquivo é uma URL assinada, de curta duração (1 hora), pedida ao servidor
+var URL_VAZIA='data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+var SignedUrls={ map:{}, fila:{}, t:null,
+  get:function(path){
+    var x=this.map[path];
+    if(x&&x.url&&x.ate>Date.now()+60000) return x.url;
+    if(x&&x.falha&&Date.now()-x.falha<30000) return x.url||URL_VAZIA;
+    this.fila[path]=1;
+    if(!this.t){ var self=this; this.t=setTimeout(function(){ self.buscar(); },40); }
+    return x&&x.url?x.url:URL_VAZIA;
+  },
+  buscar:async function(){
+    this.t=null; var ps=Object.keys(this.fila), self=this; this.fila={}; if(!ps.length||!Supa.cli) return;
+    try{
+      var r=await Supa.cli.storage.from(BUCKET).createSignedUrls(ps,3600), got={};
+      (r.data||[]).forEach(function(d){ if(d&&d.signedUrl){ got[d.path]=1; self.map[d.path]={url:d.signedUrl, ate:Date.now()+3600000}; } });
+      ps.forEach(function(p){ if(!got[p]) self.map[p]=Object.assign(self.map[p]||{}, {falha:Date.now()}); });
+    }catch(e){ ps.forEach(function(p){ self.map[p]=Object.assign(self.map[p]||{}, {falha:Date.now()}); }); }
+    scheduleRender();
+  }
+};
+function blobUrl(id){ id=String(id||''); if(id.indexOf('off:')===0) return Off.fotoUrl(id); if(id.indexOf('sb:')===0) return Supa.v2()?SignedUrls.get(id.slice(3)):Supa.publicUrl(id.slice(3)); return '/_blob/'+id; }
 
 /* ---------- armazenamento ---------- */
 var COLS=['obras','etapas','atividades','pacotes','diarios','fichas','ocorrencias','prestadores','eventos','atas','acoes','docsLegais','docsPrest','rfis','materiais','locs','servicos','treinamentos','fornecedores','compras','movEstoque','locacoes','contratosPrest','termos','danos','orcamentos','orcItens','aditivos','medicoes','contasPagar','aportes','empresas','contratosCliente','lancamentos','relatorios','avaliacoes','licoes','config','garantias','chamadosGarantia','chamadosCustos','visitasPosObra','pesquisasSatisfacao'];
@@ -484,8 +510,8 @@ async function uploadFiles(files){
   var a=await getAssets();
   if(!a){ toast('O envio de fotos não está disponível para o seu acesso.', true); return out; }
   for(var i=0;i<files.length;i++){
-    try{ var b=await shrink(files[i]); var r=await a.upload(b); out.push(r.id); }
-    catch(e){ toast('Falha ao enviar uma foto ('+(e&&e.code||'erro')+').', true); }
+    try{ var b=await shrink(files[i]); var r=await a.upload(b,{zona:'campo'}); out.push(r.id); }
+    catch(e){ toast(e&&(e.code==='sem_obra'||e.code==='sem_permissao'||e.code==='sem_espaco')?e.message:'Falha ao enviar uma foto ('+(e&&e.code||'erro')+').', true); }
   }
   return out;
 }
@@ -495,8 +521,8 @@ async function uploadAnexos(files){
   var a=await getAssets();
   if(!a){ toast('O envio de arquivos não está disponível para o seu acesso.', true); return out; }
   for(var i=0;i<files.length;i++){
-    try{ var f=files[i], pdf=f.type==='application/pdf', b=pdf?f:await shrink(f); var r=await a.upload(b); out.push({id:r.id, n:f.name, pdf:pdf}); }
-    catch(e){ toast('Falha ao enviar um arquivo ('+(e&&e.code||'erro')+').', true); }
+    try{ var f=files[i], pdf=f.type==='application/pdf', b=pdf?f:await shrink(f); var r=await a.upload(b,{zona:'restrito'}); out.push({id:r.id, n:f.name, pdf:pdf}); }
+    catch(e){ toast(e&&(e.code==='sem_obra'||e.code==='sem_permissao'||e.code==='sem_espaco')?e.message:'Falha ao enviar um arquivo ('+(e&&e.code||'erro')+').', true); }
   }
   return out;
 }

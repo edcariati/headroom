@@ -17,11 +17,20 @@ grant usage on schema public to anon, authenticated;
 alter default privileges in schema public grant all on tables to anon, authenticated;
 alter default privileges in schema public grant all on sequences to anon, authenticated;
 alter default privileges in schema public grant all on functions to anon, authenticated;
+-- STUB do schema storage do Supabase (só o necessário para testar as políticas; o real só existe no projeto)
+create schema storage;
+create table storage.buckets(id text primary key, name text, public boolean default false, file_size_limit bigint, allowed_mime_types text[]);
+create table storage.objects(id uuid primary key default gen_random_uuid(), bucket_id text, name text, owner uuid default auth.uid(), metadata jsonb);
+alter table storage.objects enable row level security;
+create function storage.foldername(name text) returns text[] language sql immutable as $$ select (string_to_array(name, '/'))[1:greatest(array_length(string_to_array(name,'/'),1)-1,0)] $$;
+grant usage on schema storage to anon, authenticated;
+grant select, insert on storage.objects to authenticated;
+grant execute on function storage.foldername(text) to anon, authenticated;
 SQL
 $P -d t -f "$(dirname "$0")/../migrations/0001_base.sql"
 $P -d t -f "$(dirname "$0")/../migrations/0002_regras.sql"
 $P -d t -c "set role authenticated" >/dev/null
 for m in "$(dirname "$0")"/../migrations/000[3-9]*.sql; do case "$m" in *"${PULAR_MIGRACAO:-__nenhuma__}"*) echo "(pulando $m para demonstrar o achado)";; *) $P -d t -f "$m";; esac; done
-cat "$(dirname "$0")/teste_rls.sql" "$(dirname "$0")/teste_regras.sql" "$(dirname "$0")/teste_notif.sql" "$(dirname "$0")/teste_posobra.sql" "$(dirname "$0")/teste_campo.sql" "$(dirname "$0")/teste_permissoes.sql" > "$D/todos.sql"
+cat "$(dirname "$0")/teste_rls.sql" "$(dirname "$0")/teste_regras.sql" "$(dirname "$0")/teste_notif.sql" "$(dirname "$0")/teste_posobra.sql" "$(dirname "$0")/teste_campo.sql" "$(dirname "$0")/teste_permissoes.sql" "$(dirname "$0")/teste_storage.sql" > "$D/todos.sql"
 $P -d t -f "$D/todos.sql"
 echo "RLS OK"

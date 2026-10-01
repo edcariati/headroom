@@ -1,0 +1,53 @@
+name: Controle de Obras — testes e segurança
+
+on:
+  push:
+    paths: ['apps/controle-obras/**', '.github/workflows/controle-obras.yml']
+  pull_request:
+    paths: ['apps/controle-obras/**', '.github/workflows/controle-obras.yml']
+
+defaults:
+  run:
+    working-directory: apps/controle-obras
+
+jobs:
+  app:
+    name: Aplicativo (testes, build, segredos)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: apps/controle-obras/package-lock.json }
+      - run: npm ci
+      - name: Postgres para o teste de equivalência servidor × app
+        run: sudo apt-get update -y && sudo apt-get install -y postgresql postgresql-contrib
+      - name: Testes (inclui build em dia, aplicar-todas.sql em dia, segurança e equivalência)
+        run: sudo env "PATH=$PATH" npm test
+      - name: Vulnerabilidades das dependências (alto ou crítico reprova)
+        run: npm audit --audit-level=high
+
+  banco:
+    name: Banco (migrações do zero, RLS e permissões)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -y && sudo apt-get install -y postgresql postgresql-contrib
+      - name: Migrações aplicadas do zero + suíte de RLS, permissões, Storage e regras
+        run: sudo bash supabase/tests/teste_local.sh
+      - name: Inventário (tabelas sem RLS e funções abertas devem ser zero)
+        run: |
+          sudo bash supabase/tests/inventario.sh | tee /tmp/inv.md
+          grep -q "tabelas sem RLS=0" /tmp/inv.md
+          grep -q "funções executáveis por anon=0" /tmp/inv.md
+          grep -q "funções security definer sem search_path=0" /tmp/inv.md
+          grep -q "políticas com using(true)=0" /tmp/inv.md
+
+  segredos:
+    name: Segredos no histórico do git
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: gitleaks/gitleaks-action@v2
+        env: { GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }

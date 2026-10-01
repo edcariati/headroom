@@ -5,6 +5,6 @@ async function boot(){
   await Store.init();
   render();
 }
-COBX.Store=Store; COBX.Supa=Supa;
+COBX.Store=Store; COBX.Supa=Supa; COBX.SignedUrls=SignedUrls; COBX.blobUrl=blobUrl;
 if(window.__COB_TEST_HOOK) window.__COB_TEST_HOOK(COBX);
 boot();

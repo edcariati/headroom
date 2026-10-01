@@ -127,10 +127,10 @@ var Off={
     scheduleRender();
   },
   /* ---------- fotos ---------- */
-  guardarFoto:async function(blob){
+  guardarFoto:async function(blob,zona,oid){
     var t=(blob&&blob.type)||'', ext=t==='application/pdf'?'pdf':(t==='image/png'?'png':(t==='image/webp'?'webp':'jpg'));
     if(navigator.storage&&navigator.storage.estimate){ try{ var e=await navigator.storage.estimate(); if(e&&e.quota&&e.usage!=null&&(e.quota-e.usage)<(blob.size||0)*2+5*1024*1024){ var er=new Error('Pouco espaço livre no aparelho para guardar a foto. Libere espaço e tente de novo.'); er.code='sem_espaco'; throw er; } }catch(x){ if(x.code==='sem_espaco') throw x; } }
-    var id='f'+nid()+Math.random().toString(36).slice(2,6), path=(Supa.uid()||Off.uid||'anon')+'/'+hoje().slice(0,7)+'/'+id+'.'+ext;
+    var id='f'+nid()+Math.random().toString(36).slice(2,6), path=(oid||Supa.obraDoContexto()||'sem-obra')+'/'+(zona||'campo')+'/'+hoje().slice(0,7)+'/'+id+'.'+ext;
     var f={id:id, blob:blob, path:path, tipo:t||'application/octet-stream', criadaEm:new Date().toISOString()};
     await this.put('fotos',f); this.fotos[id]=f; try{ this.urls[id]=URL.createObjectURL(blob); }catch(e){}
     return {id:'off:'+id};
@@ -141,7 +141,8 @@ var Off={
     var ids=Object.keys(this.fotos), self=this;
     for(var i=0;i<ids.length;i++){
       var f=this.fotos[ids[i]];
-      sbErr(await Supa.cli.storage.from(BUCKET).upload(f.path, f.blob, {contentType:f.tipo, upsert:true}));
+      var up=await Supa.cli.storage.from(BUCKET).upload(f.path, f.blob, {contentType:f.tipo, upsert:false});
+      if(up.error && !/already exists|duplicate|resource already|409/i.test((up.error.message||'')+(up.error.statusCode||''))) sbErr(up);   // já enviada antes (resposta perdida): conta como enviada
       var de='off:'+f.id, para='sb:'+f.path;
       for(var j=0;j<this.fila.length;j++){ var op=this.fila[j]; if(JSON.stringify(op).indexOf(de)>=0){ var novo=this.trocarRefs(op,de,para); Object.assign(op,novo); await this.gravarOp(op); } }
       COLS.forEach(function(c){ Store.data[c].forEach(function(d,k){ if(JSON.stringify(d).indexOf(de)>=0) Store.data[c].set(k, self.trocarRefs(d,de,para)); }); });

@@ -149,3 +149,51 @@ test('avisos · texto do aviso é escapado e sem perfil na nuvem não há sino',
   const local = await abrir({ seed: seedObra() && { obras: { o1: obra() } }, hash: '#/painel' });
   assert.doesNotMatch(local.doc.querySelector('.top').textContent, /🔔/);
 });
+
+/* ---------- Storage privado (auditoria A-04) ---------- */
+test('storage · arquivo vai para <obra>/<zona>/<ano-mes>/ e foto não vira URL pública', async () => {
+  const e = await abrir({ supa: { seed: seedObra() }, hash: '#/obra/o1/diario' });
+  const a = e.x.Supa.assets();
+  const f = await a.upload(new Blob(['x'], { type: 'image/jpeg' }));
+  const d = await a.upload(new Blob(['x'], { type: 'application/pdf' }), { zona: 'restrito' });
+  assert.match(f.id, /^sb:o1\/campo\/\d{4}-\d{2}\/.+\.jpg$/);
+  assert.match(d.id, /^sb:o1\/restrito\/\d{4}-\d{2}\/.+\.pdf$/);
+  assert.equal(e.supa.uploads.length, 2);
+  assert.equal(e.supa.uploads[0].upsert, false);
+});
+
+test('storage · sem obra aberta o envio é recusado com explicação (nada vai para pasta solta)', async () => {
+  const e = await abrir({ supa: { seed: seedObra() }, hash: '#/painel' });
+  await assert.rejects(() => e.x.Supa.assets().upload(new Blob(['x'], { type: 'image/jpeg' })), /Abra a obra antes de enviar/);
+  assert.equal(e.supa.uploads.length, 0);
+});
+
+test('storage · negado pelo servidor (perfil sem permissão na zona) vira mensagem clara', async () => {
+  const e = await abrir({ supa: { seed: seedObra() }, hash: '#/obra/o1/diario' });
+  e.supa.rede.negaStorage = true;
+  await assert.rejects(() => e.x.Supa.assets().upload(new Blob(['x'], { type: 'application/pdf' }), { zona: 'restrito' }), /Seu perfil não pode enviar este tipo de arquivo nesta obra/);
+});
+
+test('storage · exibir arquivo pede URL assinada de 1 hora, uma vez, e não repete em loop se falhar', async () => {
+  const e = await abrir({ supa: { seed: seedObra() }, hash: '#/painel' });
+  const ref = 'sb:o1/campo/2026-10/a.jpg';
+  const antes = e.x.blobUrl ? 0 : 0;
+  const u1 = e.win.eval ? null : null;
+  const url0 = e.x.SignedUrls.get('o1/campo/2026-10/a.jpg');
+  assert.match(url0, /^data:image\/gif/, 'enquanto busca, mostra um quadro vazio');
+  await e.tick(200);
+  const url1 = e.x.SignedUrls.get('o1/campo/2026-10/a.jpg');
+  assert.match(url1, /^https:\/\/teste\.supabase\.co\/storage\/v1\/object\/sign\/obras-arquivos\/o1\/campo\/2026-10\/a\.jpg\?token=/);
+  assert.doesNotMatch(url1, /object\/public/);
+  const pedidos = e.supa.log.filter((x) => x.t === 'storage:signed');
+  assert.equal(pedidos.length, 1);
+  assert.equal(pedidos[0].payload.exp, 3600);
+  e.x.SignedUrls.get('o1/campo/2026-10/a.jpg'); await e.tick(100);
+  assert.equal(e.supa.log.filter((x) => x.t === 'storage:signed').length, 1, 'usa o guardado');
+  // falha de rede: não entra em laço de pedidos
+  e.supa.rede.ligada = false;
+  e.x.SignedUrls.get('o1/campo/2026-10/b.jpg'); await e.tick(150);
+  const n = e.supa.log.filter((x) => x.t === 'storage:signed').length;
+  e.x.SignedUrls.get('o1/campo/2026-10/b.jpg'); e.x.SignedUrls.get('o1/campo/2026-10/b.jpg'); await e.tick(150);
+  assert.equal(e.supa.log.filter((x) => x.t === 'storage:signed').length, n);
+});

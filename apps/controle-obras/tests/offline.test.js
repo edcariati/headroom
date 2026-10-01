@@ -260,26 +260,38 @@ test('campo · lê as tabelas com valores só pelas funções do servidor e grav
 
 /* ---------- fotos ---------- */
 test('offline · foto sem internet fica no aparelho, aparece com selo e sobe sozinha com o sinal', async () => {
-  const e = await abrir({ supa: { seed: seedO() }, hash: '#/painel' });
+  const e = await abrir({ supa: { seed: seedO() }, hash: '#/obra/o1/diario' });
   await e.offline();
   const NodeBlob = Blob;
   const r = await e.x.Supa.assets().upload(new NodeBlob(['conteudo-da-foto'], { type: 'image/jpeg' }));
   assert.match(r.id, /^off:f/);
   assert.equal(Object.keys(Off(e).fotos).length, 1);
-  assert.match(e.app() + '', /Sem internet/);
   e.x.Store.add('diarios', { obraId: 'o1', data: dia(0), texto: 'Com foto', fotos: [r.id] }); await e.tick(150);
   assert.equal(Off(e).pendentes(), 2);
   assert.match(e.app(), /2 alterações aguardando envio/);
   await e.online();
   assert.equal(e.supa.uploads.length, 1);
-  assert.equal(e.supa.uploads[0].upsert, true, 'retomada segura');
+  assert.equal(e.supa.uploads[0].upsert, false, 'nunca substitui arquivo existente');
+  assert.match(e.supa.uploads[0].path, /^o1\/campo\/\d{4}-\d{2}\/f.+\.jpg$/, 'pasta da obra, zona campo');
   const d = e.supa.linhas('diarios')[0].dados;
-  assert.match(d.fotos[0], /^sb:u-123\/\d{4}-\d{2}\/f.+\.jpg$/);
+  assert.match(d.fotos[0], /^sb:o1\/campo\/\d{4}-\d{2}\/f.+\.jpg$/);
   assert.equal(Object.keys(Off(e).fotos).length, 0);
 });
 
+test('offline · reenvio de foto que já tinha subido (resposta perdida) conta como enviada, sem erro', async () => {
+  const e = await abrir({ supa: { seed: seedO() }, hash: '#/obra/o1/diario' });
+  await e.offline();
+  const r = await e.x.Supa.assets().upload(new Blob(['x'], { type: 'image/jpeg' }));
+  const f = Object.values(Off(e).fotos)[0];
+  e.supa.uploads.push({ path: f.path, size: 1, upsert: false });         // o servidor já tem o arquivo
+  e.x.Store.add('diarios', { obraId: 'o1', data: dia(0), texto: 'x', fotos: [r.id] }); await e.tick(100);
+  await e.online();
+  assert.equal(Object.keys(Off(e).fotos).length, 0);
+  assert.equal(Off(e).fila.length, 0);
+});
+
 test('offline · pouco espaço no aparelho recusa a foto com explicação', async () => {
-  const e = await abrir({ supa: { seed: seedO() }, hash: '#/painel' });
+  const e = await abrir({ supa: { seed: seedO() }, hash: '#/obra/o1/diario' });
   await e.offline();
   Object.defineProperty(e.win.navigator, 'storage', { configurable: true, value: { estimate: async () => ({ quota: 1000, usage: 999 }), persist: async () => true } });
   await assert.rejects(() => e.x.Supa.assets().upload(new Blob(['abc'], { type: 'image/jpeg' })), /Pouco espaço livre/);

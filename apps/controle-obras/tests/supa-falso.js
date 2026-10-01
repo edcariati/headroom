@@ -96,7 +96,15 @@ function supaFalso(opts) {
       async signOut() { session = null; return {}; },
       async resetPasswordForEmail() { return { error: null }; }
     },
-    storage: { from: () => ({ upload: async (path, blob, o) => { if (!rede.ligada) return semRede(); uploads.push({ path, size: blob && blob.size, upsert: o && o.upsert }); return { error: null }; } }) }
+    storage: { from: () => ({
+      upload: async (path, blob, o) => {
+        if (!rede.ligada) return semRede();
+        if (uploads.some((u) => u.path === path)) return { error: { message: 'The resource already exists', statusCode: '409' } };
+        if (rede.negaStorage) return { error: { message: 'new row violates row-level security policy' } };
+        uploads.push({ path, size: blob && blob.size, upsert: o && o.upsert }); return { error: null };
+      },
+      createSignedUrls: async (paths, exp) => { if (!rede.ligada) return semRede(); log.push({ t: 'storage:signed', op: 'signed', payload: { paths: paths.slice(), exp } }); return { data: paths.map((p) => ({ path: p, signedUrl: 'https://teste.supabase.co/storage/v1/object/sign/obras-arquivos/' + p + '?token=abc' })), error: null }; }
+    }) }
   };
 
   return {
