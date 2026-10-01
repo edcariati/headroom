@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import type { Protocolo, ProtocoloStatus } from '../lib/types';
-import { PROTOCOLO_STATUS, PROTOCOLO_TIPO, diasAte, fmtData } from '../lib/labels';
+import { PROTOCOLO_TIPO, diasAte, fmtData, opcoesStatus, statusProtocolo } from '../lib/labels';
 
 export default function ProtocoloItem({ p, onChange, mostrarProjeto }: {
   p: Protocolo; onChange: () => void; mostrarProjeto?: boolean;
@@ -14,10 +14,10 @@ export default function ProtocoloItem({ p, onChange, mostrarProjeto }: {
 
   async function mudarStatus(status: ProtocoloStatus) {
     const patch: Partial<Protocolo> = { status };
-    if (status === 'protocolado' && !p.data_protocolo) patch.data_protocolo = new Date().toISOString().slice(0, 10);
+    if (status === 'protocolado' && p.tipo !== 'entrega_cliente' && !p.data_protocolo) patch.data_protocolo = new Date().toISOString().slice(0, 10);
     await supabase.from('protocolos').update(patch).eq('id', p.id);
-    await supabase.from('protocolo_andamentos').insert({ protocolo_id: p.id, status, texto: `Status: ${PROTOCOLO_STATUS[status]}` });
-    await supabase.from('historico').insert({ projeto_id: p.projeto_id, tipo: 'protocolo', texto: `${PROTOCOLO_TIPO[p.tipo]}${p.numero ? ' ' + p.numero : ''}: ${PROTOCOLO_STATUS[status]}` });
+    await supabase.from('protocolo_andamentos').insert({ protocolo_id: p.id, status, texto: `Status: ${statusProtocolo(p.tipo, status)}` });
+    await supabase.from('historico').insert({ projeto_id: p.projeto_id, tipo: 'protocolo', texto: `${PROTOCOLO_TIPO[p.tipo]}${p.numero ? ' ' + p.numero : ''}: ${statusProtocolo(p.tipo, status)}` });
     onChange();
   }
   async function salvar(campos: Partial<Protocolo>) {
@@ -43,7 +43,7 @@ export default function ProtocoloItem({ p, onChange, mostrarProjeto }: {
           )}
         </div>
         <div className="dir">
-          <span className={`tag p-${p.status}`}>{PROTOCOLO_STATUS[p.status]}</span>
+          <span className={`tag p-${p.status}`}>{statusProtocolo(p.tipo, p.status)}</span>
           {p.prazo && <div className={`pequeno ${urgente ? 'alerta' : 'mudo'}`}>prazo {fmtData(p.prazo)}{dias !== null && ` (${dias < 0 ? `${-dias}d atrasado` : `${dias}d`})`}</div>}
         </div>
       </div>
@@ -52,16 +52,16 @@ export default function ProtocoloItem({ p, onChange, mostrarProjeto }: {
           <div className="duas">
             <label>Status
               <select value={p.status} onChange={(e) => mudarStatus(e.target.value as ProtocoloStatus)}>
-                {Object.entries(PROTOCOLO_STATUS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                {opcoesStatus(p.tipo).map((k) => <option key={k} value={k}>{statusProtocolo(p.tipo, k)}</option>)}
               </select>
             </label>
             <label>Número<input defaultValue={p.numero ?? ''} onBlur={(e) => e.target.value !== (p.numero ?? '') && salvar({ numero: e.target.value || null })} /></label>
           </div>
           <div className="duas">
-            <label>Protocolado em<input type="date" defaultValue={p.data_protocolo ?? ''} onBlur={(e) => salvar({ data_protocolo: e.target.value || null })} /></label>
-            <label>Próximo prazo<input type="date" defaultValue={p.prazo ?? ''} onBlur={(e) => salvar({ prazo: e.target.value || null })} /></label>
+            <label>{p.tipo === 'entrega_cliente' ? 'Entregue em' : 'Protocolado em'}<input type="date" defaultValue={p.data_protocolo ?? ''} onBlur={(e) => salvar({ data_protocolo: e.target.value || null })} /></label>
+            <label>{p.tipo === 'entrega_cliente' ? 'Data da entrega' : 'Próximo prazo'}<input type="date" defaultValue={p.prazo ?? ''} onBlur={(e) => salvar({ prazo: e.target.value || null })} /></label>
           </div>
-          <label className="check"><input type="checkbox" checked={p.cliente_notificado} onChange={(e) => salvar({ cliente_notificado: e.target.checked })} />Cliente notificado da entrada</label>
+          <label className="check"><input type="checkbox" checked={p.cliente_notificado} onChange={(e) => salvar({ cliente_notificado: e.target.checked })} />{p.tipo === 'entrega_cliente' ? 'Cliente avisado da data' : 'Cliente notificado da entrada'}</label>
           <div className="nota">
             <input placeholder="Registrar andamento (ex.: exigência recebida, retorno do fiscal…)" value={nota} onChange={(e) => setNota(e.target.value)} />
             <button onClick={anotar}>Registrar</button>

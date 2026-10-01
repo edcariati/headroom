@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import type { EtapaModelo, Projeto, Protocolo } from '../lib/types';
-import { FASES, PROTOCOLO_STATUS, diasAte, fmtData } from '../lib/labels';
+import { FASES, diasAte, fmtData, statusProtocolo } from '../lib/labels';
 import { MAX_DIAS_PAUSA, diasDePausa } from '../lib/flow';
 
 export default function Painel() {
@@ -47,7 +47,7 @@ export default function Painel() {
             {atencao.map((p) => (
               <li key={p.id}><Link to={`/projetos/${p.projeto_id}`}>
                 <b>{p.projetos?.nome}</b> · {p.projetos?.clientes?.nome}
-                <span className="mudo"> — {PROTOCOLO_STATUS[p.status]}{p.prazo ? `, prazo ${fmtData(p.prazo)}` : ''}</span>
+                <span className="mudo"> — {statusProtocolo(p.tipo, p.status)}{p.prazo ? `, prazo ${fmtData(p.prazo)}` : ''}</span>
               </Link></li>
             ))}
             {pausaCritica.map((p) => (

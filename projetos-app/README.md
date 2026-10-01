@@ -7,7 +7,7 @@ e controla os protocolos (Prefeitura, condomínio e outros órgãos). Funciona n
 ## Como colocar para rodar
 
 1. Crie um projeto em <https://supabase.com>.
-2. No **SQL Editor**, rode na ordem os 4 arquivos de `supabase/migrations/` (`0001` a `0004`)
+2. No **SQL Editor**, rode na ordem os arquivos de `supabase/migrations/` (`0001` a `0005`)
    (ou use `supabase db push` com a CLI).
 3. Em **Authentication → Providers → Email**, desative "Allow new users to sign up" e crie os usuários da
    equipe em **Authentication → Users**. Para tornar alguém admin:
@@ -22,7 +22,7 @@ e controla os protocolos (Prefeitura, condomínio e outros órgãos). Funciona n
   escopo; as não contratadas ficam ocultas.
 - **Fluxo por etapa**: entra/sai/regra, concluir (avança para a próxima aplicável), reabrir, rodadas de ajuste
   (limite de 3, alerta de custo adicional), aceites formais, pausa, retomada e rescisão (180 dias).
-- **Protocolos**: tipo, órgão, número, status, data, próximo prazo, cliente notificado e andamentos.
+- **Protocolos**: tipo (Prefeitura, condomínio, outro órgão ou entrega ao cliente), órgão, número, status, data, próximo prazo, cliente notificado e andamentos.
 - **Documentos por etapa**: modelos exigidos em cada etapa, com código de arquivo padronizado (`CAXXXXXX` vira o código do cliente) e anexo no Supabase Storage (bucket privado `documentos`).
 - **Histórico** rastreável por projeto.
 
