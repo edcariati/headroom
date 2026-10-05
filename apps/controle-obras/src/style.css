@@ -354,3 +354,37 @@ code.k{font-size:12px;background:var(--surface2);border:1px solid var(--line2);b
   .kpi-v{font-size:26px}
 }
 @media print{.dash{display:none}}
+
+/* ---- fluxo geral ---- */
+.flx{display:flex;flex-direction:column;align-items:stretch;gap:0;margin-top:14px}
+.flx-fim{align-self:center;max-width:560px;text-align:center;background:var(--steel);color:var(--on-steel);border-radius:8px;padding:10px 18px;display:flex;flex-direction:column;gap:2px}
+.flx-fim strong{font:600 16px var(--f-head)}.flx-fim span{font-size:13px;opacity:.9}
+.flx-liga{align-self:center;width:2px;height:22px;background:var(--line);position:relative}
+.flx-liga::after{content:"";position:absolute;left:-4px;bottom:-1px;border:5px solid transparent;border-top:7px solid var(--ink3);border-bottom:0}
+.flx-fase{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:0}
+.flx-fase h2{font-size:17px;display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.flx-num{width:26px;height:26px;border-radius:50%;background:var(--steel);color:var(--on-steel);display:inline-flex;align-items:center;justify-content:center;font:600 13px var(--f-head)}
+.flx-row{display:flex;flex-wrap:wrap;align-items:stretch;gap:8px 4px}
+.flx-no{display:flex;flex-direction:column;gap:2px;min-width:132px;max-width:190px;flex:1 1 132px;padding:9px 11px;border:1px solid var(--idle);border-radius:6px;background:var(--surface2);color:var(--ink);text-decoration:none;position:relative}
+.flx-no:hover{text-decoration:none;border-color:var(--steel)}
+.flx-no.sel{outline:2px solid var(--steel);outline-offset:1px}
+.flx-n{font:600 13px var(--f-head);color:var(--ink3)}
+.flx-t{font-size:14px;font-weight:500;line-height:1.25}
+.flx-s{font-size:11px;color:var(--ink2)}
+.flx-no.em_execucao{border-color:var(--steel);background:var(--steel-soft)}
+.flx-no.aguardando_vistoria{border-color:var(--amber-bar);background:var(--amber-soft)}
+.flx-no.liberada{border-color:var(--ok);background:var(--ok-soft)}
+.flx-no.crit{box-shadow:inset 0 4px 0 var(--crit)}
+.flx-seta{align-self:center;width:14px;height:2px;background:var(--ink3);position:relative;display:none}
+.flx-porta{align-self:center;width:12px;height:12px;border:2px solid var(--steel);background:var(--surface);transform:rotate(45deg);margin:0 6px;flex:none}
+.flx-row .flx-porta:last-child{margin-right:0}
+.flx-leg,.flx-leg span{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--ink2)}
+.flx-leg{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:6px}
+.flx-dot{width:12px;height:12px;border-radius:2px;border:1px solid var(--idle);display:inline-block}
+.flx-dot.em_execucao{background:var(--steel);border-color:var(--steel)}.flx-dot.aguardando_vistoria{background:var(--amber-bar);border-color:var(--amber-bar)}.flx-dot.liberada{background:var(--ok);border-color:var(--ok)}.flx-dot.crit{background:var(--crit);border-color:var(--crit)}
+.flx-det{margin-top:18px}.flx-det h3{font-size:15px;margin:10px 0 6px}
+.flx-lib{display:flex;gap:10px;align-items:flex-start;background:var(--steel-soft);padding:10px 12px;border-radius:6px}
+.flx-losango{flex:none;width:12px;height:12px;border:2px solid var(--steel);transform:rotate(45deg);margin-top:5px;background:var(--surface)}
+.flx-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}
+@media (max-width:640px){.flx-no{max-width:none;flex-basis:100%}.flx-porta{display:none}}
+@media print{.flx-det{break-inside:avoid}}

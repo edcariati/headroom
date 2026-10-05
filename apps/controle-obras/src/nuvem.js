@@ -187,7 +187,8 @@ document.addEventListener('submit', async function(e){
 });
 document.addEventListener('change', function(e){
   var el=e.target;
-  if(el.matches('[data-chg="hist-obra"]')){ hist.obra=el.value; render(); }
+  if(el.matches('[data-chg="fluxo-obra"]')){ location.hash=fluxoLink(el.value==='-'?'':el.value, 0); }
+  else if(el.matches('[data-chg="hist-obra"]')){ hist.obra=el.value; render(); }
   else if(el.matches('[data-chg="hist-col"]')){ hist.colecao=el.value; render(); }
   else if(el.matches('[data-chg="importar"]')){
     var file=el.files&&el.files[0]; if(!file) return;
