@@ -35,6 +35,7 @@
         <button data-aba="avaliadores">Avaliadores</button>
         <button data-aba="nomes">Cardápio</button>
         <button data-aba="cozinha">Cozinha</button>
+        <button data-aba="compras">Compras</button>
         <button data-aba="link">Link para enviar</button>
         <button id="btn-atualizar" style="margin-left:auto">↻ Atualizar</button>
       </nav>
@@ -146,9 +147,14 @@
 
       <!-- Cozinha -->
       <section data-painel="cozinha" class="escondido">
-        <div class="cartao">
+        <div class="titulo-secao">
+          <h2>Processo de cozinha</h2>
+          <button class="botao pequeno secundario" type="button" data-imprimir="cozinha">🖨 Imprimir / salvar PDF</button>
+        </div>
+        <div id="cozinha-conteudo"><p class="carregando">Carregando…</p></div>
+        <div class="cartao nao-imprimir">
           <div class="acoes" style="justify-content:space-between;margin-bottom:8px">
-            <h2 style="margin:0">Processo de cozinha</h2>
+            <h3 style="margin:0">PDF do processo (opcional)</h3>
             <div class="acoes">
               <button class="botao pequeno" id="btn-pdf-baixar" type="button">⬇ Baixar PDF</button>
               <label class="botao pequeno secundario" for="pdf-arquivo" style="cursor:pointer">⬆ Enviar ou atualizar PDF</label>
@@ -159,6 +165,18 @@
           <div class="erro-msg" id="erro-pdf"></div>
           <iframe id="pdf-visor" class="pdf-visor escondido" title="Processo de cozinha"></iframe>
         </div>
+      </section>
+
+      <!-- Compras -->
+      <section data-painel="compras" class="escondido">
+        <div class="titulo-secao">
+          <h2>Compras e custos</h2>
+          <div class="acoes">
+            <button class="botao pequeno" type="button" id="btn-compras-xlsx">⬇ Excel</button>
+            <button class="botao pequeno secundario" type="button" data-imprimir="compras">🖨 Imprimir</button>
+          </div>
+        </div>
+        <div id="compras-conteudo"><p class="carregando">Carregando…</p></div>
       </section>
     </div>
   </main>

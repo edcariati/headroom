@@ -121,6 +121,9 @@ async function checarSenha(senha) {
   }
 }
 
+// Processo de cozinha e compras: arquivo privado enviado só para a Vercel (fora do GitHub público).
+const privado = () => import("./_privado.js").catch(() => null);
+
 // ---------- Funções ----------
 const FUNCOES = {
   async listar_lanches() {
@@ -224,6 +227,16 @@ const FUNCOES = {
     }
     await gravarJson("cfg/cardapio.json", cfg);
     return null;
+  },
+
+  async admin_cozinha({ p_senha }) {
+    await checarSenha(p_senha);
+    return (await privado())?.COZINHA || null;
+  },
+
+  async admin_compras({ p_senha }) {
+    await checarSenha(p_senha);
+    return (await privado())?.COMPRAS || null;
   },
 
   async admin_processo({ p_senha }) {

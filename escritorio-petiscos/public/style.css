@@ -392,3 +392,72 @@ table.mapa .nome-lanche { background: none; border: 0; font: inherit; color: var
 .botao-cardapio:active { transform: translateY(3px); box-shadow: 0 3px 0 var(--laranja-escuro); }
 
 .pdf-visor { width: 100%; height: 80vh; border: 1px solid var(--linha); border-radius: 10px; background: #fff; margin-top: 8px; }
+
+/* ---------- Painel: Cozinha ---------- */
+.duas-colunas { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.papel { background: var(--creme); border-radius: 12px; padding: 12px 14px; }
+.papel-nome { font-weight: 700; color: var(--cafe-800); margin-bottom: 4px; }
+.papel p { margin: 0; font-size: 14px; }
+.fluxo { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 14px; }
+.fluxo .passo { border: 2px solid var(--linha); border-radius: 10px; padding: 6px 10px; font-size: 13px; font-weight: 700; background: #fff; }
+.fluxo .passo.chapeiro { border-color: var(--cafe-500); background: #f6ebdd; }
+.fluxo .passo.destaque { border-color: var(--laranja); background: #fde8d4; }
+.fluxo .seta { color: var(--cafe-500); font-weight: 700; }
+.lista-padrao { margin: 6px 0 0; padding-left: 22px; font-size: 14px; }
+.lista-padrao li { margin: 4px 0; }
+.momentos { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-top: 10px; }
+.momento { border: 2px solid var(--linha); border-radius: 12px; padding: 12px; background: #fff; }
+.momento.destaque { border-color: var(--laranja); background: #fff4ea; }
+.momento-nome { font-family: var(--display); color: var(--cafe-800); font-size: 17px; }
+.momento-sub { font-size: 12px; color: var(--texto-2); margin-bottom: 6px; }
+.momento ul { margin: 0; padding-left: 18px; font-size: 14px; }
+.legenda-camadas { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; margin: 6px 0 12px; }
+.legenda-camadas span { display: inline-flex; align-items: center; gap: 6px; }
+.legenda-camadas i.camada { display: inline-block; width: 16px; height: 14px; padding: 0; margin: 0; }
+.pilhas { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 18px 14px; }
+.pilha-lanche { background: #fff; border: 1px solid var(--linha); border-radius: 12px; padding: 12px; }
+.pilha-nome { font-weight: 700; color: var(--cafe-800); text-align: center; }
+.pilha-sub { font-size: 12px; color: var(--texto-2); text-align: center; margin-bottom: 8px; }
+.pilha { display: flex; flex-direction: column; gap: 3px; }
+.camada { border: 1.5px solid; border-radius: 6px; padding: 3px 6px; font-size: 12.5px; text-align: center; }
+.camada.tampa { border-radius: 14px 14px 6px 6px; }
+.camada.base { border-radius: 6px 6px 10px 10px; }
+.camada.pao { background: #f7dcc0; border-color: #c97a3a; }
+.camada.carne { background: #e9d3c4; border-color: #7a3e1d; }
+.camada.molho { background: #fbe6b5; border-color: #c9962a; }
+.camada.verde { background: #d6ecd2; border-color: #3f8a46; }
+.camada.croc { background: #e3dbf0; border-color: #6b55a3; }
+.pilha-chapa { font-size: 12.5px; margin: 8px 0 0; color: var(--texto-2); }
+tr.a-definir td { color: var(--texto-2); font-style: italic; }
+.check-item { display: flex; gap: 8px; align-items: flex-start; padding: 5px 0; font-size: 14px; cursor: pointer; }
+.check-item input { margin-top: 3px; width: 18px; height: 18px; accent-color: var(--laranja-escuro); }
+.rotulo-desc { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--laranja-escuro); margin: 0 0 4px; }
+
+/* ---------- Painel: Compras ---------- */
+.tabela-compras .obs, .obs { font-size: 12px; color: var(--texto-2); font-weight: 400; }
+.qtd-proxima { width: 86px !important; padding: 6px 8px !important; font-size: 14px !important; text-align: right; }
+.campo-inline { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; color: var(--cafe-800); }
+.campo-inline input { width: 90px; padding: 8px 10px; font-size: 15px; }
+.ok-tag { background: #2f7d4a; color: #fff; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+tfoot td { border-top: 2px solid var(--cafe-300); }
+
+@media print {
+  body[data-imprimir] [data-painel] { display: none !important; }
+  body[data-imprimir="cozinha"] [data-painel="cozinha"], body[data-imprimir="compras"] [data-painel="compras"] { display: block !important; }
+  .nao-imprimir, body[data-imprimir] .titulo-secao button, body[data-imprimir] .titulo-secao .acoes { display: none !important; }
+  .pilha-lanche, .momento { break-inside: avoid; }
+}
+
+@media (max-width: 640px) {
+  .tabela-compras thead { display: none; }
+  .tabela-compras, .tabela-compras tbody, .tabela-compras tr, .tabela-compras td { display: block; width: 100%; }
+  .tabela-compras tr { border: 1px solid var(--linha); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; background: #fff; }
+  .tabela-compras td { border: 0; padding: 3px 0; text-align: right; }
+  .tabela-compras td:first-child { text-align: left; font-size: 15px; padding-bottom: 6px; }
+  .tabela-compras td[data-rot]::before { content: attr(data-rot); float: left; color: var(--texto-2); font-size: 13px; font-weight: 400; }
+  .tabela-compras tfoot tr { display: flex; justify-content: space-between; }
+  .tabela-compras tfoot td { width: auto; }
+  .tabela-compras tfoot td:empty { display: none; }
+  .tabela-compras td.falta { text-align: left; padding-left: 0; }
+  .tabela-compras td.falta::before { float: none; display: block; }
+}

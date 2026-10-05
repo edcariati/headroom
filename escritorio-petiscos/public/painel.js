@@ -76,7 +76,8 @@
     document.querySelectorAll("#abas button[data-aba]").forEach((x) => x.classList.toggle("ativa", x === b));
     document.querySelectorAll("[data-painel]").forEach((p) => p.classList.toggle("escondido", p.dataset.painel !== b.dataset.aba));
     if (b.dataset.aba === "lanches") renderLanche();
-    if (b.dataset.aba === "cozinha") carregarProcesso();
+    if (b.dataset.aba === "cozinha") { renderCozinha(); carregarProcesso(); }
+    if (b.dataset.aba === "compras") renderCompras();
   });
 
   function renderTudo() {
@@ -525,6 +526,242 @@
       btn.disabled = false;
     }
   });
+
+  // ---------- Cozinha: processo completo (dados privados vindos da API) ----------
+  const ler = (k, padrao) => { try { const v = localStorage.getItem(k); return v == null ? padrao : JSON.parse(v); } catch (e) { return padrao; } };
+  const gravar = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+  let cozinha = null, compras = null;
+  const TIPO = { p: "pao", c: "carne", m: "molho", v: "verde", k: "croc" };
+
+  async function renderCozinha() {
+    const box = $("cozinha-conteudo");
+    try {
+      if (!cozinha) cozinha = await rpc("admin_cozinha", { p_senha: senha });
+    } catch (e) { box.innerHTML = `<div class="cartao erro-msg">${esc(e.message)}</div>`; return; }
+    if (!cozinha) { box.innerHTML = '<div class="cartao vazio">Processo de cozinha não encontrado no servidor.</div>'; return; }
+    const z = cozinha;
+    const marcados = ler("ep_checklist", {});
+    const check = (grupo, itens) => itens.map((t, i) => {
+      const id = `${grupo}-${i}`;
+      return `<label class="check-item"><input type="checkbox" data-check="${id}" ${marcados[id] ? "checked" : ""}/> <span>${esc(t)}</span></label>`;
+    }).join("");
+    const pilhas = dados.lanches.map((l) => {
+      const m = z.montagem[l.id];
+      if (!m) return "";
+      const camadas = m.camadas.slice().reverse().map(([t, rot], i, arr) =>
+        `<div class="camada ${TIPO[t]}${i === 0 ? " tampa" : ""}${i === arr.length - 1 ? " base" : ""}">${esc(rot)}</div>`).join("");
+      return `<div class="pilha-lanche">
+        <div class="pilha-nome">${l.id}. ${esc(l.codinome || l.nome)}</div>
+        <div class="pilha-sub">${esc(l.nome)}</div>
+        <div class="pilha">${camadas}</div>
+        <p class="pilha-chapa"><b>Chapa:</b> ${esc(m.chapa)}</p>
+      </div>`;
+    }).join("");
+
+    box.innerHTML = `
+      <div class="cartao">
+        <h3>Quem faz o quê</h3>
+        <div class="duas-colunas">
+          <div class="papel"><div class="papel-nome">👨‍🍳 Chapeiro</div><p>${esc(z.divisao.chapeiro)}</p></div>
+          <div class="papel"><div class="papel-nome">🧑‍🍳 Ajudante</div><p>${esc(z.divisao.ajudante)}</p></div>
+        </div>
+        <div class="fluxo">
+          <span class="passo">Preparo antecipado</span><span class="seta">→</span>
+          <span class="passo chapeiro">Tostar o pão</span><span class="seta">→</span>
+          <span class="passo chapeiro">Carne + queijo</span><span class="seta">→</span>
+          <span class="passo">Montar de baixo para cima</span><span class="seta">→</span>
+          <span class="passo destaque">Embrulhar e numerar (1 a 13)</span>
+        </div>
+        <h3 style="margin-top:18px">Padrões para todos os lanches</h3>
+        <ol class="lista-padrao">${z.padroes.map((t) => `<li>${esc(t)}</li>`).join("")}</ol>
+      </div>
+
+      <div class="cartao">
+        <h3>Linha do tempo do preparo</h3>
+        <p class="muted">A cebola caramelizada e os hambúrgueres saem na véspera; o resto, no dia.</p>
+        <div class="momentos">${z.momentos.map((mo, i) => `
+          <div class="momento${i === 0 ? " destaque" : ""}">
+            <div class="momento-nome">${esc(mo.nome)}</div>
+            <div class="momento-sub">${esc(mo.sub)}</div>
+            <ul>${mo.itens.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
+          </div>`).join("")}
+        </div>
+      </div>
+
+      <div class="cartao">
+        <h3>Preparo antecipado, passo a passo</h3>
+        <div class="tabela-wrap"><table>
+          <thead><tr><th class="num">#</th><th>Preparo</th><th>Como fazer</th><th>Quando</th><th>Guardar</th></tr></thead>
+          <tbody>${z.preparo.map((r, i) => `<tr><td class="num">${i + 1}</td><td><b>${esc(r[0])}</b></td><td>${esc(r[1])}</td><td>${esc(r[2])}</td><td>${esc(r[3])}</td></tr>`).join("")}</tbody>
+        </table></div>
+      </div>
+
+      <div class="cartao">
+        <h3>Montagem dos 13 lanches</h3>
+        <p class="muted">Cada pilha mostra o lanche de cima (tampa) para baixo (base). Monte de baixo para cima.</p>
+        <div class="legenda-camadas">
+          <span><i class="camada pao"></i>Pão</span><span><i class="camada carne"></i>Carne e queijo</span>
+          <span><i class="camada molho"></i>Molho e doce</span><span><i class="camada verde"></i>Verdura e fruta</span>
+          <span><i class="camada croc"></i>Crocante</span>
+        </div>
+        <div class="pilhas">${pilhas}</div>
+      </div>
+
+      <div class="cartao">
+        <h3>Padrão de porções</h3>
+        <div class="tabela-wrap"><table>
+          <thead><tr><th>Ingrediente</th><th>Porção por lanche</th><th>Lanches</th></tr></thead>
+          <tbody>${z.porcoes.map((r) => `<tr${r[1].startsWith("a definir") ? ' class="a-definir"' : ""}><td>${esc(r[0])}</td><td>${esc(r[1])}</td><td>${esc(r[2])}</td></tr>`).join("")}</tbody>
+        </table></div>
+        <p class="muted" style="margin-top:12px"><b>Para confirmar com o dono:</b></p>
+        <ul class="lista-padrao">${z.confirmar.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
+      </div>
+
+      <div class="cartao">
+        <h3>Cuidados</h3>
+        <div class="duas-colunas">
+          <div><p class="rotulo-desc">🌱 Lanche vegano (11. O Naturalista)</p><ul class="lista-padrao">${z.vegano.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>
+          <div><p class="rotulo-desc">⚠️ Alergênicos para avisar o avaliador</p><ul class="lista-padrao">${z.alergenicos.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>
+        </div>
+      </div>
+
+      <div class="cartao">
+        <div class="acoes" style="justify-content:space-between"><h3 style="margin:0">Checklist</h3><button class="link nao-imprimir" type="button" id="btn-limpar-check">Desmarcar tudo</button></div>
+        <div class="duas-colunas" style="margin-top:10px">
+          <div><p class="rotulo-desc">Abertura</p>${check("abertura", z.abertura)}</div>
+          <div><p class="rotulo-desc">Fechamento</p>${check("fechamento", z.fechamento)}</div>
+        </div>
+      </div>`;
+    box.querySelectorAll("[data-check]").forEach((c) => c.addEventListener("change", () => {
+      const m = ler("ep_checklist", {}); m[c.dataset.check] = c.checked; gravar("ep_checklist", m);
+    }));
+    $("btn-limpar-check").addEventListener("click", () => { gravar("ep_checklist", {}); renderCozinha(); });
+  }
+
+  // ---------- Compras e custo por lanche ----------
+  const custoUnidade = (it) => (it.qtd ? it.custo / it.qtd : null);
+  const custoBase = (it) => (it.qtd && it.conteudo ? it.custo / it.qtd / it.conteudo : null);
+  const fmtQtd = (v) => Number(v).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
+
+  async function renderCompras() {
+    const box = $("compras-conteudo");
+    try {
+      if (!compras) compras = await rpc("admin_compras", { p_senha: senha });
+    } catch (e) { box.innerHTML = `<div class="cartao erro-msg">${esc(e.message)}</div>`; return; }
+    if (!compras) { box.innerHTML = '<div class="cartao vazio">Lista de compras não encontrada no servidor.</div>'; return; }
+    const c = compras;
+    const proxima = ler("ep_proxima_compra", {});
+    const pesoCarne = ler("ep_peso_carne", "");
+    const cmv = ler("ep_cmv", 30);
+    const total = c.itens.reduce((a, it) => a + it.custo, 0);
+
+    box.innerHTML = `
+      <div class="kpis">
+        <div class="kpi"><div class="r">Última compra</div><div class="v">${reais(total)}</div></div>
+        <div class="kpi"><div class="r">Itens comprados</div><div class="v">${c.itens.length}</div></div>
+        <div class="kpi"><div class="r">Itens a cotar</div><div class="v">${c.cotar.length}</div></div>
+        <div class="kpi"><div class="r">Próxima compra (prevista)</div><div class="v" id="total-previsto">–</div></div>
+      </div>
+
+      <div class="cartao">
+        <h3>Lista de insumos</h3>
+        <p class="muted">${esc(c.referencia)}. Digite em "Próxima compra" a quantidade que vai comprar (na unidade de compra) para ver o custo previsto. Fica salvo neste aparelho.</p>
+        <div class="tabela-wrap"><table class="tabela-compras">
+          <thead><tr><th>Produto</th><th>Categoria</th><th class="num">Comprado</th><th class="num">Pago</th><th class="num">Custo por unidade</th><th class="num nao-imprimir-col">Próxima compra</th><th class="num">Previsto</th></tr></thead>
+          <tbody>${c.itens.map((it, i) => `<tr>
+            <td><b>${esc(it.produto)}</b>${it.obs ? `<div class="obs">${esc(it.obs)}</div>` : ""}</td>
+            <td data-rot="Categoria">${esc(it.categoria)}</td>
+            <td class="num" data-rot="Comprado">${fmtQtd(it.qtd)} ${esc(it.unidade)}</td>
+            <td class="num" data-rot="Pago">${reais(it.custo)}</td>
+            <td class="num" data-rot="Custo por unidade"><b>${reais(custoUnidade(it))}</b>/${esc(it.unidade)}</td>
+            <td class="num" data-rot="Próxima compra"><input class="qtd-proxima" type="number" inputmode="decimal" min="0" step="any" data-i="${i}" value="${proxima[it.produto] ?? ""}" placeholder="0"/> ${esc(it.unidade)}</td>
+            <td class="num" data-rot="Previsto" data-previsto="${i}">–</td></tr>`).join("")}</tbody>
+          <tfoot><tr><td colspan="3"><b>Total</b></td><td class="num"><b>${reais(total)}</b></td><td></td><td></td><td class="num"><b id="total-previsto-tab">–</b></td></tr></tfoot>
+        </table></div>
+        <p class="rotulo-desc" style="margin-top:14px">Falta cotar (estão nas receitas, mas não na compra)</p>
+        <ul class="lista-padrao">${c.cotar.map((x) => `<li><b>${esc(x.produto)}</b>: ${esc(x.motivo)}</li>`).join("")}</ul>
+      </div>
+
+      <div class="cartao">
+        <h3>Custo por lanche</h3>
+        <div class="acoes" style="margin-bottom:10px">
+          <label class="campo-inline">Peso do hambúrguer bovino <input id="peso-carne" type="number" min="0" step="1" value="${pesoCarne}" placeholder="g"/> g</label>
+          <label class="campo-inline">CMV alvo <input id="cmv" type="number" min="1" max="100" step="1" value="${cmv}"/> %</label>
+        </div>
+        <p class="muted">Custo dos ingredientes de cada porção, pelo preço da última compra. O preço sugerido (custo ÷ CMV) só aparece quando todos os ingredientes do lanche têm custo. Não inclui tempero, óleo, embalagem e gás.</p>
+        <div class="tabela-wrap"><table class="tabela-compras">
+          <thead><tr><th>Lanche</th><th class="num">Custo dos ingredientes</th><th class="num">Preço sugerido</th><th>Falta definir</th></tr></thead>
+          <tbody id="custo-lanches"></tbody>
+        </table></div>
+      </div>`;
+
+    const atualizar = () => {
+      let tot = 0, algum = false;
+      box.querySelectorAll(".qtd-proxima").forEach((inp) => {
+        const it = c.itens[inp.dataset.i];
+        const q = parseFloat(String(inp.value).replace(",", "."));
+        const cel = box.querySelector(`[data-previsto="${inp.dataset.i}"]`);
+        if (q > 0) { const v = q * custoUnidade(it); tot += v; algum = true; cel.textContent = reais(v); }
+        else cel.textContent = "–";
+      });
+      $("total-previsto").textContent = algum ? reais(tot) : "–";
+      $("total-previsto-tab").textContent = algum ? reais(tot) : "–";
+
+      const peso = parseFloat($("peso-carne").value);
+      const alvo = parseFloat($("cmv").value) / 100;
+      $("custo-lanches").innerHTML = dados.lanches.map((l) => {
+        let custo = 0; const falta = [];
+        (c.ficha[l.id] || []).forEach(([prod, porc]) => {
+          let q = porc;
+          if (porc === "CARNE") q = peso > 0 ? peso : null;
+          if (porc === "CARNE2") q = peso > 0 ? 2 * peso : null;
+          const it = c.itens.find((x) => x.produto === prod);
+          const unit = it ? custoBase(it) : null;
+          if (q == null || unit == null) { falta.push(porc === "CARNE" || porc === "CARNE2" ? "peso do hambúrguer" : prod + (it ? (unit == null ? " (peso da embalagem)" : " (porção)") : " (cotar)")); return; }
+          custo += q * unit;
+        });
+        const completo = falta.length === 0;
+        return `<tr><td><b>${l.id}. ${esc(l.codinome || l.nome)}</b> <span class="obs">${esc(l.nome)}</span></td>
+          <td class="num" data-rot="Custo">${reais(custo)}${completo ? "" : ' <span class="obs">(parcial)</span>'}</td>
+          <td class="num" data-rot="Preço sugerido">${completo && alvo > 0 ? `<b>${reais(custo / alvo)}</b>` : "–"}</td>
+          <td class="falta" data-rot="Falta">${completo ? '<span class="ok-tag">completo</span>' : `<span class="obs">${esc([...new Set(falta)].join(", "))}</span>`}</td></tr>`;
+      }).join("");
+    };
+    box.querySelectorAll(".qtd-proxima").forEach((inp) => inp.addEventListener("input", () => {
+      const m = ler("ep_proxima_compra", {}); const it = c.itens[inp.dataset.i];
+      if (inp.value === "") delete m[it.produto]; else m[it.produto] = inp.value;
+      gravar("ep_proxima_compra", m); atualizar();
+    }));
+    $("peso-carne").addEventListener("input", (e) => { gravar("ep_peso_carne", e.target.value); atualizar(); });
+    $("cmv").addEventListener("input", (e) => { gravar("ep_cmv", e.target.value); atualizar(); });
+    atualizar();
+  }
+
+  $("btn-compras-xlsx").addEventListener("click", () => {
+    if (!compras) return toast("Abra a aba Compras primeiro", true);
+    if (!window.XLSX) return toast("Não foi possível carregar o gerador de Excel", true);
+    const proxima = ler("ep_proxima_compra", {});
+    const linhas = compras.itens.map((it) => {
+      const q = parseFloat(String(proxima[it.produto] ?? "").replace(",", "."));
+      return {
+        "Produto": it.produto, "Categoria": it.categoria, "Unidade de compra": it.unidade,
+        "Qtd comprada": it.qtd, "Pago (R$)": it.custo, "Custo por unidade (R$)": +custoUnidade(it).toFixed(4),
+        "Próxima compra (qtd)": q > 0 ? q : "", "Previsto (R$)": q > 0 ? +(q * custoUnidade(it)).toFixed(2) : "",
+        "Observação": it.obs || "",
+      };
+    });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(linhas), "Insumos");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(compras.cotar.map((x) => ({ "Produto": x.produto, "Para": x.motivo }))), "A cotar");
+    XLSX.writeFile(wb, `compras-escritorio-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  });
+
+  // Imprimir só a aba escolhida
+  document.querySelectorAll("[data-imprimir]").forEach((b) => b.addEventListener("click", () => {
+    document.body.dataset.imprimir = b.dataset.imprimir;
+    window.print();
+  }));
+  window.addEventListener("afterprint", () => { delete document.body.dataset.imprimir; });
 
   // ---------- Cozinha (PDF do processo, só no painel) ----------
   let pdfUrl = null, pdfNome = "processo-cozinha.pdf";
