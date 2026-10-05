@@ -79,7 +79,7 @@ function vPainel(){
       +'<div class="row" style="margin-top:10px;gap:8px"><span class="chip '+(ppc?(ppc.ppc*100>=(o.metaPPC==null?80:o.metaPPC)?'ok':'warn'):'')+'">PPC '+(ppc?pct(ppc.ppc):'—')+'</span><span class="chip '+(cr?'crit':(ab.length?'warn':'ok'))+'">'+plural(ab.length,'ocorrência aberta','ocorrências abertas')+(cr?' ('+cr+' crítica'+(cr>1?'s':'')+')':'')+'</span></div></a>';
   }).join('');
   var vazio='<div class="card empty" style="margin-top:18px"><h3>Nenhuma obra cadastrada</h3><p>Cadastre a primeira obra para receber as 22 etapas do protocolo, o cronograma e os controles de qualidade.</p><p style="margin-top:14px"><button class="btn primary" data-act="obra-nova" data-write>Cadastrar obra</button></p></div>';
-  return '<div class="wrap"><div class="row spread"><h1>Obras</h1><button class="btn primary" data-act="obra-nova" data-write>+ Nova obra</button></div>'+alHtml
+  return '<div class="wrap"><div class="row spread"><h1>Obras</h1><button class="btn primary" data-act="obra-nova" data-write>+ Nova obra</button></div>'+vDashboard()+alHtml
     +(obras.length?'<div class="grid cols3 sec">'+cards+'</div>':vazio)+'</div>';
 }
 

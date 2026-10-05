@@ -2,7 +2,7 @@
    Guarda o aplicativo para abrir sem internet depois do primeiro acesso.
    A versão é gerada pelo build.py (hash do index.html + config.js).
    Uma versão nova NÃO assume sozinha: o app avisa e o usuário confirma (nunca troca no meio de um registro). */
-var VERSAO = 'ca7ea8ebbf6a';
+var VERSAO = 'f28841ba4bf6';
 var CACHE = 'cob-' + VERSAO;
 var SHELL = ['./', 'index.html', 'config.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 var CDN = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2';
