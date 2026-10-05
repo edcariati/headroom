@@ -6,19 +6,20 @@ var NAV_GRUPOS=[
   ['exec','Execução e qualidade',['diario','ocorrencias','entrega','projeto']],
   ['sup','Suprimentos',['compras','estoque','locacoes']],
   ['prest','Prestadores',['contratos','avaliacoes']],
-  ['custo','Custo e financeiro',['orcamento','medicao','financeiro','fisfin','dre']],
-  ['gest','Gestão',['agenda','reunioes','documentos','relatorio']],
+  ['custo','Custo e financeiro',['orcamento','medicao','pedidos','financeiro','pagprazos','metaevo','fisfin','dre']],
+  ['gest','Gestão',['agenda','reunioes','documentos','quinzenal','relatorio']],
   ['pos','Pós-obra',['garantias','chamados','visitas','satisfacao']],
   ['enc','Encerramento',['encerramento']]
 ];
-var NAV_ROTULO={resumo:'Resumo', etapas:'Etapas', cronograma:'Cronograma', balanco:'Balanço', semana:'Semana e PPC', diario:'Diário', ocorrencias:'Ocorrências', entrega:'Pré-entrega', projeto:'RFI e materiais', compras:'Compras', estoque:'Estoque', locacoes:'Locações', contratos:'Contratos e frentes', avaliacoes:'Avaliações', orcamento:'Orçamento', medicao:'Medição', financeiro:'Financeiro', fisfin:'Físico-financeiro', dre:'DRE', agenda:'Agenda', reunioes:'Reuniões', documentos:'Documentos', relatorio:'Relatório mensal', encerramento:'Encerramento e P0', garantias:'Garantias', chamados:'Chamados', visitas:'Visitas', satisfacao:'Satisfação'};
+var NAV_ROTULO={resumo:'Resumo', etapas:'Etapas', cronograma:'Cronograma', balanco:'Balanço', semana:'Semana e PPC', diario:'Diário', ocorrencias:'Ocorrências', entrega:'Pré-entrega', projeto:'RFI e materiais', compras:'Compras', estoque:'Estoque', locacoes:'Locações', contratos:'Contratos e frentes', avaliacoes:'Avaliações', orcamento:'Orçamento', medicao:'Medição', financeiro:'Financeiro', fisfin:'Físico-financeiro', dre:'DRE', agenda:'Agenda', reunioes:'Reuniões', documentos:'Documentos', relatorio:'Relatório mensal', quinzenal:'Relatório quinzenal', pedidos:'Pedidos de pagamento', pagprazos:'Pagamentos e prazos', metaevo:'Meta × evolução', encerramento:'Encerramento e P0', garantias:'Garantias', chamados:'Chamados', visitas:'Visitas', satisfacao:'Satisfação'};
 function abaMapa(){
   var m=abaMapaTodas();
+  if(Store.papel==='campo'){ ['pedidos','pagprazos','metaevo'].forEach(function(k){ delete m[k]; }); }
   if(Store.papel!=='cliente') return m;
-  var ok={}; ['garantias','chamados','visitas','satisfacao','relatorio'].forEach(function(k){ ok[k]=m[k]; }); return ok;
+  var ok={}; ['garantias','chamados','visitas','satisfacao','relatorio','quinzenal'].forEach(function(k){ ok[k]=m[k]; }); return ok;
 }
 function abaMapaTodas(){
-  return {garantias:tGarantias, chamados:tChamados, visitas:tVisitas, satisfacao:tSatisfacao, resumo:tResumo, etapas:tEtapas, cronograma:tCron, balanco:tBalanco, semana:tSemana, diario:tDiario, ocorrencias:tOcorr, entrega:tEntrega, projeto:tProjeto, compras:tCompras, estoque:tEstoque, locacoes:tLocacoes, contratos:tContratos, avaliacoes:tAvaliacoes, encerramento:tEncerramento, orcamento:tOrcamento, medicao:tMedicao, financeiro:tFinanceiro, fisfin:tFisFin, dre:tDRE, relatorio:tRelatorio, agenda:tAgenda, reunioes:tReunioes, documentos:tDocumentos};
+  return {garantias:tGarantias, chamados:tChamados, visitas:tVisitas, satisfacao:tSatisfacao, resumo:tResumo, etapas:tEtapas, cronograma:tCron, balanco:tBalanco, semana:tSemana, diario:tDiario, ocorrencias:tOcorr, entrega:tEntrega, projeto:tProjeto, compras:tCompras, estoque:tEstoque, locacoes:tLocacoes, contratos:tContratos, avaliacoes:tAvaliacoes, encerramento:tEncerramento, orcamento:tOrcamento, medicao:tMedicao, financeiro:tFinanceiro, fisfin:tFisFin, dre:tDRE, relatorio:tRelatorio, quinzenal:tQuinzenal, pedidos:tPedidos, pagprazos:tPagPrazos, metaevo:tMetaEvo, agenda:tAgenda, reunioes:tReunioes, documentos:tDocumentos};
 }
 function obraNav(o,tab){
   var mapa=abaMapa(), base='#/obra/'+o.id+'/', grupo=NAV_GRUPOS.filter(function(g){ return g[2].indexOf(tab)>=0; })[0]||NAV_GRUPOS[0];
@@ -587,6 +588,7 @@ function checklistEncerramento(o){
   var semAv=cts.filter(function(c){ return !byObra('avaliacoes',oid).some(function(a){ return a.prestadorId===c.prestadorId; }); }).map(function(c){ return prestNome(c.prestadorId)||'prestador'; }); add('avaliacoes','Avaliação de todos os prestadores', semAv.length===0, semAv.length?'Sem avaliação: '+semAv.join(', ')+'.':(cts.length?'Todos avaliados.':'Sem contratos de prestador.'), base+'avaliacoes');
   var mAtual=hoje().slice(0,7), mUlt=new Date().getDate()<=10?mesAdd(mAtual,-1):mAtual, rel=relVigente(oid,mAtual)||(mUlt!==mAtual?relVigente(oid,mUlt):null);
   add('relatorio','Relatório do último mês emitido', !!rel, rel?'Emitido ('+mesNome(rel.mes)+').':'Falta emitir o relatório de '+mesNome(mUlt)+'.', base+'relatorio');
+  itensEncerG(o,add);
   var nl=byObra('licoes',oid).length; add('licoes','Lições aprendidas registradas', nl>0, nl?plural(nl,'registro','registros')+'.':'Nenhuma lição registrada.', base+'encerramento');
   return itens;
 }
@@ -726,7 +728,7 @@ function tEncerramento(o){
       +'<div class="card-h" style="border-top:1px solid var(--line2)"><h3>Por disciplina</h3></div><div class="tbl-scroll"><table class="tbl"><thead><tr><th>Disciplina</th><th class="num">Orçado</th><th class="num">Real</th><th class="num">Desvio</th><th>Ação</th><th class="num">Incidência real</th><th>Faixa de referência</th></tr></thead><tbody>'+p.disciplinas.map(function(d){ return '<tr'+(d.fora?' style="background:var(--crit-soft)"':'')+'><td>'+esc(d.disciplina)+'</td><td class="num">'+brl(d.orcado)+'</td><td class="num">'+brl(d.real)+'</td><td class="num">'+brl(d.desvio)+'</td><td><span class="chip '+(d.acao==='ajustar'?'crit':'ok')+'">'+(d.acao==='ajustar'?'Ajustar':'Manter')+'</span></td><td class="num">'+fpc(d.incidencia)+'</td><td>'+(d.ref?String(d.ref.minimo).replace('.',',')+'% a '+String(d.ref.maximo).replace('.',',')+'%'+(d.fora?' <span class="chip crit">Fora da faixa</span>':' <span class="chip ok">Dentro</span>'):'—')+'</td></tr>'; }).join('')+'</tbody></table></div>'
       :'<p class="muted pad">Nenhuma etapa executada ou comprada ainda.</p>')+'</section>';
   var cr=curvaRealCusto(oid), curva=cr.length>1?'<section class="card sec pad"><h3 style="margin-bottom:8px">Curva real do custo (% acumulado por mês)</h3>'+svgGrafico({titulo:'Curva real de custo acumulado', labels:cr.map(function(x){ return mesCurto(x.mes); }), linhas:[{nome:'Custo apropriado acumulado',cor:'var(--steel)',v:cr.map(function(x){ return x.pct; })}], fmt:function(v){ return Math.round(v)+'%'; }})+'</section>':'';
-  return '<div class="sec-h"><div><h2>Encerramento e P0</h2><p class="muted small">Fechar a obra, guardar o que aprendemos e calibrar o preço inicial para as próximas.</p></div></div><div style="margin-top:14px">'+stat+'</div>'+check+licHtml+p0+benchHtml(o)+garantiaIncHtml()+curva;
+  return '<div class="sec-h"><div><h2>Encerramento e P0</h2><p class="muted small">Fechar a obra, guardar o que aprendemos e calibrar o preço inicial para as próximas.</p></div></div><div style="margin-top:14px">'+stat+'</div>'+check+encerComprasHtml(o)+licHtml+p0+benchHtml(o)+garantiaIncHtml()+curva;
 }
 Object.assign(A5,{
   'obra-encerrar':function(d){ encerrarObra(d.oid); },

@@ -577,7 +577,7 @@ Object.assign(A4,{
 
 /* ================= CONTAS A PAGAR, APORTES E FLUXO DE CAIXA ================= */
 var CONTA_ST={aberta:'Aberta', paga:'Paga', cancelada:'Cancelada'};
-var CONTA_ORIGEM={medicao:'Medição', compra:'Compra', locacao:'Locação', outro:'Avulsa'};
+var CONTA_ORIGEM={medicao:'Medição', compra:'Compra', locacao:'Locação', pedido:'Pedido de pagamento', outro:'Avulsa'};
 var FORMAS_PAG=['Pix','Transferência','Boleto','Dinheiro','Cheque','Outra'];
 
 function vencDaCond(cond, base){ var m=/(\d+)\s*dias?/i.exec(String(cond||'')); return (m&&base)?addDays(base,Number(m[1])):''; }
@@ -787,6 +787,11 @@ function custoEtapa(oid){
         add(n,'apropriado',locValorReal(l));
         var cp=G('contasPagar',contaId('locacao',l.id)); if(cp&&cp.status==='paga') add(n,'pago',cp.valor);
       }
+    });
+    byObra('pedidosPag',oid).forEach(function(p){
+      var st=pedStatus(p), v=r2(pedValor(p)), n=p.etapa||0;
+      if(st==='aprovado') add(n,'comprometido',v);
+      else if(st==='pago'){ add(n,'apropriado',v); add(n,'pago',v); }
     });
   }
   var meds=byObra('medicoes',oid), medidoPor={};

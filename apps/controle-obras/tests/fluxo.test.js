@@ -22,3 +22,19 @@ test('fluxo · com obra mostra o status por etapa e escapa o nome', async () => 
   assert.equal(e.doc.querySelector('#app img'), null);
   assert.match(e.app(), /Abrir na obra/);
 });
+
+test('fluxo · ritos de gestão e meta × evolução da etapa aparecem com a obra escolhida', async () => {
+  const { obraAdm, dia } = require('./helpers');
+  const seed = { obras: { o1: obraAdm({ inicio: dia(-60) }) },
+    orcamentos: { b1: { obraId: 'o1', versao: 1, data: dia(-5), motivo: 'Base', total: 600, nItens: 1, lotes: 1, porEtapa: { 5: 600 }, porTipo: { material: 600 } } },
+    orcItens: { b1_0: { obraId: 'o1', orcId: 'b1', lote: 0, itens: [{ codigo: '5.01', etapa: 5, descricao: 'Concreto', unidade: 'm³', quantidade: 2, precoUnitario: 300, tipo: 'material', prestador: '', prestadorId: '', total: 600 }] } },
+    atividades: { a1: { obraId: 'o1', nome: 'Fundação', etapa: 5, inicio: dia(-20), fim: dia(20), avanco: 30 } },
+    compras: { c1: { obraId: 'o1', item: 'Concreto', etapa: 5, status: 'pago', pedido: { total: 400, data: dia(-5) }, conf: { data: dia(-4) } } } };
+  const e = await abrir({ seed, hash: '#/fluxo/o1/5' });
+  const t = e.app();
+  assert.match(t, /Ritos de gestão/);
+  assert.match(t, /Relatório quinzenal ao cliente/);
+  assert.match(t, /Meta × evolução × pagamentos/);
+  assert.match(t, /Desalinhada/);
+  assert.match(t, /Final de obra × compras/);
+});

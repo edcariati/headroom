@@ -35,6 +35,7 @@ function fichaArmaduraOk(oid,n){
 function travasPedido(o,c){
   var m=[];
   if(!c.aprov) m.push('A compra ainda não tem aprovação registrada.');
+  foraEscopoTravas(c).forEach(function(t){ m.push(t); });
   if(c.sobMedida && !c.medidaOk) m.push('Item sob medida: confirme que a medida do vão acabado foi conferida em obra antes de pedir.');
   if(c.concretagem){
     var n=c.etapa||5, fa=fichaArmaduraOk(o.id,n);
@@ -139,6 +140,7 @@ function compraForm(oid,c){
     [{name:'qtd',label:'Quantidade',type:'number',min:0,step:'any',required:true,value:c&&c.qtd},{name:'dataUso',label:'Data de uso na obra',type:'date',required:true,value:c&&c.dataUso}],
     [{name:'prazoEntrega',label:'Prazo de entrega (dias)',type:'number',min:0,step:1,value:c&&c.prazoEntrega!=null?c.prazoEntrega:'',hint:'Pedir até = data de uso menos este prazo.'},{name:'critico',label:'Item crítico?',type:'radio',options:[['sim','Sim'],['nao','Não']],value:c&&c.critico?'sim':'nao'}],
     [{name:'sobMedida',label:'Sob medida (esquadria, marcenaria, pedra)?',type:'radio',options:[['sim','Sim'],['nao','Não']],value:c&&c.sobMedida?'sim':'nao'},{name:'concretagem',label:'É concreto para concretagem?',type:'radio',options:[['sim','Sim'],['nao','Não']],value:c&&c.concretagem?'sim':'nao'}]];
+  if(adm) f.push([{name:'foraEscopo',label:'Está fora do escopo contratado?',type:'radio',options:[['sim','Sim'],['nao','Não']],value:c&&c.foraEscopo?'sim':'nao',hint:'Fora do escopo só é pedido com aditivo assinado ou autorização de emergência.'},{name:'motivoFora',label:'Se fora do escopo, por quê?',type:'select',options:selOpts(TIPOS_OC.map(function(t){ return [t.k,t.n]; }),'Selecione…'),value:(c&&c.motivoFora)||''}]);
   if(adm) f.push({name:'orcado',label:'Valor orçado (R$, total do item)',type:'number',min:0,step:'0.01',value:c&&c.orcado,hint:'Usado para conferir a margem e a alçada. Depois virá do orçamento importado.'});
   f.push({name:'obs',label:adm?'Especificação e observações':'Especificação a conferir',type:'textarea',rows:2,value:c&&c.obs});
   openForm({title:novo?'Nova necessidade de compra':'Editar necessidade', wide:true, fields:f,
@@ -149,6 +151,7 @@ function compraForm(oid,c){
       if(!v.dataUso) return 'Informe a data de uso.';
       var data=Object.assign({status:'necessidade', cotacoes:[], criadoEm:new Date().toISOString(), por:Store.uid||null}, c||{}, {obraId:oid, item:v.item.trim(), etapa:v.etapa?Number(v.etapa):0, un:v.un, qtd:v.qtd, dataUso:v.dataUso, prazoEntrega:v.prazoEntrega==null?null:v.prazoEntrega, critico:v.critico==='sim', sobMedida:v.sobMedida==='sim', concretagem:v.concretagem==='sim', obs:v.obs||''});
       if(adm) data.orcado=v.orcado==null?null:v.orcado;
+      if(adm){ data.foraEscopo=v.foraEscopo==='sim'; data.motivoFora=data.foraEscopo?v.motivoFora:''; if(data.foraEscopo&&!v.motivoFora) return 'Informe por que está fora do escopo.'; }
       await Store.set('compras', c?c.id:nid(), data);
     }});
 }
@@ -180,7 +183,7 @@ function openCompra(id){
   openDlg('<div class="dlg-h"><h2>'+esc(c.item)+'</h2><button type="button" class="btn ghost ico" data-close aria-label="Fechar">✕</button></div><div class="dlg-b">'
     +'<div class="row" style="margin-bottom:10px"><span class="chip steel">'+esc(COMPRA_ST[c.status])+'</span>'+(c.critico?'<span class="chip warn">Crítico</span>':'')+(c.etapa?'<span class="chip">Etapa '+c.etapa+'</span>':'')+(c.sobMedida?'<span class="chip">Sob medida</span>':'')+(c.concretagem?'<span class="chip">Concretagem</span>':'')+'</div>'
     +'<dl class="small" style="display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0"><dt class="muted">Quantidade</dt><dd style="margin:0">'+esc(String(c.qtd).replace('.',','))+' '+esc(c.un||'')+'</dd><dt class="muted">Uso na obra</dt><dd style="margin:0">'+fmt(c.dataUso)+'</dd><dt class="muted">Pedir até</dt><dd style="margin:0">'+(lim?fmt(lim)+(compraAtrasadaPedido(c)?' — <strong style="color:var(--crit)">atrasado</strong>':''):'—')+'</dd>'+(adm?'<dt class="muted">Orçado</dt><dd style="margin:0">'+brl(c.orcado)+'</dd>':'')+(c.obs?'<dt class="muted">Especificação</dt><dd style="margin:0;white-space:pre-wrap">'+esc(c.obs)+'</dd>':'')+'</dl>'
-    +cotHtml+aprHtml+trHtml+pedHtml+entHtml+cfHtml
+    +foraEscopoHtml(c,'compras')+cotHtml+aprHtml+trHtml+pedHtml+entHtml+cfHtml
     +(hist?'<h3 style="margin-top:18px">Histórico</h3><ul class="small" style="padding-left:18px">'+hist+'</ul>':'')
     +'</div><div class="dlg-f"><button class="btn danger" data-act="compra-excluir" data-id="'+c.id+'" data-write style="margin-right:auto">Excluir</button><button class="btn" data-act="compra-editar" data-id="'+c.id+'" data-write>Editar</button>'+(rot?'<button class="btn primary" data-act="compra-avancar" data-id="'+c.id+'" data-vol="1" data-write>'+rot+'</button>':'')+'</div>', true);
 }
@@ -519,7 +522,7 @@ function alertasP3(o){
   if(la.length) A.push({k:'warn', t:plural(la.length,'locação com devolução atrasada','locações com devolução atrasada')+': cada dia extra é cobrado.', to:base+'locacoes'});
   var dn=byObra('danos',oid).filter(function(d){return d.status==='aberta';});
   if(dn.length) A.push({k:'warn', t:plural(dn.length,'dano em aberto','danos em aberto')+', somando '+brl(dn.reduce(function(s,d){return s+(Number(d.custo)||0);},0))+'.', to:base+'contratos'});
-  return A.concat(alertasP4(o)).concat(alertasP5(o)).concat(alertasP7(o));
+  return A.concat(alertasP4(o)).concat(alertasP5(o)).concat(alertasP7(o)).concat(alertasG(o));
 }
 function indRowsP3(o){
   var oid=o.id, out='', cs=byObra('compras',oid), ls=byObra('locacoes',oid), ts=byObra('termos',oid), ds=byObra('danos',oid);

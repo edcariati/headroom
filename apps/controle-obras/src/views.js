@@ -660,7 +660,7 @@ document.addEventListener('click', function(e){
   if(e.target.closest('[data-close]')){ closeDlg(); return; }
   var el=e.target.closest('[data-act]'); if(!el) return;
   if(offBloqueia(el.dataset.act)){ e.preventDefault(); return; }
-  var f=A[el.dataset.act]||A2[el.dataset.act]||A3[el.dataset.act]||A4[el.dataset.act]||A5[el.dataset.act]||A7[el.dataset.act]||AOff[el.dataset.act]||ANuvem[el.dataset.act]; if(f){ e.preventDefault(); f(el.dataset, el); }
+  var f=A[el.dataset.act]||A2[el.dataset.act]||A3[el.dataset.act]||A4[el.dataset.act]||A5[el.dataset.act]||A7[el.dataset.act]||AG[el.dataset.act]||AOff[el.dataset.act]||ANuvem[el.dataset.act]; if(f){ e.preventDefault(); f(el.dataset, el); }
 });
 document.addEventListener('change', function(e){
   var el=e.target.closest('[data-chg="cond"]'); if(!el) return;

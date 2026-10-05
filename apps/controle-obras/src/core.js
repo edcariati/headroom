@@ -173,7 +173,7 @@ var SignedUrls={ map:{}, fila:{}, t:null,
 function blobUrl(id){ id=String(id||''); if(id.indexOf('off:')===0) return Off.fotoUrl(id); if(id.indexOf('sb:')===0) return Supa.v2()?SignedUrls.get(id.slice(3)):Supa.publicUrl(id.slice(3)); return '/_blob/'+id; }
 
 /* ---------- armazenamento ---------- */
-var COLS=['obras','etapas','atividades','pacotes','diarios','fichas','ocorrencias','prestadores','eventos','atas','acoes','docsLegais','docsPrest','rfis','materiais','locs','servicos','treinamentos','fornecedores','compras','movEstoque','locacoes','contratosPrest','termos','danos','orcamentos','orcItens','aditivos','medicoes','contasPagar','aportes','empresas','contratosCliente','lancamentos','relatorios','avaliacoes','licoes','config','garantias','chamadosGarantia','chamadosCustos','visitasPosObra','pesquisasSatisfacao'];
+var COLS=['obras','etapas','atividades','pacotes','diarios','fichas','ocorrencias','prestadores','eventos','atas','acoes','docsLegais','docsPrest','rfis','materiais','locs','servicos','treinamentos','fornecedores','compras','movEstoque','locacoes','contratosPrest','termos','danos','orcamentos','orcItens','aditivos','medicoes','contasPagar','aportes','empresas','contratosCliente','lancamentos','relatorios','avaliacoes','licoes','config','garantias','chamadosGarantia','chamadosCustos','visitasPosObra','pesquisasSatisfacao','pedidosPag'];
 var Store={
   mode:'boot', db:null, data:{}, uid:null, writable:true, user:null, q:new Map(), unsubs:[],
   init:async function(){

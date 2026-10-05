@@ -31,6 +31,6 @@ $P -d t -f "$(dirname "$0")/../migrations/0001_base.sql"
 $P -d t -f "$(dirname "$0")/../migrations/0002_regras.sql"
 $P -d t -c "set role authenticated" >/dev/null
 for m in "$(dirname "$0")"/../migrations/000[3-9]*.sql; do case "$m" in *"${PULAR_MIGRACAO:-__nenhuma__}"*) echo "(pulando $m para demonstrar o achado)";; *) $P -d t -f "$m";; esac; done
-cat "$(dirname "$0")/teste_rls.sql" "$(dirname "$0")/teste_regras.sql" "$(dirname "$0")/teste_notif.sql" "$(dirname "$0")/teste_posobra.sql" "$(dirname "$0")/teste_campo.sql" "$(dirname "$0")/teste_permissoes.sql" "$(dirname "$0")/teste_storage.sql" > "$D/todos.sql"
+cat "$(dirname "$0")/teste_rls.sql" "$(dirname "$0")/teste_regras.sql" "$(dirname "$0")/teste_notif.sql" "$(dirname "$0")/teste_posobra.sql" "$(dirname "$0")/teste_campo.sql" "$(dirname "$0")/teste_permissoes.sql" "$(dirname "$0")/teste_storage.sql" "$(dirname "$0")/teste_pagamentos.sql" > "$D/todos.sql"
 $P -d t -f "$D/todos.sql"
 echo "RLS OK"

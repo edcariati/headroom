@@ -8,7 +8,7 @@ function dashCor(v,bom,ruim,inverso){ if(v==null) return ''; if(inverso) return 
 function dashDados(){
   var todas=L('obras'), obras=todas.filter(function(o){ return !encerrada(o); }), ver=dashVeValores(), hj=hoje(), mes=hj.slice(0,7);
   var d={n:obras.length, nEnc:todas.length-obras.length, ver:ver, linhas:[], alertas:0, criticos:0};
-  var ppcs=[], spis=[], cpis=[], fis=[], gast=[], conf=0, confTot=0, ocAb=0, ocCr=0, ocVenc=0, bac=0, ac=0, ev=0, rec=0, res=0, rl=0, cVenc=0, cVencV=0, cAv=0, cAvV=0, apVenc=0, medAn=0;
+  var meAt=0, meAl=0, mePago=0, meEv=0, meAdi=0, qzAtr=0, pedAp=0, feP=0, ppcs=[], spis=[], cpis=[], fis=[], gast=[], conf=0, confTot=0, ocAb=0, ocCr=0, ocVenc=0, bac=0, ac=0, ev=0, rec=0, res=0, rl=0, cVenc=0, cVencV=0, cAv=0, cAvV=0, apVenc=0, medAn=0;
   obras.forEach(function(o){
     var oid=o.id, meta=o.metaPPC==null?80:o.metaPPC, ppc=ppcAtual(oid), p=ppc?ppc.ppc*100:null, e=orcVigente(oid)?evm(o):null;
     var ab=byObra('ocorrencias',oid).filter(ocAberta), cr=ab.filter(function(x){ return x.gravidade==='critica'; }).length, ve=ab.filter(vencidaOc).length;
@@ -22,11 +22,15 @@ function dashDados(){
       if(modAdm(o)){ byObra('contasPagar',oid).forEach(function(c){ if(contaVencida(c)){ cVenc++; cVencV+=c.valor; } else if(contaAVencer(c,7)){ cAv++; cAvV+=c.valor; } });
         byObra('aportes',oid).forEach(function(a){ if(!a.dataRecebida&&a.dataPrevista&&a.dataPrevista<hj) apVenc++; }); } }
     byObra('medicoes',oid).forEach(function(m){ if(m.status==='em_analise') medAn++; });
+    qzPendentes(o).forEach(function(q){ if(hj>qPrazo(q)) qzAtr++; });
+    if(ver){ var me=metaEvo(oid).kpi; meAt+=me.nAtivas; meAl+=me.nAlinhadas; mePago+=me.pagoTotal; meEv+=me.evTotal; meAdi+=me.adiante; pedAp+=pedDaObra(oid).filter(function(x){ return pedStatus(x)==='aprovacao'; }).length; }
+    feP+=byObra('compras',oid).concat(pedDaObra(oid)).filter(function(x){ return x.foraEscopo&&!foraEscopoOk(x,true)&&x.status!=='recusado'&&x.status!=='cancelado'&&x.status!=='pago'; }).length;
     var lib=ETAPAS.filter(function(x){ return etapaDoc(oid,x.n).status==='liberada'; }).length;
     d.linhas.push({o:o, ppc:p, meta:meta, spi:e?e.spi:null, cpi:e?e.cpi:null, fis:e&&e.fisPct!=null?e.fisPct*100:(lib/22*100), ab:ab.length, cr:cr, ve:ve, al:al.length, crit:nCrit, lib:lib});
   });
   d.ppc=dashMedia(ppcs); d.spi=dashMedia(spis); d.cpi=dashMedia(cpis); d.fis=dashMedia(fis); d.gasto=dashMedia(gast);
   d.conf=confTot?conf/confTot*100:null; d.ocAb=ocAb; d.ocCr=ocCr; d.ocVenc=ocVenc; d.bac=bac; d.ac=ac; d.ev=ev; d.rec=rec; d.res=res; d.margem=rl>0?res/rl*100:null;
+  d.meAlinh=meAt?meAl/meAt*100:null; d.meAt=meAt; d.meAl=meAl; d.meIpe=meEv>0?mePago/meEv:null; d.meAdi=meAdi; d.qzAtr=qzAtr; d.pedAp=pedAp; d.feP=feP;
   d.cVenc=cVenc; d.cVencV=cVencV; d.cAv=cAv; d.cAvV=cAvV; d.apVenc=apVenc; d.medAn=medAn;
   var notas=L('prestadores').map(function(p){ return prestNotaMedia(p.id); }); d.nota=dashMedia(notas); d.nNotas=notas.filter(function(x){ return x!=null; }).length;
   var docsOk=0, docsTot=0, mesP=hj.slice(0,7); obras.forEach(function(o){ var ps={}; byObra('contratosPrest',o.id).filter(function(c){ return c.status!=='encerrado'; }).forEach(function(c){ ps[c.prestadorId]=1; }); Object.keys(ps).forEach(function(pid){ docsTot++; if(prestEmDia(o.id,pid,mesP)) docsOk++; }); });
@@ -78,6 +82,7 @@ function vDashboard(){
     dashKpi('PPC médio', dashPct(d.ppc), 'Meta '+(d.linhas[0]?d.linhas[0].meta:80)+'%', dashCor(d.ppc,d.linhas[0]?d.linhas[0].meta:80,(d.linhas[0]?d.linhas[0].meta:80)-15), null, 'Pacotes 100% concluídos ÷ pacotes planejados, na última semana fechada de cada obra.'),
     dashKpi('SPI médio', dashFmt1(d.spi), d.spi==null?'sem cronograma e orçamento':(d.spi>=1?'no ritmo ou adiantado':'atrasado'), dashCor(d.spi,1,0.9), null, 'Avanço físico real ÷ avanço planejado. Abaixo de 1 = atraso.'),
     dashKpi('Avanço físico', dashPct(d.fis), d.gasto!=null&&d.ver?'gasto: '+dashPct(d.gasto):'média das obras', ''),
+    dashKpi('Relatórios quinzenais em atraso', '<span class="num">'+d.qzAtr+'</span>', d.qzAtr?'engenharia deve emitir':'em dia', d.qzAtr?'warn':'ok'),
     dashKpi('Medições em análise', '<span class="num">'+d.medAn+'</span>', d.medAn?'esperando decisão':'nenhuma parada', d.medAn?'warn':'ok')
   ];
   var qual=[
@@ -94,6 +99,9 @@ function vDashboard(){
       dashKpi('CPI médio', dashFmt1(d.cpi), d.cpi==null?'sem custo apropriado':(d.cpi>=1?'dentro do orçado':'acima do orçado'), dashCor(d.cpi,1,0.9), null, 'Valor agregado ÷ custo real. Abaixo de 1 = custando mais que o previsto.'),
       dashKpi('Margem do resultado', d.margem==null?'—':dashPct(d.margem), d.margem==null?'sem lançamentos no DRE':'resultado '+dashBrl(d.res), d.margem==null?'':(d.margem>=0?'ok':'crit'), '#/dre', 'Resultado acumulado ÷ receita líquida (DRE gerencial).'),
       dashKpi('Contas vencidas', '<span class="num">'+d.cVenc+'</span>', d.cVenc?dashBrl(d.cVencV):(d.cAv?d.cAv+' vencem em 7 dias':'nenhuma'), d.cVenc?'crit':(d.cAv?'warn':'ok')),
+      dashKpi('Meta × evolução × pagamentos', dashPct(d.meAlinh), d.meAt?d.meAl+' de '+d.meAt+' etapas alinhadas'+(d.meAdi>0?' · pago adiante '+dashBrl(d.meAdi):''):'nenhuma etapa em andamento', dashCor(d.meAlinh,80,50), null, 'Etapas em andamento em que o pago acompanha o executado e o físico acompanha a meta do cronograma. Detalhe na aba Meta × evolução de cada obra.'),
+      dashKpi('Pago ÷ executado (IPE)', dashFmt1(d.meIpe), d.meIpe==null?'sem execução ainda':(d.meIpe<=1.05?'pagamentos acompanham a obra':'pagando adiante do físico'), d.meIpe==null?'':(d.meIpe<=1.05?'ok':(d.meIpe<=1.1?'warn':'crit')), null, 'Total pago ÷ valor executado (orçado × físico) nas etapas com orçamento.'),
+      dashKpi('Pedidos a aprovar / fora do escopo', '<span class="num">'+d.pedAp+' / '+d.feP+'</span>', d.feP?'itens fora do escopo sem aditivo assinado':(d.pedAp?'pedidos aguardando aprovação':'nada pendente'), d.feP?'warn':(d.pedAp?'warn':'ok')),
       dashKpi('Aportes atrasados', '<span class="num">'+d.apVenc+'</span>', d.apVenc?'cobrar o cliente':'em dia', d.apVenc?'warn':'ok')
     ];
   }

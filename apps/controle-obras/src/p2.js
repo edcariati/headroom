@@ -136,7 +136,7 @@ function eventosAuto(filtroOid){
     byObra('acoes',o.id).filter(function(a){return a.status==='aberta';}).forEach(function(a){ add(a.prazo,'Ação: '+short(a.descricao,44)+(a.responsavel?' ('+a.responsavel+')':''),'engenharia',b+'reunioes'); });
     DOC_LEGAIS.forEach(function(t){ var d=docLegal(o.id,t.k); if(d&&d.validade) add(d.validade,'Vence: '+t.n,'legal',b+'documentos'); });
     if(o.inicio && !docRegistrado(docLegal(o.id,'cno'))) add(addDays(o.inicio,30),'Prazo para cadastrar a obra no CNO','legal',b+'documentos');
-    eventosP3(o,add,b);
+    eventosP3(o,add,b); eventosG(o,add,b);
   });
   var pr=filtroOid?prestAtivos(filtroOid):L('prestadores');
   pr.forEach(function(p){
