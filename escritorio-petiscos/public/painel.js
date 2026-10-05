@@ -639,8 +639,9 @@
   }
 
   // ---------- Compras e custo por lanche ----------
-  const custoUnidade = (it) => (it.qtd ? it.custo / it.qtd : null);
-  const custoBase = (it) => (it.qtd && it.conteudo ? it.custo / it.qtd / it.conteudo : null);
+  // custo por unidade de compra: preço médio atual quando informado, senão o da última compra
+  const custoUnidade = (it) => (it.preco != null ? it.preco : it.qtd ? it.custo / it.qtd : null);
+  const custoBase = (it) => { const u = custoUnidade(it); return u != null && it.conteudo ? u / it.conteudo : null; };
   const fmtQtd = (v) => Number(v).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
 
   async function renderCompras() {
@@ -651,7 +652,7 @@
     if (!compras) { box.innerHTML = '<div class="cartao vazio">Lista de compras não encontrada no servidor.</div>'; return; }
     const c = compras;
     const proxima = ler("ep_proxima_compra", {});
-    const pesoCarne = ler("ep_peso_carne", "");
+    const pesoCarne = ler("ep_peso_carne", "") || c.peso_carne_padrao || "";
     const cmv = ler("ep_cmv", 30);
     const total = c.itens.reduce((a, it) => a + it.custo, 0);
 
@@ -667,13 +668,13 @@
         <h3>Lista de insumos</h3>
         <p class="muted">${esc(c.referencia)}. Digite em "Próxima compra" a quantidade que vai comprar (na unidade de compra) para ver o custo previsto. Fica salvo neste aparelho.</p>
         <div class="tabela-wrap"><table class="tabela-compras">
-          <thead><tr><th>Produto</th><th>Categoria</th><th class="num">Comprado</th><th class="num">Pago</th><th class="num">Custo por unidade</th><th class="num nao-imprimir-col">Próxima compra</th><th class="num">Previsto</th></tr></thead>
+          <thead><tr><th>Produto</th><th>Categoria</th><th class="num">Comprado</th><th class="num">Pago</th><th class="num">Preço médio por unidade</th><th class="num nao-imprimir-col">Próxima compra</th><th class="num">Previsto</th></tr></thead>
           <tbody>${c.itens.map((it, i) => `<tr>
             <td><b>${esc(it.produto)}</b>${it.obs ? `<div class="obs">${esc(it.obs)}</div>` : ""}</td>
             <td data-rot="Categoria">${esc(it.categoria)}</td>
             <td class="num" data-rot="Comprado">${fmtQtd(it.qtd)} ${esc(it.unidade)}</td>
             <td class="num" data-rot="Pago">${reais(it.custo)}</td>
-            <td class="num" data-rot="Custo por unidade"><b>${reais(custoUnidade(it))}</b>/${esc(it.unidade)}</td>
+            <td class="num" data-rot="Preço médio"><b>${reais(custoUnidade(it))}</b>/${esc(it.unidade)}</td>
             <td class="num" data-rot="Próxima compra"><input class="qtd-proxima" type="number" inputmode="decimal" min="0" step="any" data-i="${i}" value="${proxima[it.produto] ?? ""}" placeholder="0"/> ${esc(it.unidade)}</td>
             <td class="num" data-rot="Previsto" data-previsto="${i}">–</td></tr>`).join("")}</tbody>
           <tfoot><tr><td colspan="3"><b>Total</b></td><td class="num"><b>${reais(total)}</b></td><td></td><td></td><td class="num"><b id="total-previsto-tab">–</b></td></tr></tfoot>
@@ -690,7 +691,7 @@
         </div>
         <p class="muted">Custo dos ingredientes de cada porção, pelo preço da última compra. O preço sugerido (custo ÷ CMV) só aparece quando todos os ingredientes do lanche têm custo. Não inclui tempero, óleo, embalagem e gás.</p>
         <div class="tabela-wrap"><table class="tabela-compras">
-          <thead><tr><th>Lanche</th><th class="num">Custo dos ingredientes</th><th class="num">Preço sugerido</th><th>Falta definir</th></tr></thead>
+          <thead><tr><th>Lanche</th><th class="num">Custo dos ingredientes</th><th class="num">Preço atual</th><th class="num">CMV atual</th><th class="num">Preço sugerido</th><th>Falta definir</th></tr></thead>
           <tbody id="custo-lanches"></tbody>
         </table></div>
       </div>`;
@@ -723,6 +724,8 @@
         const completo = falta.length === 0;
         return `<tr><td><b>${l.id}. ${esc(l.codinome || l.nome)}</b> <span class="obs">${esc(l.nome)}</span></td>
           <td class="num" data-rot="Custo">${reais(custo)}${completo ? "" : ' <span class="obs">(parcial)</span>'}</td>
+          <td class="num" data-rot="Preço atual">${c.precos?.[l.id] ? reais(c.precos[l.id]) : "–"}</td>
+          <td class="num" data-rot="CMV atual">${completo && c.precos?.[l.id] ? `<b class="${custo / c.precos[l.id] > alvo ? "cmv-alto" : "cmv-ok"}">${num((100 * custo) / c.precos[l.id])}%</b>` : "–"}</td>
           <td class="num" data-rot="Preço sugerido">${completo && alvo > 0 ? `<b>${reais(custo / alvo)}</b>` : "–"}</td>
           <td class="falta" data-rot="Falta">${completo ? '<span class="ok-tag">completo</span>' : `<span class="obs">${esc([...new Set(falta)].join(", "))}</span>`}</td></tr>`;
       }).join("");

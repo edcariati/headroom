@@ -461,3 +461,6 @@ tfoot td { border-top: 2px solid var(--cafe-300); }
   .tabela-compras td.falta { text-align: left; padding-left: 0; }
   .tabela-compras td.falta::before { float: none; display: block; }
 }
+
+.cmv-ok { color: #2f7d4a; }
+.cmv-alto { color: var(--erro); }
