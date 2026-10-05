@@ -390,3 +390,5 @@ table.mapa .nome-lanche { background: none; border: 0; font: inherit; color: var
   text-decoration: none;
 }
 .botao-cardapio:active { transform: translateY(3px); box-shadow: 0 3px 0 var(--laranja-escuro); }
+
+.pdf-visor { width: 100%; height: 80vh; border: 1px solid var(--linha); border-radius: 10px; background: #fff; margin-top: 8px; }

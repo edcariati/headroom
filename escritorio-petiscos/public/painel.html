@@ -34,6 +34,7 @@
         <button data-aba="lanches">Por lanche</button>
         <button data-aba="avaliadores">Avaliadores</button>
         <button data-aba="nomes">Cardápio</button>
+        <button data-aba="cozinha">Cozinha</button>
         <button data-aba="link">Link para enviar</button>
         <button id="btn-atualizar" style="margin-left:auto">↻ Atualizar</button>
       </nav>
@@ -140,6 +141,23 @@
             <button class="botao pequeno secundario" id="btn-copiar">Copiar</button>
             <a class="botao pequeno" id="btn-whats" target="_blank" rel="noopener">Enviar no WhatsApp</a>
           </div>
+        </div>
+      </section>
+
+      <!-- Cozinha -->
+      <section data-painel="cozinha" class="escondido">
+        <div class="cartao">
+          <div class="acoes" style="justify-content:space-between;margin-bottom:8px">
+            <h2 style="margin:0">Processo de cozinha</h2>
+            <div class="acoes">
+              <button class="botao pequeno" id="btn-pdf-baixar" type="button">⬇ Baixar PDF</button>
+              <label class="botao pequeno secundario" for="pdf-arquivo" style="cursor:pointer">⬆ Enviar ou atualizar PDF</label>
+              <input type="file" id="pdf-arquivo" accept="application/pdf,.pdf" class="escondido" />
+            </div>
+          </div>
+          <p class="muted" id="pdf-info">Carregando…</p>
+          <div class="erro-msg" id="erro-pdf"></div>
+          <iframe id="pdf-visor" class="pdf-visor escondido" title="Processo de cozinha"></iframe>
         </div>
       </section>
     </div>

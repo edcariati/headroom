@@ -76,6 +76,7 @@
     document.querySelectorAll("#abas button[data-aba]").forEach((x) => x.classList.toggle("ativa", x === b));
     document.querySelectorAll("[data-painel]").forEach((p) => p.classList.toggle("escondido", p.dataset.painel !== b.dataset.aba));
     if (b.dataset.aba === "lanches") renderLanche();
+    if (b.dataset.aba === "cozinha") carregarProcesso();
   });
 
   function renderTudo() {
@@ -522,6 +523,74 @@
       $("erro-nomes").textContent = e.message;
     } finally {
       btn.disabled = false;
+    }
+  });
+
+  // ---------- Cozinha (PDF do processo, só no painel) ----------
+  let pdfUrl = null, pdfNome = "processo-cozinha.pdf";
+
+  function pdfDeBase64(b64) {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: "application/pdf" });
+  }
+
+  async function carregarProcesso() {
+    $("erro-pdf").textContent = "";
+    $("pdf-info").textContent = "Carregando…";
+    try {
+      const r = await rpc("admin_processo", { p_senha: senha });
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+      pdfUrl = null;
+      if (!r) {
+        $("pdf-info").textContent = "Nenhum PDF enviado ainda. Use \"Enviar ou atualizar PDF\".";
+        $("pdf-visor").classList.add("escondido");
+        return;
+      }
+      pdfNome = r.nome;
+      pdfUrl = URL.createObjectURL(pdfDeBase64(r.pdf));
+      $("pdf-info").textContent = r.atualizado_em
+        ? `Atualizado em ${new Date(r.atualizado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}. Só aparece para quem tem a senha do painel.`
+        : "Só aparece para quem tem a senha do painel.";
+      $("pdf-visor").src = pdfUrl;
+      $("pdf-visor").classList.remove("escondido");
+    } catch (e) {
+      $("pdf-info").textContent = "";
+      $("erro-pdf").textContent = e.message;
+    }
+  }
+
+  $("btn-pdf-baixar").addEventListener("click", () => {
+    if (!pdfUrl) return toast("Nenhum PDF enviado ainda", true);
+    const a = document.createElement("a");
+    a.href = pdfUrl;
+    a.download = pdfNome;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  });
+
+  $("pdf-arquivo").addEventListener("change", async (ev) => {
+    const f = ev.target.files[0];
+    ev.target.value = "";
+    if (!f) return;
+    if (f.size > 3 * 1024 * 1024) return toast("PDF muito grande (máx. 3 MB)", true);
+    $("erro-pdf").textContent = "";
+    $("pdf-info").textContent = "Enviando…";
+    try {
+      const b64 = await new Promise((ok, erro) => {
+        const leitor = new FileReader();
+        leitor.onload = () => ok(String(leitor.result).split(",")[1]);
+        leitor.onerror = () => erro(new Error("Não foi possível ler o arquivo"));
+        leitor.readAsDataURL(f);
+      });
+      await rpc("admin_processo_salvar", { p_senha: senha, p_pdf: b64, p_nome: f.name });
+      toast("PDF salvo ✓");
+      await carregarProcesso();
+    } catch (e) {
+      $("pdf-info").textContent = "";
+      $("erro-pdf").textContent = e.message;
     }
   });
 

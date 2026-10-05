@@ -4,6 +4,7 @@
 //   p/{id}.json              avaliador { id, segredo, nome, idade, criado_em }
 //   av/{id}/{lanche}.json    avaliação de um lanche por um avaliador
 //   cfg/cardapio.json        lanches editados no painel { "1": { nome, codinome, descricao }, ... }
+//   cfg/processo-cozinha.pdf processo de cozinha (só o painel lê e grava)
 //
 // O avaliador recebe o token "{id}.{segredo}" e só ele pode gravar as próprias notas.
 // O painel exige a senha da variável de ambiente ADMIN_SENHA.
@@ -223,6 +224,31 @@ const FUNCOES = {
     }
     await gravarJson("cfg/cardapio.json", cfg);
     return null;
+  },
+
+  async admin_processo({ p_senha }) {
+    await checarSenha(p_senha);
+    const r = await get("cfg/processo-cozinha.pdf", { access: "private", useCache: false });
+    if (!r || r.statusCode !== 200) return null;
+    const pdf = Buffer.from(await new Response(r.stream).arrayBuffer()).toString("base64");
+    const info = (await lerJson("cfg/processo-cozinha.json")) || {};
+    return { pdf, nome: info.nome || "processo-cozinha.pdf", atualizado_em: info.atualizado_em || null };
+  },
+
+  async admin_processo_salvar({ p_senha, p_pdf, p_nome }) {
+    await checarSenha(p_senha);
+    const buf = Buffer.from(String(p_pdf || ""), "base64");
+    if (buf.length < 100 || buf.subarray(0, 5).toString() !== "%PDF-") falha("Envie um arquivo PDF.");
+    if (buf.length > 3 * 1024 * 1024) falha("PDF muito grande (máx. 3 MB).");
+    await put("cfg/processo-cozinha.pdf", buf, {
+      access: "private",
+      addRandomSuffix: false,
+      allowOverwrite: true,
+      contentType: "application/pdf",
+    });
+    const nome = String(p_nome || "processo-cozinha.pdf").slice(0, 120);
+    await gravarJson("cfg/processo-cozinha.json", { nome, atualizado_em: new Date().toISOString() });
+    return { ok: true };
   },
 
   async admin_excluir_avaliador({ p_senha, p_id }) {
