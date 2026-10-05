@@ -13,6 +13,7 @@ function parseRoute(){
   if(p[0]==='fornecedores') return {view:'fornecedores'};
   if(p[0]==='dre') return {view:'dre'};
   if(p[0]==='fluxo') return {view:'fluxo'};
+  if(p[0]==='visao') return {view:'visao'};
   if(p[0]==='nuvem') return {view:'nuvem'};
   if(p[0]==='historico') return {view:'historico'};
   if(p[0]==='avisos') return {view:'avisos'};
@@ -23,7 +24,7 @@ function topbar(r){
   var cur=function(v){ return r.view===v?' aria-current="page"':''; };
   var obraAtiva=(r.view==='obra'||r.view==='etapa'), cli=Store.papel==='cliente';
   var nav=cli?'<a href="#/painel"'+(r.view==='painel'||obraAtiva?' aria-current="page"':'')+'>Minha obra</a>'
-    :'<a href="#/painel"'+(r.view==='painel'||obraAtiva?' aria-current="page"':'')+'>Obras</a><a href="#/agenda"'+cur('agenda')+'>Agenda</a><a href="#/prestadores"'+cur('prestadores')+'>Prestadores</a><a href="#/fornecedores"'+cur('fornecedores')+'>Fornecedores</a><a href="#/fluxo"'+cur('fluxo')+'>Fluxo</a><a href="#/dre"'+cur('dre')+'>DRE</a>'+(Store.backend==='supabase'?'<a href="#/historico"'+cur('historico')+'>Histórico</a>':'')+'<a href="#/nuvem"'+cur('nuvem')+'>Nuvem</a>';
+    :'<a href="#/painel"'+(r.view==='painel'||obraAtiva?' aria-current="page"':'')+'>Obras</a><a href="#/visao"'+cur('visao')+'>Visão geral</a><a href="#/agenda"'+cur('agenda')+'>Agenda</a><a href="#/prestadores"'+cur('prestadores')+'>Prestadores</a><a href="#/fornecedores"'+cur('fornecedores')+'>Fornecedores</a><a href="#/fluxo"'+cur('fluxo')+'>Fluxo</a><a href="#/dre"'+cur('dre')+'>DRE</a>'+(Store.backend==='supabase'?'<a href="#/historico"'+cur('historico')+'>Histórico</a>':'')+'<a href="#/nuvem"'+cur('nuvem')+'>Nuvem</a>';
   return '<header class="top"><div class="top-in"><a class="brand" href="#/painel">Cariati<span>·Obras</span></a>'
     +'<nav class="nav" aria-label="Principal">'+nav+'</nav>'
     +'<div class="tools">'+sinoAvisos(r)+(cli?'<button class="btn ghost sm" data-act="nuvem-sair">Sair</button>':'<button class="btn ghost sm" data-act="exportar" title="Baixar uma cópia dos dados">Exportar</button>')+'<button class="btn ghost sm" data-act="tema" title="Alternar tema claro e escuro" aria-label="Alternar tema">◐</button></div></div></header>';
@@ -298,7 +299,7 @@ function render(){
     app.innerHTML=topbar(r)+banners()+(r.view==='nuvem'?vNuvem():(r.view==='avisos'?vAvisos():(r.view==='pendencias'?vPendencias():vHistorico())));
     if(key!==lastKey) window.scrollTo(0,0); lastKey=key; return;
   }
-  var body=r.view==='obra'?vObra(r):(r.view==='etapa'?vEtapa(r):(r.view==='prestadores'?vPrest():(r.view==='agenda'?vAgenda():(r.view==='fornecedores'?vForn():(r.view==='dre'?vDRE():(r.view==='fluxo'?vFluxo():vPainel()))))));
+  var body=r.view==='obra'?vObra(r):(r.view==='etapa'?vEtapa(r):(r.view==='prestadores'?vPrest():(r.view==='agenda'?vAgenda():(r.view==='fornecedores'?vForn():(r.view==='dre'?vDRE():(r.view==='fluxo'?vFluxo():(r.view==='visao'?vVisao():vPainel())))))));
   document.body.classList.toggle('ro', !Store.writable);
   app.innerHTML=topbar(r)+banners()+body;
   if(key===lastKey){ window.scrollTo(0,y); var g2=document.querySelector('.gantt-scroll'); if(g2) g2.scrollLeft=ui.ganttScroll; } else { window.scrollTo(0,0); ui.ganttScroll=0; }
