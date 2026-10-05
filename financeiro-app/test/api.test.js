@@ -1,0 +1,110 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { tratar } from '../api/_lib/router.js';
+import { StoreMemoria } from '../api/_lib/store-memoria.js';
+import { StoreBlob } from '../api/_lib/store-blob.js';
+import { carregarDados } from '../api/_lib/dados.js';
+import { criarSessao, sessaoValida, senhaConfere } from '../api/_lib/auth.js';
+
+const HOJE = '2026-06-15';
+const chamar = (store, metodo, rota, { query, corpo, senha, cookie } = {}) =>
+  tratar({ metodo, rota, query, corpo, cookie, ip: '1.1.1.1' }, { store, senha, hoje: () => HOJE, agora: () => '2026-06-15T10:00:00.000Z' });
+const j = async (store, ...a) => { const r = await chamar(store, ...a); return r; };
+
+test('primeiro acesso cria o plano de contas padrão uma única vez', async () => {
+  const store = new StoreMemoria();
+  const cats = await j(store, 'GET', 'cadastros/categorias');
+  assert.equal(cats.status, 200);
+  assert.ok(cats.corpo.length >= 20 && cats.corpo.every((c) => c.grupo_dre));
+  await j(store, 'GET', 'cadastros/categorias');
+  assert.equal((await j(store, 'GET', 'cadastros/categorias')).corpo.length, cats.corpo.length);
+});
+
+test('fluxo completo pela API: conta, pessoa, lançamento, baixa, estorno e exclusão', async () => {
+  const store = new StoreMemoria();
+  const conta = (await j(store, 'POST', 'cadastros/contas', { corpo: { nome: 'Inter', saldo_inicial_cents: 100000 } })).corpo;
+  const pessoa = (await j(store, 'POST', 'cadastros/pessoas', { corpo: { nome: 'Cliente', tipo: 'cliente' } })).corpo;
+  const cat = (await j(store, 'GET', 'cadastros/categorias')).corpo.find((c) => c.tipo === 'receita');
+  const novo = await j(store, 'POST', 'lancamentos', { corpo: { tipo: 'receita', nome: 'Projeto X', valor_total_cents: 90000, parcelas: 3,
+    primeiro_vencimento: '2026-06-20', categoria_id: cat.id, pessoa_id: pessoa.id, conta_id: conta.id } });
+  assert.equal(novo.status, 201);
+  const lista = (await j(store, 'GET', 'parcelas', { query: { tipo: 'receita', de: '2026-01-01', ate: '2026-12-31' } })).corpo;
+  assert.equal(lista.itens.length, 3);
+  assert.equal(lista.itens[0].nome, 'Projeto X 1/3');
+  const pid = lista.itens[0].id;
+  assert.equal((await j(store, 'POST', `parcelas/${pid}/baixa`, { corpo: { data: '2026-06-20', conta_id: conta.id } })).status, 200);
+  assert.equal((await j(store, 'GET', 'contas-saldos')).corpo[0].saldo_cents, 130000);
+  assert.equal((await j(store, 'POST', `parcelas/${pid}/baixa`, { corpo: { conta_id: conta.id } })).status, 400);
+  assert.equal((await j(store, 'POST', `parcelas/${pid}/estorno`)).status, 200);
+  assert.equal((await j(store, 'GET', 'contas-saldos')).corpo[0].saldo_cents, 100000);
+  assert.equal((await j(store, 'DELETE', `cadastros/contas/${conta.id}`)).status, 409); // em uso
+  assert.equal((await j(store, 'DELETE', `lancamentos/${novo.corpo.id}`)).status, 200);
+  assert.equal((await j(store, 'DELETE', `cadastros/contas/${conta.id}`)).status, 200);
+  const csv = await j(store, 'GET', 'parcelas.csv', { query: { de: '2026-01-01', ate: '2026-12-31' } });
+  assert.match(csv.tipo, /csv/);
+});
+
+test('erros de validação viram 400 e rota inexistente 404', async () => {
+  const store = new StoreMemoria();
+  assert.equal((await j(store, 'POST', 'lancamentos', { corpo: { tipo: 'receita', nome: '' } })).status, 400);
+  assert.equal((await j(store, 'POST', 'cadastros/categorias', { corpo: { nome: 'x', tipo: 'despesa', grupo_dre: 'receita_bruta' } })).status, 400);
+  assert.equal((await j(store, 'PUT', 'cadastros/contas/inexistente', { corpo: { nome: 'x' } })).status, 404);
+  assert.equal((await j(store, 'GET', 'nada')).status, 404);
+});
+
+test('senha: sem sessão bloqueia tudo, login certo libera, errado nega, e a sessão expira', async () => {
+  const store = new StoreMemoria();
+  const senha = 'uma-senha-bem-forte-123';
+  assert.equal((await j(store, 'GET', 'resumo', { senha })).status, 401);
+  assert.equal((await j(store, 'GET', 'sessao', { senha })).corpo.autenticado, false);
+  const errado = await j(store, 'POST', 'login', { senha, corpo: { senha: 'errada' } });
+  assert.equal(errado.status, 401);
+  const certo = await j(store, 'POST', 'login', { senha, corpo: { senha } });
+  assert.equal(certo.status, 200);
+  const cookie = certo.cabecalhos['Set-Cookie'].split(';')[0];
+  assert.match(certo.cabecalhos['Set-Cookie'], /HttpOnly/);
+  assert.equal((await j(store, 'GET', 'resumo', { senha, cookie })).status, 200);
+  assert.equal((await j(store, 'GET', 'resumo', { senha, cookie: 'sessao=1.abc' })).status, 401);
+  const velho = criarSessao(senha, Date.now() - 13 * 3600 * 1000);
+  assert.equal(sessaoValida(velho, senha), false);
+  assert.equal(sessaoValida(criarSessao(senha), 'outra-senha'), false);
+  assert.ok(senhaConfere(senha, senha) && !senhaConfere('x', senha) && !senhaConfere('x', undefined));
+}, { timeout: 10000 });
+
+test('produção sem ADMIN_SENHA fica bloqueada (não abre por engano)', async () => {
+  const r = await tratar({ metodo: 'GET', rota: 'resumo' }, { store: new StoreMemoria(), senha: undefined, producao: true });
+  assert.equal(r.status, 503);
+});
+
+test('só relê o que mudou: segunda leitura não baixa registros de novo', async () => {
+  const store = new StoreMemoria();
+  await carregarDados(store);
+  let leituras = 0;
+  const ler = store.ler.bind(store);
+  store.ler = async (c) => { leituras++; return ler(c); };
+  await carregarDados(store);
+  assert.equal(leituras, 0);
+  await j(store, 'POST', 'cadastros/centros', { corpo: { nome: 'Novo' } });
+  await carregarDados(store);
+  assert.equal(leituras, 0); // o que acabou de ser gravado já está no cache
+});
+
+test('StoreBlob usa Blob privado, sem sufixo aleatório, com sobrescrita e sem cache', async () => {
+  const chamadas = [];
+  const arquivos = new Map();
+  const sdk = {
+    put: async (p, corpo, op) => { chamadas.push(['put', p, op]); arquivos.set(p, corpo); return { etag: 'x1' }; },
+    get: async (p, op) => { chamadas.push(['get', p, op]); return arquivos.has(p) ? { statusCode: 200, stream: new Response(arquivos.get(p)).body } : null; },
+    list: async (op) => { chamadas.push(['list', op.prefix]); return { blobs: [...arquivos.keys()].filter((k) => k.startsWith(op.prefix)).map((pathname) => ({ pathname, etag: 'x1' })), hasMore: false }; },
+    del: async (p) => { chamadas.push(['del', p]); arquivos.delete(p); },
+  };
+  const store = new StoreBlob(sdk);
+  await store.gravar('dados/a/1.json', { id: '1' });
+  assert.deepEqual(await store.ler('dados/a/1.json'), { id: '1' });
+  assert.equal(await store.ler('dados/a/2.json'), null);
+  assert.deepEqual(await store.listar('dados/'), [{ caminho: 'dados/a/1.json', etag: 'x1' }]);
+  await store.excluir('dados/a/1.json');
+  const put = chamadas.find((c) => c[0] === 'put')[2];
+  assert.equal(put.access, 'private'); assert.equal(put.addRandomSuffix, false); assert.equal(put.allowOverwrite, true);
+  assert.deepEqual(chamadas.find((c) => c[0] === 'get')[2], { access: 'private', useCache: false });
+});
