@@ -53,7 +53,7 @@ $('#novo-menu').onclick = (e) => {
 function telaLogin() {
   document.body.classList.add('login');
   $('#conteudo').innerHTML = `<form class="login-card" id="login-form">
-    <div class="logo">F</div><h2>Financeiro interno</h2><p class="suave">Acesso restrito. Digite a senha.</p>
+    <img class="login-logo" src="logo-cariati.png" alt="Cariati Arquitetura &amp; Gestão"><h2>Financeiro interno</h2><p class="suave">Acesso restrito. Digite a senha.</p>
     <input class="campo" type="password" name="senha" autocomplete="current-password" placeholder="Senha" required autofocus aria-label="Senha">
     <div class="erro" role="alert"></div><button class="btn primary" type="submit">Entrar</button></form>`;
   $('#login-form').onsubmit = async (e) => {
@@ -92,7 +92,7 @@ $('#sair').onclick = async () => { await api('logout', { method: 'POST' }).catch
 function telaLogin() {
   document.body.classList.add('login');
   $('#conteudo').innerHTML = `<form class="login-card" id="login-form">
-    <div class="logo">F</div><h2>Financeiro interno</h2><p class="suave">Acesso restrito. Digite a senha.</p>
+    <img class="login-logo" src="logo-cariati.png" alt="Cariati Arquitetura &amp; Gestão"><h2>Financeiro interno</h2><p class="suave">Acesso restrito. Digite a senha.</p>
     <input class="campo" type="password" name="senha" autocomplete="current-password" placeholder="Senha" required autofocus aria-label="Senha">
     <div class="erro" role="alert"></div><button class="btn primary" type="submit">Entrar</button></form>`;
   $('#login-form').onsubmit = async (e) => {
