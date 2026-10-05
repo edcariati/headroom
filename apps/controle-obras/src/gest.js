@@ -522,3 +522,41 @@ function alertasG(o){
   return A;
 }
 COBX.eventosAuto=eventosAuto; COBX.alertasG=alertasG; COBX.pedStatus=pedStatus; COBX.qzPendentes=qzPendentes; COBX.pendenciasFim=pendenciasFim; COBX.foraEscopoOk=foraEscopoOk;
+
+/* ================= COMPRAS: código, prioridade e vista em lista (como a lista de solicitações da Vobi) ================= */
+var PRIO={baixa:'Baixa', media:'Média', alta:'Alta'};
+function proximoCodigoCompra(){
+  var m=0; L('compras').forEach(function(c){ var n=Number(String(c.codigo||'').replace(/\D/g,''))||0; if(n>m) m=n; });
+  var s=String(m+1); while(s.length<5) s='0'+s; return 'SC'+s;
+}
+function comprasVistaBarra(o,cs){
+  var fl=fluxoDe(o), f=ui.cmpFiltro||'';
+  var chips=['<button class="btn sm'+(f===''?' primary':'')+'" data-act="cmp-filtro" data-f="">Todas <span class="num">'+cs.length+'</span></button>'].concat(fl.map(function(st){ var n=cs.filter(function(c){ return c.status===st||(st===fl[0]&&fl.indexOf(c.status)<0); }).length; return '<button class="btn sm'+(f===st?' primary':'')+'" data-act="cmp-filtro" data-f="'+st+'">'+COMPRA_ST[st]+' <span class="num">'+n+'</span></button>'; }));
+  var vis='<div class="row" style="gap:4px"><button class="btn sm'+(ui.cmpVista!=='lista'?' primary':'')+'" data-act="cmp-vista" data-v="quadro">Quadro</button><button class="btn sm'+(ui.cmpVista==='lista'?' primary':'')+'" data-act="cmp-vista" data-v="lista">Lista</button></div>';
+  return '<div class="row spread no-print" style="margin:12px 0;flex-wrap:wrap;gap:8px"><div class="row" style="gap:4px;flex-wrap:wrap">'+chips.join('')+'</div>'+vis+'</div>';
+}
+function comprasLista(o,cs){
+  var fl=fluxoDe(o), f=ui.cmpFiltro||'', ve=gVe(), adm=modAdm(o);
+  var l=cs.filter(function(c){ return !f||c.status===f||(f===fl[0]&&fl.indexOf(c.status)<0); }).sort(function(a,b){ return (b.criadoEm||'')<(a.criadoEm||'')?-1:1; });
+  var cor={alta:'crit',media:'warn',baixa:''};
+  return '<div class="card tbl-scroll"><table class="tbl"><thead><tr><th>Código</th><th>Nome</th><th>Criação</th><th>Necessidade</th><th>Pedir até</th>'+((adm&&ve)?'<th class="num">Custo previsto</th>':'')+'<th>Status</th><th>Prioridade</th></tr></thead><tbody>'
+    +(l.length?l.map(function(c){ var lim=limiteCompra(c), at=compraAtrasadaPedido(c)||pedidoAtrasado(c);
+      return '<tr'+(at?' style="background:var(--crit-soft)"':'')+'><td class="num">'+esc(c.codigo||'—')+'</td><td><button type="button" class="linkbtn" data-act="compra-abrir" data-id="'+c.id+'">'+esc(short(c.item,60))+'</button>'+(c.critico?' <span class="chip warn">Crítico</span>':'')+(c.foraEscopo?' <span class="chip crit">Fora do escopo</span>':'')+'</td><td>'+fmt((c.criadoEm||'').slice(0,10))+'</td><td>'+fmt(c.dataUso)+'</td><td>'+(lim?fmt(lim):'—')+'</td>'+((adm&&ve)?'<td class="num">'+(valorCompra(c)?brl(valorCompra(c)):(c.orcado?brl(c.orcado):'—'))+'</td>':'')+'<td><span class="chip steel">'+esc(COMPRA_ST[c.status]||c.status)+'</span></td><td><span class="chip '+(cor[c.prioridade||'media'])+'">'+PRIO[c.prioridade||'media']+'</span></td></tr>'; }).join(''):'<tr><td colspan="8" class="muted">Nenhuma compra neste filtro.</td></tr>')
+    +'</tbody></table></div>';
+}
+Object.assign(AG,{
+  'cmp-vista':function(d){ ui.cmpVista=d.v; render(); },
+  'cmp-filtro':function(d){ ui.cmpFiltro=d.f; render(); }
+});
+
+/* ================= RESUMO DA OBRA: próximos pagamentos e próximas tarefas (como a tela Geral da Vobi) ================= */
+function resumoProximos(o){
+  var oid=o.id, hj=hoje(), ve=gVe(), b='#/obra/'+oid+'/';
+  var tar=eventosAuto(oid).filter(function(e){ return e.status==='agendado'&&e.data>=addDays(hj,-30)&&e.area!=='financeiro'; }).sort(function(a,c){ return a.data<c.data?-1:1; }).slice(0,6);
+  var tarHtml='<section class="card"><div class="card-h"><h2>Próximas tarefas</h2><a class="small" href="'+b+'agenda">Abrir agenda</a></div>'
+    +(tar.length?'<ul class="alerts">'+tar.map(function(e){ return '<li><span class="dot '+(e.data<hj?'crit':'steel')+'"></span><div class="grow">'+esc(short(e.titulo,70))+'<div class="tiny muted">'+fmt(e.data)+(e.data<hj?' · atrasada':'')+'</div></div>'+(e.to?'<a class="small" href="'+e.to+'">Abrir</a>':'')+'</li>'; }).join('')+'</ul>':'<p class="muted small" style="padding:14px 16px">Nenhuma tarefa programada.</p>')+'</section>';
+  var pg=ve?pagamentosObra(oid).filter(function(p){ return !p.pago; }).sort(function(a,c){ return (a.venc||'9')<(c.venc||'9')?-1:1; }).slice(0,6):[];
+  var pgHtml=ve?'<section class="card"><div class="card-h"><h2>Próximos pagamentos</h2><a class="small" href="'+b+'pagprazos">Pagamentos e prazos</a></div>'
+    +(pg.length?'<ul class="alerts">'+pg.map(function(p){ var v=p.venc&&p.venc<hj; return '<li><span class="dot '+(v?'crit':'steel')+'"></span><div class="grow">'+esc(short(p.desc,60))+'<div class="tiny muted">'+(p.venc?fmt(p.venc):'sem data')+(v?' · vencido':'')+' · '+brl(p.valor)+'</div></div><a class="small" href="'+p.to+'">Abrir</a></li>'; }).join('')+'</ul>':'<p class="muted small" style="padding:14px 16px">Nenhum pagamento em aberto.</p>')+'</section>':'';
+  return '<div class="grid cols2">'+tarHtml+pgHtml+'</div>';
+}

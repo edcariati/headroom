@@ -220,3 +220,26 @@ test('navegação · abas novas aparecem nos grupos certos', async () => {
   await e.go('#/obra/o1/relatorio');
   assert.match(e.app(), /Relatório quinzenal/);
 });
+
+/* ---------- itens inspirados na análise da Vobi ---------- */
+test('compras · código sequencial (SC00001…), prioridade e vista em lista com filtro por situação', async () => {
+  const seed = { obras: { o1: obraAdm() }, compras: { c0: { obraId: 'o1', item: 'Antigo', codigo: 'SC00090', status: 'necessidade', dataUso: dia(5), criadoEm: new Date().toISOString() } } };
+  const e = await abrir({ seed, hash: '#/obra/o1/compras' });
+  await e.click('[data-act="compra-nova"]');
+  await e.submit({ item: 'Roda de andaime', qtd: '2', dataUso: dia(10), prioridade: 'alta' });
+  const nova = e.linhas('compras').filter((c) => c.item === 'Roda de andaime')[0];
+  assert.equal(nova.codigo, 'SC00091'); assert.equal(nova.prioridade, 'alta');
+  await e.click('[data-act="cmp-vista"][data-v="lista"]');
+  assert.match(e.app(), /SC00090/); assert.match(e.app(), /SC00091/); assert.match(e.app(), /Alta/);
+  await e.click('[data-act="cmp-filtro"][data-f="cotacao"]');
+  assert.doesNotMatch(e.app(), /SC00091/);
+});
+
+test('resumo da obra · próximas tarefas e próximos pagamentos', async () => {
+  const seed = { obras: { o1: obraAdm() }, acoes: { a1: { obraId: 'o1', descricao: 'Enviar projeto ao cliente', status: 'aberta', prazo: dia(3) } },
+    contasPagar: { cp1: { obraId: 'o1', origem: 'outro', origemId: 'x', descricao: 'Locação de andaime', valor: 330, status: 'aberta', vencimento: dia(4) } } };
+  const e = await abrir({ seed, hash: '#/obra/o1/resumo' });
+  const t = e.app();
+  assert.match(t, /Próximas tarefas/); assert.match(t, /Enviar projeto ao cliente/);
+  assert.match(t, /Próximos pagamentos/); assert.match(t, /Locação de andaime/);
+});

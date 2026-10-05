@@ -130,14 +130,16 @@ function tCompras(o){
   }).join('');
   var info=adm?'<div class="row" style="gap:6px;margin:12px 0"><span class="chip '+(o.alcada==null?'warn':'steel')+'">Alçada: '+(o.alcada==null?'não definida':brl(o.alcada))+'</span><span class="chip steel">Margem sobre o orçado: '+(o.margemPreco==null?5:o.margemPreco)+'%</span><button class="btn sm ghost" data-act="obra-editar" data-oid="'+oid+'" data-write>Ajustar</button></div>'
     :'<div class="callout" style="margin:12px 0">Neste contrato (Gestão de Obras) a compra é do cliente. A Cariati confere a especificação e o recebimento, mas não cota, pede nem paga.</div>';
+  var lista=(ui.cmpVista==='lista'&&cs.length)?comprasLista(o,cs):'';
   return '<div class="sec-h"><div><h2>Compras</h2><p class="muted small">'+(adm?'Da necessidade ao pagamento. Compra fora do orçado ou acima da alçada só segue com aprovação do cliente por escrito.':'Necessidades, entregas e conferência de recebimento.')+'</p></div><button class="btn primary" data-act="compra-nova" data-oid="'+oid+'" data-write>+ Necessidade de compra</button></div>'+info
-    +(cs.length?'<div class="board">'+cols+'</div>':'<div class="card empty"><h3>Nenhuma necessidade de compra</h3><p>Registre o que a obra vai precisar, com a data de uso e o prazo de entrega. O app calcula até quando é preciso pedir.</p></div>');
+    +(cs.length?comprasVistaBarra(o,cs)+(lista||'<div class="board">'+cols+'</div>'):'<div class="card empty"><h3>Nenhuma necessidade de compra</h3><p>Registre o que a obra vai precisar, com a data de uso e o prazo de entrega. O app calcula até quando é preciso pedir.</p></div>');
 }
 function compraForm(oid,c){
   var novo=!c, o=G('obras',oid), adm=modAdm(o);
   var f=[{name:'item',label:'Item',required:true,value:c&&c.item,ph:'Ex.: Concreto usinado fck 30'},
     [{name:'etapa',label:'Etapa',type:'select',options:etapaOptions('—'),value:c&&c.etapa?String(c.etapa):''},{name:'un',label:'Unidade',type:'select',options:UNIDADES.map(function(u){return [u,u];}),value:(c&&c.un)||'un'}],
     [{name:'qtd',label:'Quantidade',type:'number',min:0,step:'any',required:true,value:c&&c.qtd},{name:'dataUso',label:'Data de uso na obra',type:'date',required:true,value:c&&c.dataUso}],
+    {name:'prioridade',label:'Prioridade',type:'select',options:[['baixa','Baixa'],['media','Média'],['alta','Alta']],value:(c&&c.prioridade)||'media'},
     [{name:'prazoEntrega',label:'Prazo de entrega (dias)',type:'number',min:0,step:1,value:c&&c.prazoEntrega!=null?c.prazoEntrega:'',hint:'Pedir até = data de uso menos este prazo.'},{name:'critico',label:'Item crítico?',type:'radio',options:[['sim','Sim'],['nao','Não']],value:c&&c.critico?'sim':'nao'}],
     [{name:'sobMedida',label:'Sob medida (esquadria, marcenaria, pedra)?',type:'radio',options:[['sim','Sim'],['nao','Não']],value:c&&c.sobMedida?'sim':'nao'},{name:'concretagem',label:'É concreto para concretagem?',type:'radio',options:[['sim','Sim'],['nao','Não']],value:c&&c.concretagem?'sim':'nao'}]];
   if(adm) f.push([{name:'foraEscopo',label:'Está fora do escopo contratado?',type:'radio',options:[['sim','Sim'],['nao','Não']],value:c&&c.foraEscopo?'sim':'nao',hint:'Fora do escopo só é pedido com aditivo assinado ou autorização de emergência.'},{name:'motivoFora',label:'Se fora do escopo, por quê?',type:'select',options:selOpts(TIPOS_OC.map(function(t){ return [t.k,t.n]; }),'Selecione…'),value:(c&&c.motivoFora)||''}]);
@@ -149,7 +151,7 @@ function compraForm(oid,c){
       if(!(v.item||'').trim()) return 'Informe o item.';
       if(!(v.qtd>0)) return 'Informe a quantidade.';
       if(!v.dataUso) return 'Informe a data de uso.';
-      var data=Object.assign({status:'necessidade', cotacoes:[], criadoEm:new Date().toISOString(), por:Store.uid||null}, c||{}, {obraId:oid, item:v.item.trim(), etapa:v.etapa?Number(v.etapa):0, un:v.un, qtd:v.qtd, dataUso:v.dataUso, prazoEntrega:v.prazoEntrega==null?null:v.prazoEntrega, critico:v.critico==='sim', sobMedida:v.sobMedida==='sim', concretagem:v.concretagem==='sim', obs:v.obs||''});
+      var data=Object.assign({status:'necessidade', cotacoes:[], criadoEm:new Date().toISOString(), por:Store.uid||null}, c||{}, {obraId:oid, codigo:(c&&c.codigo)||proximoCodigoCompra(), prioridade:v.prioridade||'media', item:v.item.trim(), etapa:v.etapa?Number(v.etapa):0, un:v.un, qtd:v.qtd, dataUso:v.dataUso, prazoEntrega:v.prazoEntrega==null?null:v.prazoEntrega, critico:v.critico==='sim', sobMedida:v.sobMedida==='sim', concretagem:v.concretagem==='sim', obs:v.obs||''});
       if(adm) data.orcado=v.orcado==null?null:v.orcado;
       if(adm){ data.foraEscopo=v.foraEscopo==='sim'; data.motivoFora=data.foraEscopo?v.motivoFora:''; if(data.foraEscopo&&!v.motivoFora) return 'Informe por que está fora do escopo.'; }
       await Store.set('compras', c?c.id:nid(), data);

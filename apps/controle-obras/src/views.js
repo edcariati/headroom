@@ -135,7 +135,7 @@ function tResumo(o){
   var maxB=Math.max.apply(null,bands.map(function(b){return ab.filter(function(x){var i=idadeOc(x);return i>=b[1]&&i<=b[2];}).length;}).concat([1]));
   var agingHtml=ab.length?bands.map(function(b){ var n=ab.filter(function(x){var i=idadeOc(x);return i>=b[1]&&i<=b[2];}).length; return '<div class="hbar"><span>'+b[0]+'</span><div class="t"><i style="width:'+Math.round(n/maxB*100)+'%;background:'+(b[1]>=8?'var(--crit)':'var(--steel)')+'"></i></div><span class="num">'+n+'</span></div>'; }).join(''):'<p class="muted small" style="padding:0 16px">Nenhum apontamento aberto.</p>';
   var agingCard='<section class="card"><div class="card-h"><h2>Idade dos apontamentos abertos</h2></div><div style="padding:10px 0">'+agingHtml+'</div></section>';
-  return '<div class="stack">'+alHtml+'<div class="grid cols2"><div class="stack">'+tbl+'</div><div class="stack">'+ppcCard+causasCard+agingCard+'</div></div></div>';
+  return '<div class="stack">'+alHtml+resumoProximos(o)+'<div class="grid cols2"><div class="stack">'+tbl+'</div><div class="stack">'+ppcCard+causasCard+agingCard+'</div></div></div>';
 }
 
 function kcardEtapa(o,e){
