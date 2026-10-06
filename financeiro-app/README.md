@@ -4,6 +4,8 @@ Sistema financeiro interno de um escritório de arquitetura e gestão de obras: 
 
 ## Como funciona
 
+Interface em estilo "Vidro & Luz" (escuro por padrão, com modo claro, PWA e busca global Ctrl+K). Veja `docs/DESIGN-SYSTEM.md`.
+
 - `public/` — telas (HTML, CSS e JavaScript simples, sem build).
 - `api/app.js` — única função da Vercel; recebe tudo em `/api/app?rota=...`.
 - `api/_lib/` — regras financeiras, acesso aos dados, senha e rotas.
