@@ -172,7 +172,7 @@ test('usuários por e-mail: criar com senha provisória, entrar, trocar senha, e
   assert.equal((await comSemente({ email: 'a@b.com', senha: 'senha-semente-1' })).status, 200);
   assert.equal((await comSemente({ email: 'a@b.com', senha: 'outra' })).status, 401);
   // excluído depois de semeado, não volta
-  const id = (await tratar({ metodo: 'GET', rota: 'usuarios', cookie: `sessao=${criarSessao(SENHA)}`, ip: '3.3.3.3' }, { store: loja2, senha: SENHA, hoje: () => HOJE })).corpo[0].id;
-  await tratar({ metodo: 'DELETE', rota: `usuarios/${id}`, cookie: `sessao=${criarSessao(SENHA)}`, ip: '3.3.3.3' }, { store: loja2, senha: SENHA, hoje: () => HOJE });
+  const idSem = (await tratar({ metodo: 'GET', rota: 'usuarios', cookie: `sessao=${criarSessao(SENHA)}`, ip: '3.3.3.3' }, { store: loja2, senha: SENHA, hoje: () => HOJE })).corpo[0].id;
+  await tratar({ metodo: 'DELETE', rota: `usuarios/${idSem}`, cookie: `sessao=${criarSessao(SENHA)}`, ip: '3.3.3.3' }, { store: loja2, senha: SENHA, hoje: () => HOJE });
   assert.equal((await comSemente({ email: 'a@b.com', senha: 'senha-semente-1' })).status, 401);
 });
