@@ -37,6 +37,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **wrap (codex):** fix `headroom wrap codex` producing a `config.toml` with duplicate top-level `model_provider` / `openai_base_url` keys (TOML-spec error) when the user had already configured their own provider. The injector now rewrites pre-existing top-level `model_provider` and `openai_base_url` lines in place — the previous value is kept in a `# was: …` trailing comment — instead of unconditionally prepending a duplicate, so `codex` can start against the proxy. The pre-wrap snapshot mechanism continues to byte-for-byte restore the original file on `headroom unwrap codex`.
 
 
+## [0.28.0](https://github.com/edcariati/headroom/compare/v0.27.0...v0.28.0) (2026-10-07)
+
+
+### Features
+
+* **financeiro:** anexos, recibos, notas fiscais, edição do lançamento e busca no back-end ([a29d3ea](https://github.com/edcariati/headroom/commit/a29d3ea4a03f6d821eb3468842c002f7699250d7))
+* **financeiro:** app financeiro interno do escritório ([ebf2799](https://github.com/edcariati/headroom/commit/ebf2799566bda27eb5c94488f1fa805be5712865))
+* **financeiro:** app financeiro interno para publicar na Vercel ([e19b612](https://github.com/edcariati/headroom/commit/e19b6123e6e1509058b6263154f4c297cb86092b))
+* **financeiro:** categorias com subcategorias, rascunho automático nos formulários e parcelamento por serviço no projeto ([ae508ce](https://github.com/edcariati/headroom/commit/ae508ce4aa5b62f79673e370d8b54c97328ba084))
+* **financeiro:** documentos, anexos, recibos, notas fiscais, busca geral, edição completa do lançamento e plano de recebimento por serviço ([2192ae2](https://github.com/edcariati/headroom/commit/2192ae286db72b45ba3eaa6a4d62e82e5f6343b7))
+* **financeiro:** fluxos do financeiro dentro do aplicativo (pendências por passo, contato, conferência, relatório e comprovante) ([d85238e](https://github.com/edcariati/headroom/commit/d85238ea52686dd2979523db42bf0a6bab3ec9e3))
+* **financeiro:** fluxos do financeiro e visão do diretor no Resumo ([ebd2c5f](https://github.com/edcariati/headroom/commit/ebd2c5f508be9289a2af78a0ad1ef07e7d804b29))
+* **financeiro:** logo da Cariati no app financeiro ([7385120](https://github.com/edcariati/headroom/commit/73851206ae52cd47a924c4e506a68347cfbea26f))
+* **financeiro:** logo da Cariati no menu, na tela de senha e no ícone da aba ([e7ae0b0](https://github.com/edcariati/headroom/commit/e7ae0b0f45300808336fb2774b3f87f2b9da376f))
+* **financeiro:** parcelamento do serviço até 24x e recorrência até 180 meses ([d6d0f58](https://github.com/edcariati/headroom/commit/d6d0f5888dcb421179fd9ba010b357ef0fff9e77))
+* **financeiro:** redesign, clientes, A receber e usuários por e-mail ([1b7f6d5](https://github.com/edcariati/headroom/commit/1b7f6d5c10a45f88d63a85e7e322a6cfa1d8ce51))
+* **financeiro:** redesign, clientes, A receber e usuários por e-mail ([6437e4b](https://github.com/edcariati/headroom/commit/6437e4baa614b8948bfe79329ee5ab3a1417ea02))
+* **financeiro:** subcategorias, documentos, recibos, notas fiscais, rascunho e novos limites ([746bc4c](https://github.com/edcariati/headroom/commit/746bc4c44fef4d4b3c5af5ee69a0543c82eb5f66))
+* **financeiro:** visão do diretor no Resumo (crescimento, atrasos, caixa de 12 meses, contratos parcelados e DRE x caixa) ([8610b2c](https://github.com/edcariati/headroom/commit/8610b2c9caa3f332dd77d25be7f8b830d3974ad9))
+
 ## [0.27.0](https://github.com/chopratejas/headroom/compare/v0.26.0...v0.27.0) (2026-06-22)
 
 
