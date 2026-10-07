@@ -34,7 +34,7 @@ export function statusParcela(p, hoje) {
 
 // ---------- dados em memória ----------
 
-const COLECOES = ['contas', 'categorias', 'centros', 'pessoas', 'servicos', 'contratos', 'lancamentos', 'transferencias'];
+const COLECOES = ['contas', 'categorias', 'centros', 'pessoas', 'servicos', 'contratos', 'lancamentos', 'transferencias', 'contatos', 'conferencias', 'entregas'];
 export function criarDados(colecoes = {}) {
   const d = Object.fromEntries(COLECOES.map((c) => [c, colecoes[c] ? [...colecoes[c]] : []]));
   d.mapa = Object.fromEntries(COLECOES.map((c) => [c, new Map(d[c].map((x) => [x.id, x]))]));
@@ -126,7 +126,7 @@ export function criarLancamento(d, i, agora = new Date().toISOString()) {
   return l;
 }
 
-function registrarPagamento(d, l, numero, { data, valor_cents, conta_id } = {}) {
+function registrarPagamento(d, l, numero, { data, valor_cents, conta_id, comprovante } = {}) {
   const p = l.parcelas.find((x) => x.numero === numero);
   exigir(p, 'Parcela não encontrada.', 404);
   const dataPg = data || hojeISO();
@@ -139,7 +139,9 @@ function registrarPagamento(d, l, numero, { data, valor_cents, conta_id } = {}) 
   const conta = conta_id || p.pagamentos.at(-1)?.conta_id || l.conta_id;
   exigir(conta, 'Informe a conta bancária da baixa.');
   achar(d, 'contas', conta, 'Conta não encontrada.');
-  p.pagamentos.push({ data: dataPg, valor_cents: valor, conta_id: conta });
+  const pg = { data: dataPg, valor_cents: valor, conta_id: conta };
+  if (texto(comprovante)) pg.comprovante = texto(comprovante).slice(0, 300);
+  p.pagamentos.push(pg);
 }
 
 const dividirId = (id) => {
@@ -641,6 +643,7 @@ export function aReceber(d, f = {}, hoje = hojeISO()) {
     return { pessoa_id: pid || null, nome: pe?.nome ?? 'Sem cliente informado', codigo: pe?.codigo ?? null, telefone: pe?.telefone ?? null, email: pe?.email ?? null,
       vencido_cents: soma(venc, (p) => p.aberto_cents), a_vencer_cents: soma(prox, (p) => p.aberto_cents), total_cents: soma(ps, (p) => p.aberto_cents),
       max_atraso_dias: Math.max(0, ...venc.map((p) => p.dias_atraso)), proximo_vencimento: prox[0]?.vencimento ?? null,
+      ultimo_contato: d.contatos.filter((x) => x.pessoa_id === pid).reduce((m, x) => (!m || x.data > m.data || (x.data === m.data && x.criado_em > m.criado_em) ? x : m), null),
       parcelas: ps.map((p) => ({ id: p.id, nome: p.nome, vencimento: p.vencimento, aberto_cents: p.aberto_cents, valor_cents: p.valor_cents, status: p.status,
         dias_atraso: p.dias_atraso, contrato_codigo: p.contrato_codigo, conta_id: p.conta_id, tipo: 'receita' })) };
   }).filter((c) => !busca || `${c.nome} ${c.codigo || ''} ${c.parcelas.map((p) => `${p.nome} ${p.contrato_codigo || ''}`).join(' ')}`.toLowerCase().includes(busca))
@@ -664,4 +667,85 @@ export function aReceber(d, f = {}, hoje = hojeISO()) {
     clientes: clientesLista, agenda,
     caixa: { saldo_cents: saldo, vencido_pagar_cents: soma(desp.filter((p) => p.status === 'vencido'), (p) => p.aberto_cents), projecao },
   };
+}
+
+// ---------- fluxos: contatos de cobrança, conferência das contas e entrega do relatório ----------
+
+export const CANAIS_CONTATO = ['whatsapp', 'telefone', 'email', 'presencial', 'outro'];
+const dataOu = (v, hoje, msg) => { const x = v || hoje; exigir(ehISO(x), msg); return x; };
+
+export function criarContato(d, i, agora = new Date().toISOString(), hoje = hojeISO()) {
+  achar(d, 'pessoas', i.pessoa_id, 'Cliente não encontrado.');
+  const canal = i.canal || 'whatsapp';
+  exigir(CANAIS_CONTATO.includes(canal), 'Canal de contato inválido.');
+  exigir(texto(i.resposta), 'Anote a resposta do cliente ou o combinado.');
+  return { id: novoId(), pessoa_id: i.pessoa_id, data: dataOu(i.data, hoje, 'Data do contato inválida.'), canal, resposta: texto(i.resposta).slice(0, 500),
+    parcela_id: i.parcela_id || null, criado_em: agora };
+}
+// Confere o saldo do aplicativo com o do extrato. Se há diferença, a explicação é obrigatória.
+export function criarConferencia(d, i, agora = new Date().toISOString(), hoje = hojeISO()) {
+  achar(d, 'contas', i.conta_id, 'Conta não encontrada.');
+  exigir(Number.isInteger(i.saldo_banco_cents), 'Informe o saldo do extrato do banco.');
+  const data = dataOu(i.data, hoje, 'Data da conferência inválida.');
+  const app = saldoContas(d, data, hoje).find((c) => c.id === i.conta_id)?.saldo_cents ?? 0;
+  const diferenca = i.saldo_banco_cents - app;
+  exigir(diferenca === 0 || texto(i.observacao), 'Há diferença entre o aplicativo e o extrato. Explique o motivo.');
+  return { id: novoId(), conta_id: i.conta_id, data, saldo_banco_cents: i.saldo_banco_cents, saldo_app_cents: app, diferenca_cents: diferenca,
+    observacao: texto(i.observacao).slice(0, 500) || null, criado_em: agora };
+}
+export function criarEntrega(d, i, agora = new Date().toISOString(), hoje = hojeISO()) {
+  return { id: novoId(), tipo: 'relatorio_quinzenal', data: dataOu(i.data, hoje, 'Data da entrega inválida.'), observacao: texto(i.observacao).slice(0, 500) || null, criado_em: agora };
+}
+
+const diasDesde = (iso, hoje) => Math.round((Date.parse(hoje) - Date.parse(iso)) / 864e5);
+const ultimo = (lista) => lista.reduce((m, x) => (!m || x.data > m.data ? x : m), null);
+
+// Os nove passos do fluxo do financeiro, cada um com o que fica pendente hoje.
+export function fluxos(d, hoje = hojeISO()) {
+  const parcelas = expandir(d, hoje);
+  const rec = parcelas.filter((p) => p.tipo === 'receita');
+  const clientesLista = d.pessoas.filter(ehCliente);
+  const ativos = d.contratos.filter((c) => c.status === 'ativo');
+  const nomeCli = (id) => d.mapa.pessoas.get(id)?.nome ?? 'Sem cliente';
+  const em7 = new Date(Date.parse(hoje) + 7 * 864e5).toISOString().slice(0, 10);
+  const comLanc = new Set(d.lancamentos.filter((l) => l.tipo === 'receita' && l.contrato_id).map((l) => l.contrato_id));
+  const contatos = Map.groupBy(d.contatos, (c) => c.pessoa_id);
+  const emAtraso = [...Map.groupBy(rec.filter((p) => p.status === 'vencido' && p.pessoa_id), (p) => p.pessoa_id)].map(([pid]) => pid);
+  const semContato = emAtraso.filter((pid) => { const u = ultimo(contatos.get(pid) || []); return !u || diasDesde(u.data, hoje) > 7; });
+  const recebSemComp = rec.flatMap((p) => p.pagamentos.filter((x) => !x.comprovante && diasDesde(x.data, hoje) <= 15).map(() => p));
+  const despVenc = parcelas.filter((p) => p.tipo === 'despesa' && p.status === 'vencido');
+  const confs = Map.groupBy(d.conferencias, (c) => c.conta_id);
+  const contasAtivas = d.contas.filter((c) => c.ativa !== 0 && c.ativa !== false);
+  const semConf = contasAtivas.filter((c) => { const u = ultimo(confs.get(c.id) || []); return !u || diasDesde(u.data, hoje) > 7; });
+  const ultEntrega = ultimo(d.entregas);
+  const entregaAtrasada = !ultEntrega || diasDesde(ultEntrega.data, hoje) > 15;
+
+  const passo = (n, chave, nome, entrega, onde, quando, itens, extra = {}) =>
+    ({ n, chave, nome, entrega, onde, quando, pendencias: itens.length, itens: itens.slice(0, 8), ...extra });
+  const passos = [
+    passo(1, 'cadastro', 'Cadastro do cliente', 'Cliente com código, CPF ou CNPJ, contato, endereço do cliente e da obra.', { rota: 'clientes', rotulo: 'Clientes' }, 'No dia do fechamento',
+      clientesLista.filter((c) => !c.documento || !c.telefone || !(c.endereco && c.cidade)).map((c) => `${c.nome}: falta ${[!c.documento && 'CPF/CNPJ', !c.telefone && 'telefone', !(c.endereco && c.cidade) && 'endereço'].filter(Boolean).join(', ')}`)),
+    passo(2, 'projeto', 'Projeto e serviços', 'Projeto com código CA, área em m², competência e serviços contratados com valor.', { rota: 'clientes', rotulo: 'Clientes' }, 'Antes da primeira cobrança',
+      ativos.filter((c) => !(c.servicos || []).length || !c.area_m2).map((c) => `${c.codigo} ${c.nome}: falta ${[!(c.servicos || []).length && 'serviços', !c.area_m2 && 'área'].filter(Boolean).join(' e ')}`)),
+    passo(3, 'receita', 'Receita e parcelas', 'Receita ligada ao cliente e ao projeto, com parcelas, categoria e conta de recebimento.', { rota: 'receitas', rotulo: 'Receitas' }, 'Junto com o contrato assinado',
+      ativos.filter((c) => c.valor_total_cents > 0 && !comLanc.has(c.id)).map((c) => `${c.codigo} ${c.nome}: sem receita lançada`)),
+    passo(4, 'cobranca', 'Cobrança', 'Boleto ou Pix emitido no banco e enviado ao cliente; nota fiscal anotada no lançamento.', { rota: 'receitas', rotulo: 'Receitas' }, 'Antes do vencimento',
+      rec.filter((p) => p.aberto_cents > 0 && p.vencimento >= hoje && p.vencimento <= em7 && !p.nota_fiscal).map((p) => `${p.nome}: vence ${p.vencimento.split('-').reverse().join('/')} sem nota fiscal`)),
+    passo(5, 'acompanhamento', 'Acompanhamento diário', 'Vencidos e vencimentos da semana conferidos; contato com cada cliente em atraso registrado.', { rota: 'areceber', rotulo: 'A receber' }, 'Todo dia útil',
+      semContato.map((pid) => `${nomeCli(pid)}: em atraso sem contato registrado nos últimos 7 dias`),
+      { ultimo: ultimo(d.contatos)?.data ?? null, ultimo_rotulo: 'Último contato registrado' }),
+    passo(6, 'baixa', 'Baixa', 'Recebimento baixado com data, valor e conta; comprovante salvo na pasta do cliente.', { rota: 'areceber', rotulo: 'A receber' }, 'No dia em que o valor cai',
+      recebSemComp.map((p) => `${p.nome}: recebimento sem comprovante`)),
+    passo(7, 'despesas', 'Despesas e transferências', 'Despesas lançadas com categoria e fornecedor; transferências entre contas registradas.', { rota: 'despesas', rotulo: 'Despesas' }, 'No dia do pagamento',
+      despVenc.map((p) => `${p.nome}: venceu ${p.vencimento.split('-').reverse().join('/')} e continua em aberto`)),
+    passo(8, 'conciliacao', 'Conciliação', 'Saldo de cada conta conferido com o extrato do banco; diferenças explicadas.', { rota: 'contas', rotulo: 'Contas e extratos' }, 'Toda semana',
+      semConf.map((c) => `${c.nome}: sem conferência com o extrato nos últimos 7 dias`),
+      { ultimo: ultimo(d.conferencias)?.data ?? null, ultimo_rotulo: 'Última conferência' }),
+    passo(9, 'relatorio', 'Relatório quinzenal', 'Fluxo de caixa, DRE e resultados conferidos; atrasos e compensação no caixa entregues ao diretor.', { rota: 'fluxo', rotulo: 'Fluxo de caixa' }, 'A cada 15 dias',
+      entregaAtrasada ? [ultEntrega ? `Último relatório entregue há ${diasDesde(ultEntrega.data, hoje)} dias` : 'Nenhum relatório quinzenal registrado ainda'] : [],
+      { ultimo: ultEntrega?.data ?? null, ultimo_rotulo: 'Última entrega' }),
+  ];
+  const emDia = passos.filter((p) => p.pendencias === 0).length;
+  return { hoje, passos, em_dia: emDia, total: passos.length, pendencias: soma(passos, (p) => p.pendencias),
+    contas: contasAtivas.map((c) => ({ id: c.id, nome: c.nome })) };
 }

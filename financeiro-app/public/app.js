@@ -5,6 +5,7 @@ import { modal } from './util.js';
 import * as V from './views.js';
 import { clientesView, formCliente } from './clientes.js';
 import { aReceberView } from './areceber.js';
+import { fluxosView } from './fluxos.js';
 import { novoUsuario, usuariosView } from './usuarios.js';
 
 // ---------- telas ----------
@@ -12,6 +13,7 @@ const novoMenu = () => abrirNovo();
 const ROTAS = {
   resumo: { titulo: 'Resumo', grupo: 'Financeiro', icone: 'home', sub: 'Caixa, contas e próximos vencimentos num só olhar.', fn: (el) => V.resumo(el), cta: { rotulo: 'Novo lançamento', icone: 'plus', acao: novoMenu } },
   areceber: { titulo: 'A receber', grupo: 'Financeiro', icone: 'alvo', sub: 'Quem está devendo, o que vence e como isso afeta o caixa.', fn: (el) => aReceberView(el), cta: { rotulo: 'Nova receita', icone: 'plus', acao: () => formLancamento('receita', renderAgora) } },
+  fluxos: { titulo: 'Fluxos', grupo: 'Financeiro', icone: 'raio', sub: 'O que o financeiro entrega em cada passo e o que está pendente.', fn: (el) => fluxosView(el), cta: { rotulo: 'Novo lançamento', icone: 'plus', acao: novoMenu } },
   clientes: { titulo: 'Clientes', grupo: 'Financeiro', icone: 'usuarios', sub: 'Quem são os clientes, seus códigos, projetos e serviços contratados.', fn: (el) => clientesView(el), cta: { rotulo: 'Novo cliente', icone: 'plus', acao: () => formCliente(renderAgora) } },
   pagamentos: { titulo: 'Pagamentos do cliente', grupo: 'Financeiro', icone: 'contrato', sub: 'Contratos, parcelas e quanto ainda falta receber.', fn: (el) => V.pagamentos(el), cta: { rotulo: 'Nova receita de contrato', icone: 'plus', acao: () => formLancamento('receita', renderAgora) } },
   receitas: { titulo: 'Receitas', grupo: 'Financeiro', icone: 'receitas', sub: 'Tudo o que entra: vencimentos, recebimentos e atrasos.', fn: (el, q) => V.lista(el, 'receita', q), cta: { rotulo: 'Nova receita', icone: 'plus', acao: () => formLancamento('receita', renderAgora) } },

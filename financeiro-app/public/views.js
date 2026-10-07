@@ -1,5 +1,6 @@
 import { $, $$, MESES, api, brl, confirmar, controlePeriodo, dataBR, esc, excluirComDesfazer, getPeriodo, ligarPeriodo, qs, rotuloMes, toast, urlApi } from './util.js';
 import { CORES, animarContadores, chipStatus, estadoVazio, gauge, grafico, icon, kpi, linha, revelar, rosca, skeletonPagina, spark } from './ui.js';
+import { formConferencia } from './fluxos.js';
 import { CADASTROS, GRUPOS, formBaixa, formCadastro, formEditarParcela, formLancamento, formTransferencia, limparCache } from './forms.js';
 
 export const setCrumbs = (lista) => window.dispatchEvent(new CustomEvent('crumbs', { detail: lista }));
@@ -240,6 +241,8 @@ export async function contas(el, query = {}) {
   const lista = await api('contas-saldos');
   const sel = query.conta || lista[0]?.id;
   const ex = sel ? await api(`contas/${sel}/extrato`) : null;
+  const conferencias = sel ? await api(`conferencias?conta_id=${sel}`) : [];
+  const ultConf = conferencias[0];
   const total = lista.reduce((s, c) => s + c.saldo_cents, 0);
   const atual = lista.find((c) => c.id === sel);
   setCrumbs(['Financeiro', 'Contas e extratos', ...(atual ? [atual.nome] : [])]);
@@ -249,11 +252,14 @@ export async function contas(el, query = {}) {
       <section class="glass painel hero mira reveal" style="display:grid;place-items:center">${gauge({ pct: perc, rotulo: atual?.nome || 'Conta', valor: `<span data-count="${atual?.saldo_cents || 0}" data-fmt="brl">${brl(atual?.saldo_cents || 0)}</span>`, sub: `${fmtPct(perc)} do saldo total`, cor: 'violet', ariaLabel: `${atual?.nome}: ${fmtPct(perc)} do saldo total` })}</section>
       <div class="grade-kpi" style="align-content:center">${lista.map((c) => `<button class="kpi reveal${c.id === sel ? ' ativa' : ''}" data-conta="${c.id}" type="button"><span class="kpi-topo"><span class="kpi-rot">${icon('banco')}${esc(c.nome)}</span></span><span class="kpi-val ${c.saldo_cents < 0 ? 'vermelho' : ''}" data-count="${c.saldo_cents}" data-fmt="brl">${brl(c.saldo_cents)}</span><span class="kpi-var suave">${esc(c.banco || '')}</span></button>`).join('')}</div></div>`
     : estadoVazio({ titulo: 'Nenhuma conta cadastrada', texto: 'Cadastre suas contas bancárias com o saldo inicial para ver saldos e extratos.', acaoRotulo: 'Nova conta', acaoId: 'estado-novo' })}
-    ${ex ? `<h2 style="margin:var(--s6) 0 var(--s3)">Extrato · ${esc(ex.conta.nome)}</h2>${ex.movimentos.length ? '' : '<p class="suave" style="margin-bottom:var(--s3)">Ainda não há movimentos nesta conta.</p>'}<section class="glass reveal"><div class="tabela-wrap"><table class="tbl"><thead><tr><th>Data</th><th>Descrição</th><th>Pessoa</th><th class="num">Valor</th><th class="num">Saldo</th></tr></thead><tbody>
+    ${ex ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:var(--s3);flex-wrap:wrap;margin:var(--s6) 0 var(--s3)"><h2 style="margin:0">Extrato · ${esc(ex.conta.nome)}</h2>
+      <div style="display:flex;align-items:center;gap:var(--s3);flex-wrap:wrap">${ultConf ? `<span class="suave">Última conferência: ${dataBR(ultConf.data)}${ultConf.diferenca_cents ? ` · diferença de ${brl(ultConf.diferenca_cents)}` : ' · saldo igual ao extrato'}</span>` : '<span class="suave">Ainda não conferida com o extrato</span>'}
+      <button class="btn btn-sm" type="button" data-conferir>${icon('check')}Conferir com o extrato</button></div></div>${ex.movimentos.length ? '' : '<p class="suave" style="margin-bottom:var(--s3)">Ainda não há movimentos nesta conta.</p>'}<section class="glass reveal"><div class="tabela-wrap"><table class="tbl"><thead><tr><th>Data</th><th>Descrição</th><th>Pessoa</th><th class="num">Valor</th><th class="num">Saldo</th></tr></thead><tbody>
       <tr><td data-label="Data"></td><td class="nome suave" data-label="Descrição">Saldo inicial</td><td data-label="Pessoa"></td><td class="num" data-label="Valor"></td><td class="num" data-label="Saldo"><b>${brl(ex.saldo_inicial_cents)}</b></td></tr>
       ${[...ex.movimentos].reverse().map((m) => `<tr><td data-label="Data">${dataBR(m.data)}</td><td class="nome" data-label="Descrição"><strong>${esc(m.descricao)}</strong>${m.origem === 'transferencia' ? ` <span class="chip">${icon('transfer')}transferência</span>` : ''}</td><td data-label="Pessoa">${esc(m.pessoa || '')}</td><td class="num" data-label="Valor">${sv(m.valor_cents)}</td><td class="num" data-label="Saldo">${brl(m.saldo_cents)}</td></tr>`).join('')}</tbody></table></div></section>` : ''}`;
   el.onclick = (e) => {
     if (e.target.closest('#estado-novo')) return formCadastro('contas', null, () => { limparCache(); contas(el); });
+    if (e.target.closest('[data-conferir]')) return formConferencia(lista, sel, () => { contas(el, query); });
     const b = e.target.closest('[data-conta]');
     if (b) location.hash = `#/contas?conta=${b.dataset.conta}`;
   };

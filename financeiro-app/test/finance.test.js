@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   criarDados, criarLancamento, baixarParcela, estornarParcela, editarParcela, dividirCentavos, resumo, fluxoCaixa, dre, listarParcelas,
   criarTransferencia, saldoContas, extratoConta, ErroValidacao, resultadosGerais, resultadosPorProjeto, outrosRelatorios,
-  validarCadastro, emUso, pagamentosCliente, clientes, sugestoesCodigo, aReceber,
+  validarCadastro, emUso, pagamentosCliente, clientes, sugestoesCodigo, aReceber, criarContato, criarConferencia, criarEntrega, fluxos,
 } from '../api/_lib/finance.js';
 
 const HOJE = '2026-06-15';
@@ -19,7 +19,7 @@ function base() {
     contratos: [{ id: 't1', codigo: 'CA260101', nome: 'Casa A', pessoa_id: 'p1' }],
   });
 }
-const incluir = (d, l) => { d.lancamentos.push(l); d.mapa.lancamentos.set(l.id, l); return l; };
+const incluir = (d, l) => { d.lancamentos.push(l); d.mapa.lancamentos.set(l.id, l); d._exp = null; return l; };
 const trocar = (d, l) => { d.lancamentos.splice(d.lancamentos.findIndex((x) => x.id === l.id), 1, l); d.mapa.lancamentos.set(l.id, l); d._exp = null; };
 const rec = (d, o) => incluir(d, criarLancamento(d, { tipo: 'receita', nome: 'R', categoria_id: 'k1', conta_id: 'c1', ...o }));
 const desp = (d, o) => incluir(d, criarLancamento(d, { tipo: 'despesa', nome: 'D', categoria_id: 'k4', conta_id: 'c1', ...o }));
@@ -265,4 +265,47 @@ test('a receber: atrasos por cliente, faixas de atraso, agenda e projeção de c
   assert.equal(r.caixa.projecao[0].saldo_projetado_cents, caixa + 15000); // 7 dias: entra 150,00
   assert.equal(r.caixa.projecao[2].saldo_projetado_cents, caixa + 15000 - 40000);
   assert.equal(aReceber(d, { busca: 'zzz' }, HOJE).clientes.length, 0);
+});
+
+test('fluxos: pendências de cada passo, contato, comprovante, conferência e relatório quinzenal', () => {
+  const d = base(); // hoje = 2026-06-15; Inter começa com 1.000,00
+  const f0 = fluxos(d, HOJE);
+  assert.equal(f0.total, 9);
+  assert.equal(f0.passos[0].pendencias, 1); // Cliente A sem CPF/CNPJ, telefone e endereço
+  assert.match(f0.passos[0].itens[0], /Cliente A: falta CPF\/CNPJ, telefone, endereço/);
+  assert.equal(f0.passos[8].pendencias, 1); // nenhum relatório ainda
+  assert.equal(f0.passos[7].pendencias, 2); // duas contas sem conferência
+  Object.assign(d.pessoas[0], { documento: '12345678909', telefone: '1', endereco: 'Rua', cidade: 'X' });
+  Object.assign(d.contratos[0], { status: 'ativo', valor_total_cents: 100000, area_m2: 80, servicos: [{ nome: 'Projeto', valor_cents: 100000 }] });
+  assert.equal(fluxos(d, HOJE).passos[2].pendencias, 1); // projeto ativo sem receita
+  const atrasada = rec(d, { nome: 'Atrasada', pessoa_id: 'p1', contrato_id: 't1', valor_total_cents: 100000, primeiro_vencimento: '2026-05-01' });
+  let f = fluxos(d, HOJE);
+  assert.equal(f.passos[0].pendencias, 0); assert.equal(f.passos[2].pendencias, 0);
+  assert.equal(f.passos[4].pendencias, 1); // em atraso, sem contato
+  assert.equal(f.passos[3].pendencias, 0);
+  // contato registrado resolve o passo
+  assert.throws(() => criarContato(d, { pessoa_id: 'p1', resposta: ' ' }, undefined, HOJE), /resposta/);
+  assert.throws(() => criarContato(d, { pessoa_id: 'nao', resposta: 'x' }, undefined, HOJE), /não encontrado/);
+  const c = criarContato(d, { pessoa_id: 'p1', canal: 'whatsapp', resposta: 'Paga sexta' }, undefined, HOJE);
+  d.contatos.push(c);
+  f = fluxos(d, HOJE); assert.equal(f.passos[4].pendencias, 0); assert.equal(f.passos[4].ultimo, HOJE);
+  // baixa sem comprovante aparece; com comprovante não
+  pagar(d, atrasada, 1, { data: '2026-06-14', conta_id: 'c1' });
+  assert.equal(fluxos(d, HOJE).passos[5].pendencias, 1);
+  const com = rec(d, { nome: 'Com comprovante', pessoa_id: 'p1', valor_total_cents: 5000, primeiro_vencimento: '2026-06-10' });
+  pagar(d, com, 1, { data: '2026-06-15', conta_id: 'c1', comprovante: ' pix-123.pdf ' });
+  assert.equal(d.lancamentos.at(-1).parcelas[0].pagamentos[0].comprovante, 'pix-123.pdf');
+  assert.equal(fluxos(d, HOJE).passos[5].pendencias, 1); // só a sem comprovante
+  // conferência: diferença exige explicação
+  const app = 100000 + 100000 + 5000; // saldo inicial + dois recebimentos
+  assert.throws(() => criarConferencia(d, { conta_id: 'c1', saldo_banco_cents: app + 300 }, undefined, HOJE), /diferença/);
+  assert.throws(() => criarConferencia(d, { conta_id: 'c1' }, undefined, HOJE), /saldo do extrato/);
+  const ok = criarConferencia(d, { conta_id: 'c1', saldo_banco_cents: app + 300, observacao: 'Tarifa ainda não lançada' }, undefined, HOJE);
+  assert.equal(ok.diferenca_cents, 300); assert.equal(ok.saldo_app_cents, app);
+  d.conferencias.push(ok);
+  assert.equal(fluxos(d, HOJE).passos[7].pendencias, 1); // falta a outra conta
+  // relatório quinzenal
+  d.entregas.push(criarEntrega(d, { data: '2026-06-10' }, undefined, HOJE));
+  assert.equal(fluxos(d, HOJE).passos[8].pendencias, 0);
+  assert.equal(fluxos(d, '2026-07-01').passos[8].pendencias, 1); // 21 dias depois
 });

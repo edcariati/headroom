@@ -118,6 +118,13 @@ export async function tratar(req, ctx) {
       }
     }
 
+    // ----- fluxos: contatos, conferências e entregas -----
+    if (a === 'contatos' && !b && metodo === 'POST') { const x = F.criarContato(d, body, agora(), H); await gravar(store, 'contatos', x); return ok(x, 201); }
+    if (a === 'contatos' && !b && metodo === 'GET') return ok(d.contatos.filter((x) => !query.pessoa_id || x.pessoa_id === query.pessoa_id).sort((x, y) => y.data.localeCompare(x.data)));
+    if (a === 'conferencias' && !b && metodo === 'POST') { const x = F.criarConferencia(d, body, agora(), H); await gravar(store, 'conferencias', x); return ok(x, 201); }
+    if (a === 'conferencias' && !b && metodo === 'GET') return ok(d.conferencias.filter((x) => !query.conta_id || x.conta_id === query.conta_id).sort((x, y) => y.data.localeCompare(x.data)));
+    if (a === 'entregas' && !b && metodo === 'POST') { const x = F.criarEntrega(d, body, agora(), H); await gravar(store, 'entregas', x); return ok(x, 201); }
+
     // ----- lançamentos e parcelas -----
     if (a === 'parcelas' && !b && metodo === 'GET') return ok(F.listarParcelas(d, filtrosParcela(query), H));
     if (a === 'parcelas.csv' && metodo === 'GET') {
@@ -163,6 +170,7 @@ export async function tratar(req, ctx) {
 
     // ----- dashboard e relatórios -----
     if (metodo === 'GET') {
+      if (a === 'fluxos') return ok(F.fluxos(d, H));
       if (a === 'a-receber') return ok(F.aReceber(d, query, H));
       if (a === 'clientes') return ok(F.clientes(d, query, H));
       if (a === 'sugestoes-codigo') return ok(F.sugestoesCodigo(d, H));
