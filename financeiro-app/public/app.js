@@ -5,6 +5,7 @@ import { modal } from './util.js';
 import * as V from './views.js';
 import { clientesView, formCliente } from './clientes.js';
 import { aReceberView } from './areceber.js';
+import { novoUsuario, usuariosView } from './usuarios.js';
 
 // ---------- telas ----------
 const novoMenu = () => abrirNovo();
@@ -21,6 +22,7 @@ const ROTAS = {
   dre: { titulo: 'DRE gerencial', grupo: 'Relatórios', icone: 'pizza', sub: 'Resultado do escritório por competência ou por caixa.', fn: (el) => V.dre(el), cta: { rotulo: 'Novo lançamento', icone: 'plus', acao: novoMenu } },
   resultados: { titulo: 'Resultados', grupo: 'Relatórios', icone: 'tendencia', sub: 'Quanto sobrou: geral e por projeto.', fn: (el, q) => V.resultados(el, q), cta: { rotulo: 'Novo lançamento', icone: 'plus', acao: novoMenu } },
   outros: { titulo: 'Outros relatórios', grupo: 'Relatórios', icone: 'camadas', sub: 'Totais por cliente, fornecedor, categoria, centro de custo ou projeto.', fn: (el) => V.outros(el), cta: { rotulo: 'Novo lançamento', icone: 'plus', acao: novoMenu } },
+  usuarios: { titulo: 'Usuários', grupo: 'Configurações', icone: 'usuarios', sub: 'Quem entra no sistema, com e-mail e senha própria.', fn: (el) => usuariosView(el), cta: { rotulo: 'Novo usuário', icone: 'plus', acao: () => novoUsuario(renderAgora) } },
   cadastros: { titulo: 'Cadastros', grupo: 'Configurações', icone: 'ajustes', sub: 'Contas, categorias, centros de custo, pessoas e projetos.', fn: (el, q) => V.cadastrosView(el, q),
     cta: { rotulo: 'Novo cadastro', icone: 'plus', acao: () => formCadastro(V.cadastrosView.aba || 'contas', null, renderAgora) } },
 };
@@ -249,15 +251,19 @@ function telaLogin() {
   cta.hidden = true;
   ultimaChave = null;
   $('#conteudo').innerHTML = `<form class="login-card glass glass-forte mira reveal" id="login-form">
-    <img class="login-logo" src="logo-cariati.png" alt="Cariati Arquitetura &amp; Gestão"><h2>Financeiro interno</h2><p class="suave">Acesso restrito. Digite a senha para continuar.</p>
-    <label class="f" style="text-align:left">Senha<input class="campo" type="password" name="senha" autocomplete="current-password" required autofocus></label>
+    <img class="login-logo" src="logo-cariati.png" alt="Cariati Arquitetura &amp; Gestão"><h2>Financeiro interno</h2><p class="suave">Acesso restrito. Entre com seu e-mail e senha.</p>
+    <label class="f" style="text-align:left">E-mail<input class="campo" type="email" name="email" autocomplete="username" placeholder="seu@email.com.br"><span class="dica">Administrador: deixe o e-mail em branco e use a senha de administrador.</span></label>
+    <label class="f" style="text-align:left">Senha<input class="campo" type="password" name="senha" autocomplete="current-password" required></label>
     <div class="erro" role="alert" style="justify-content:center"></div><button class="btn btn-primary" type="submit" style="width:100%">Entrar</button></form>`;
+  $('#login-form').email.value = ler('ultimoEmail', '');
+  $((ler('ultimoEmail', '') ? '[name=senha]' : '[name=email]'), $('#login-form')).focus();
   $('#login-form').onsubmit = async (e) => {
     e.preventDefault();
     const botao = $('button', e.target);
     botao.disabled = true;
     try {
-      await api('login', { method: 'POST', body: { senha: e.target.senha.value } });
+      await api('login', { method: 'POST', body: { email: e.target.email.value.trim(), senha: e.target.senha.value } });
+      gravar('ultimoEmail', e.target.email.value.trim());
       document.body.classList.remove('login');
       render();
     } catch (err) {

@@ -29,7 +29,7 @@ export const servidor = http.createServer(async (req, res) => {
     const query = Object.fromEntries(url.searchParams);
     const rota = query.rota || '';
     delete query.rota;
-    const r = await tratar({ metodo: req.method, rota, query, corpo, cookie: req.headers.cookie, ip: req.socket.remoteAddress }, { store, senha: process.env.ADMIN_SENHA });
+    const r = await tratar({ metodo: req.method, rota, query, corpo, cookie: req.headers.cookie, ip: req.socket.remoteAddress }, { store, senha: process.env.ADMIN_SENHA, semente: process.env.USUARIOS_SEMENTE });
     for (const [k, v] of Object.entries(r.cabecalhos || {})) res.setHeader(k, v);
     res.writeHead(r.status, { 'Content-Type': r.tipo || 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     return res.end(r.tipo ? r.corpo : JSON.stringify(r.corpo));

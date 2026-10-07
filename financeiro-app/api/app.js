@@ -15,7 +15,7 @@ export default async function handler(req, res) {
     metodo: req.method, rota, query, corpo, cookie: req.headers.cookie,
     ip: String(req.headers['x-forwarded-for'] || '').split(',')[0].trim(),
     https: req.headers['x-forwarded-proto'] === 'https',
-  }, { store, senha: process.env.ADMIN_SENHA, producao: !!process.env.VERCEL });
+  }, { store, senha: process.env.ADMIN_SENHA, semente: process.env.USUARIOS_SEMENTE, producao: !!process.env.VERCEL });
   for (const [k, v] of Object.entries(r.cabecalhos || {})) res.setHeader(k, v);
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Content-Type', r.tipo || 'application/json; charset=utf-8');
