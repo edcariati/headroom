@@ -17,6 +17,17 @@ export async function cadastros(forcar = false) {
 }
 export const limparCache = () => { cache = null; };
 
+// Lista de categorias com subcategorias agrupadas: "Automóvel" vira um grupo com Combustível, Estacionamento…
+export function opcoesCategorias(cats, sel, vazio = '—') {
+  const op = (x, rot) => `<option value="${x.id}"${String(sel) === String(x.id) ? ' selected' : ''}>${esc(rot ?? x.nome)}</option>`;
+  const filhos = (id) => cats.filter((x) => x.pai_id === id);
+  const pais = cats.filter((x) => !x.pai_id || !cats.some((p) => p.id === x.pai_id));
+  return `<option value="">${esc(vazio)}</option>${pais.map((p) => {
+    const f = filhos(p.id);
+    return f.length ? `<optgroup label="${esc(p.nome)}">${op(p, `${p.nome} (geral)`)}${f.map((x) => op(x)).join('')}</optgroup>` : op(p);
+  }).join('')}`;
+}
+
 const guardar = (k, v) => { try { localStorage.setItem(k, v); } catch { /* sem storage */ } };
 const ler = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const tirar = (k) => { try { localStorage.removeItem(k); } catch { /* sem storage */ } };
@@ -53,7 +64,7 @@ export async function formLancamento(tipo, aoSalvar, prefill = {}) {
     <section data-passo="2" class="empilha" aria-label="Etapa 2: Classificação" hidden>
       <div class="linha2">
         <label class="f">${ehReceita ? 'Cliente' : 'Fornecedor'}<select class="campo" name="pessoa_id">${opcoes(pessoas, '', '—')}</select></label>
-        <label class="f">Categoria *<select class="campo" name="categoria_id" required>${opcoes(cats, catPadrao, 'Escolha…')}</select><span class="msg" data-msg="categoria_id"></span></label>
+        <label class="f">Categoria *<select class="campo" name="categoria_id" required>${opcoesCategorias(cats, catPadrao, 'Escolha…')}</select><span class="msg" data-msg="categoria_id"></span></label>
       </div>
       <div class="linha2">
         <label class="f">Centro de custo<select class="campo" name="centro_custo_id">${opcoes(c.centros, '', '—')}</select></label>
@@ -78,7 +89,7 @@ export async function formLancamento(tipo, aoSalvar, prefill = {}) {
     <button type="submit" class="btn btn-primary" id="passo-criar" hidden>${icon('check')}Criar lançamento</button>`;
 
   const m = modal(ehReceita ? 'Nova receita' : 'Nova despesa', corpo, {
-    rotulo: 'Criar lançamento', rodape, classe: 'folha-passos',
+    rotulo: 'Criar lançamento', rodape, classe: 'folha-passos', chave: false, proteger: true,
     onSubmit: async (d) => {
       const valor = parseDinheiro(d.valor);
       if (!valor || valor <= 0) throw new Error('Informe um valor válido, como 1.250,00.');
@@ -220,7 +231,7 @@ export async function formBaixa(p, aoSalvar) {
     <label class="f">Valor (R$) *<input class="campo" name="valor" value="${dinheiroInput(p.aberto_cents)}" inputmode="decimal" required><span class="dica">Pode ser parcial: o restante continua em aberto.</span></label></div>
     <label class="f">Conta bancária *<select class="campo" name="conta_id" required>${opcoes(c.contas, p.conta_id || ler('ultimaConta') || c.contas[0]?.id, 'Escolha…')}</select></label>
     <label class="f">Comprovante<input class="campo" name="comprovante" autocomplete="off" placeholder="Nome do arquivo ou link na pasta do cliente"><span class="dica">Opcional. Ajuda a conferir depois.</span></label>`, {
-    rotulo: 'Confirmar',
+    rotulo: 'Confirmar', chave: `baixa:${p.id}`,
     onSubmit: async (d) => {
       const valor = parseDinheiro(d.valor);
       if (!valor) throw new Error('Valor inválido.');
@@ -236,6 +247,7 @@ export function formEditarParcela(p, aoSalvar) {
   modal('Editar parcela', `<div class="glass painel" style="padding:var(--s4)"><strong>${esc(p.nome)}</strong></div>
     <div class="linha2"><label class="f">Vencimento *<input class="campo" type="date" name="vencimento" value="${p.vencimento}" required></label>
     <label class="f">Valor (R$) *<input class="campo" name="valor" value="${dinheiroInput(p.valor_cents)}" inputmode="decimal" required></label></div>`, {
+    chave: `parcela:${p.id}`,
     onSubmit: async (d) => {
       const valor = parseDinheiro(d.valor);
       if (!valor) throw new Error('Valor inválido.');
@@ -270,7 +282,7 @@ export async function formTransferencia(aoSalvar) {
 export const CADASTROS = {
   contas: { titulo: 'Contas bancárias', singular: 'conta', campos: [['nome', 'Nome', 'text'], ['banco', 'Banco', 'text'], ['saldo_inicial_cents', 'Saldo inicial', 'money']],
     colunas: [['nome', 'Nome'], ['banco', 'Banco'], ['saldo_inicial_cents', 'Saldo inicial', 'money']] },
-  categorias: { titulo: 'Categorias', singular: 'categoria', campos: [['nome', 'Nome', 'text'], ['tipo', 'Tipo', 'select', { receita: 'Receita', despesa: 'Despesa' }],
+  categorias: { titulo: 'Categorias', singular: 'categoria', campos: [['nome', 'Nome', 'text'], ['pai_id', 'Subcategoria de', 'categoria_pai'], ['tipo', 'Tipo', 'select', { receita: 'Receita', despesa: 'Despesa' }],
     ['grupo_dre', 'Grupo da DRE', 'select', GRUPOS]], colunas: [['nome', 'Nome'], ['tipo', 'Tipo'], ['grupo_dre', 'Grupo da DRE', 'grupo']] },
   centros: { titulo: 'Centros de custo', singular: 'centro de custo', campos: [['nome', 'Nome', 'text']], colunas: [['nome', 'Nome']] },
   pessoas: { titulo: 'Clientes e fornecedores', singular: 'pessoa', campos: [['codigo', 'Código (automático se vazio)', 'text'], ['nome', 'Nome', 'text'],
@@ -295,17 +307,19 @@ export async function formCadastro(tipo, reg, aoSalvar) {
     let ctl;
     if (t === 'select') ctl = `<select class="campo" name="${k}">${Object.entries(ops).map(([val, r]) => `<option value="${val}"${v === val ? ' selected' : ''}>${esc(r)}</option>`).join('')}</select>`;
     else if (t === 'pessoa') ctl = `<select class="campo" name="${k}">${opcoes(c.pessoas.filter((p) => p.tipo !== 'fornecedor'), v, '—')}</select>`;
-    else if (t === 'categoria') ctl = `<select class="campo" name="${k}">${opcoes(c.categorias.filter((x) => x.tipo === 'receita'), v, '—')}</select>`;
+    else if (t === 'categoria') ctl = `<select class="campo" name="${k}">${opcoesCategorias(c.categorias.filter((x) => x.tipo === 'receita'), v, '—')}</select>`;
+    else if (t === 'categoria_pai') ctl = `<select class="campo" name="${k}"><option value="">Nenhuma (é uma categoria principal)</option>${c.categorias.filter((x) => !x.pai_id && x.id !== reg?.id && !c.categorias.some((f) => f.pai_id === reg?.id)).map((x) => `<option value="${x.id}"${String(v) === String(x.id) ? ' selected' : ''}>${esc(x.nome)} (${x.tipo})</option>`).join('')}</select>`;
     else if (t === 'textarea') ctl = `<textarea class="campo" name="${k}" rows="2">${esc(v)}</textarea>`;
     else if (t === 'money') ctl = `<input class="campo" name="${k}" inputmode="decimal" value="${v === '' ? '' : dinheiroInput(v)}" placeholder="0,00">`;
     else ctl = `<input class="campo" type="${t === 'date' ? 'date' : 'text'}" name="${k}" value="${esc(v)}"${obrig ? ' required' : ''} autocomplete="off">`;
     return `<label class="f">${esc(rot)}${obrig ? ' *' : ''}${ctl}</label>`;
   };
-  modal(`${reg ? 'Editar' : 'Novo(a)'} ${cfg.singular}`, cfg.campos.map(campo).join(''), {
+  const m = modal(`${reg ? 'Editar' : 'Novo(a)'} ${cfg.singular}`, cfg.campos.map(campo).join(''), {
+    chave: `${tipo}:${reg?.id ?? 'novo'}`,
     onSubmit: async (d) => {
       const body = {};
       for (const [k, , t] of cfg.campos) {
-        if (t === 'money') { const v = parseDinheiro(d[k]); body[k] = v ?? 0; } else if (t === 'pessoa' || t === 'categoria') body[k] = d[k] || null;
+        if (t === 'money') { const v = parseDinheiro(d[k]); body[k] = v ?? 0; } else if (t === 'pessoa' || t === 'categoria' || t === 'categoria_pai') body[k] = d[k] || null;
         else body[k] = d[k];
       }
       await api(`cadastros/${tipo}${reg ? '/' + reg.id : ''}`, { method: reg ? 'PUT' : 'POST', body });
@@ -314,4 +328,10 @@ export async function formCadastro(tipo, reg, aoSalvar) {
       aoSalvar?.();
     },
   });
+  if (tipo === 'categorias') {
+    // subcategoria herda o tipo e o grupo da DRE da categoria principal
+    const f = $('form', m.dlg);
+    const ajustar = () => { const sub = !!f.pai_id.value; ['tipo', 'grupo_dre'].forEach((k) => { f.elements[k].closest('label').hidden = sub; }); };
+    f.pai_id.addEventListener('change', ajustar); ajustar();
+  }
 }

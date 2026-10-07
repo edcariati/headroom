@@ -1,6 +1,6 @@
 // Leitura e gravação dos registros. Lê só o que mudou (compara o etag da listagem) e devolve cópias isoladas.
 import { criarDados } from './finance.js';
-import { MARCADOR, MARCADOR_SERVICOS, registrosDeServicos, registrosDoPlano } from './plano.js';
+import { MARCADOR, MARCADOR_PLANO2, MARCADOR_SERVICOS, registrosDeServicos, registrosDoPlano, registrosPlano2 } from './plano.js';
 
 const PREFIXO = 'dados/';
 const caches = new WeakMap(); // store -> Map(caminho -> { etag, obj })
@@ -28,6 +28,11 @@ async function semearPlano(store) {
   await store.gravar(MARCADOR, { criado_em: new Date().toISOString() });
 }
 
+async function semearPlano2(store) {
+  await Promise.all(registrosPlano2().map((c) => gravar(store, 'categorias', c)));
+  await store.gravar(MARCADOR_PLANO2, { criado_em: new Date().toISOString() });
+}
+
 async function semearServicos(store) {
   await Promise.all(registrosDeServicos().map((s) => gravar(store, 'servicos', s)));
   await store.gravar(MARCADOR_SERVICOS, { criado_em: new Date().toISOString() });
@@ -37,6 +42,7 @@ export async function carregarDados(store) {
   const cache = cacheDe(store);
   let lista = await store.listar(PREFIXO);
   if (!lista.some((x) => x.caminho === MARCADOR)) { await semearPlano(store); lista = await store.listar(PREFIXO); }
+  if (!lista.some((x) => x.caminho === MARCADOR_PLANO2)) { await semearPlano2(store); lista = await store.listar(PREFIXO); }
   if (!lista.some((x) => x.caminho === MARCADOR_SERVICOS)) { await semearServicos(store); lista = await store.listar(PREFIXO); }
   const vivos = new Set(lista.map((x) => x.caminho));
   for (const k of [...cache.keys()]) if (!vivos.has(k)) cache.delete(k);

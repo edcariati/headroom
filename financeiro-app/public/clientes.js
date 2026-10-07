@@ -1,7 +1,7 @@
 // Clientes: cadastro com código, serviços contratados e projeto, mais a tela de listagem.
 import { $, $$, api, brl, dataBR, dinheiroInput, esc, hojeISO, modal, opcoes, parseDinheiro, qs, toast } from './util.js';
 import { animarContadores, estadoVazio, gauge, icon, kpi, revelar, skeletonPagina } from './ui.js';
-import { cadastros, formCadastro, formLancamento, limparCache } from './forms.js';
+import { cadastros, formCadastro, formLancamento, limparCache, opcoesCategorias } from './forms.js';
 
 const pronto = (el) => { revelar(el); animarContadores(el); };
 const pct = (a, b) => (b > 0 ? (a / b) * 100 : 0);
@@ -10,27 +10,43 @@ const STATUS_PROJETO = { ativo: 'Ativo', concluido: 'Concluído', cancelado: 'Ca
 const soDigitos = (v) => String(v || '').replace(/\D/g, '');
 
 // ---------- editor de serviços contratados ----------
-// Lista de linhas (nome + valor) com um seletor que puxa do catálogo. Devolve leitura dos valores e do total.
+// Cada serviço tem nome, valor, número de parcelas e primeiro vencimento: é isso que alimenta o fluxo de recebimento e a cobrança.
+const addMes = (iso, n) => {
+  const [a, m, d] = iso.split('-').map(Number), t = a * 12 + (m - 1) + n, ano = Math.floor(t / 12), mes = (t % 12) + 1;
+  return `${ano}-${String(mes).padStart(2, '0')}-${String(Math.min(d, new Date(ano, mes, 0).getDate())).padStart(2, '0')}`;
+};
+const planoTxt = (l) => {
+  if (!l.valor_cents) return '';
+  const n = Math.max(1, Number(l.parcelas) || 1);
+  return `${n}x de ${brl(Math.floor(l.valor_cents / n))}${l.primeiro_vencimento ? ` · ${dataBR(l.primeiro_vencimento)}${n > 1 ? ` até ${dataBR(addMes(l.primeiro_vencimento, n - 1))}` : ''}` : ''}`;
+};
 function editorServicos(raiz, catalogo, iniciais, aoMudar) {
-  const linhas = iniciais.map((s) => ({ ...s }));
+  let linhas = iniciais.map((s) => ({ parcelas: 1, primeiro_vencimento: '', ...s }));
   const ativos = catalogo.filter((s) => s.ativo);
   const total = () => linhas.reduce((s, l) => s + (l.valor_cents || 0), 0);
-  const atualizarTotal = () => { $('[data-total]', raiz).textContent = brl(total()); aoMudar?.(); };
   const desenhar = () => {
-    raiz.innerHTML = `<div class="servicos-lista">${linhas.map((s, i) => `<div class="servico-linha" data-i="${i}">
+    raiz.innerHTML = `<div class="servicos-lista">${linhas.map((s, i) => { const gerado = !!s.lancamento_id; return `<div class="servico-linha" data-i="${i}">
         <input class="campo" data-nome value="${esc(s.nome)}" placeholder="Nome do serviço" aria-label="Serviço ${i + 1}" autocomplete="off">
-        <input class="campo" data-valor inputmode="decimal" value="${s.valor_cents ? dinheiroInput(s.valor_cents) : ''}" placeholder="0,00" aria-label="Valor do serviço ${i + 1} em reais" autocomplete="off">
-        <button type="button" class="icon-btn" data-rm aria-label="Remover serviço ${i + 1}">${icon('x')}</button></div>`).join('')}</div>
+        <input class="campo" data-valor inputmode="decimal" value="${s.valor_cents ? dinheiroInput(s.valor_cents) : ''}" placeholder="Valor 0,00" aria-label="Valor do serviço ${i + 1} em reais" autocomplete="off"${gerado ? ' disabled' : ''}>
+        <input class="campo" data-parc type="number" min="1" max="360" value="${s.parcelas || 1}" aria-label="Número de parcelas do serviço ${i + 1}" title="Parcelas"${gerado ? ' disabled' : ''}>
+        <input class="campo" data-venc type="date" value="${esc(s.primeiro_vencimento || '')}" aria-label="Primeiro vencimento do serviço ${i + 1}" title="Primeiro vencimento"${gerado ? ' disabled' : ''}>
+        <button type="button" class="icon-btn" data-rm aria-label="Remover serviço ${i + 1}">${icon('x')}</button>
+        <div class="servico-plano" data-plano>${gerado ? `<span class="chip s-pago">${icon('check')}Recebimentos já gerados</span> <span class="suave">${esc(planoTxt(s))}</span>` : `<span class="suave">${esc(planoTxt(s))}</span>`}</div></div>`; }).join('')}</div>
+      ${linhas.length ? '<p class="suave" style="font-size:.78rem;margin:0 0 var(--s2)">Em cada linha: serviço · valor · parcelas · primeiro vencimento. As parcelas vencem de mês em mês.</p>' : ''}
       <select class="campo" data-add aria-label="Adicionar serviço"><option value="">+ Adicionar serviço…</option>
         ${ativos.map((s) => `<option value="${s.id}">${esc(s.nome)}</option>`).join('')}<option value="__outro">Outro (digitar o nome)</option></select>
       <div class="servicos-total"><span class="suave">Total dos serviços</span><b class="num" data-total>${brl(total())}</b></div>`;
   };
   raiz.addEventListener('input', (e) => {
-    const l = linhas[Number(e.target.closest('.servico-linha')?.dataset.i)];
+    const linhaEl = e.target.closest('.servico-linha'), l = linhas[Number(linhaEl?.dataset.i)];
     if (!l) return;
     if (e.target.matches('[data-nome]')) l.nome = e.target.value;
     if (e.target.matches('[data-valor]')) l.valor_cents = parseDinheiro(e.target.value) || 0;
-    atualizarTotal();
+    if (e.target.matches('[data-parc]')) l.parcelas = Math.max(1, Math.min(360, Number(e.target.value) || 1));
+    if (e.target.matches('[data-venc]')) l.primeiro_vencimento = e.target.value;
+    $('[data-total]', raiz).textContent = brl(total());
+    if (!l.lancamento_id) $('[data-plano]', linhaEl).innerHTML = `<span class="suave">${esc(planoTxt(l))}</span>`;
+    aoMudar?.();
   });
   raiz.addEventListener('click', (e) => {
     const b = e.target.closest('[data-rm]');
@@ -41,19 +57,39 @@ function editorServicos(raiz, catalogo, iniciais, aoMudar) {
   raiz.addEventListener('change', (e) => {
     if (!e.target.matches('[data-add]') || !e.target.value) return;
     const s = ativos.find((x) => x.id === e.target.value);
-    linhas.push(s ? { servico_id: s.id, nome: s.nome, valor_cents: s.valor_padrao_cents || 0 } : { servico_id: null, nome: '', valor_cents: 0 });
+    linhas.push({ servico_id: s?.id ?? null, nome: s?.nome ?? '', valor_cents: s?.valor_padrao_cents || 0, parcelas: 1, primeiro_vencimento: hojeISO() });
     desenhar(); aoMudar?.();
     $$('[data-nome]', raiz).at(-1)?.focus();
   });
   desenhar();
+  const valida = () => linhas.filter((l) => l.nome.trim());
   return {
     total,
-    valores: () => linhas.filter((l) => l.nome.trim()).map((l) => ({ servico_id: l.servico_id || null, nome: l.nome.trim(), valor_cents: l.valor_cents || 0 })),
-    nomes: () => linhas.filter((l) => l.nome.trim()).map((l) => l.nome.trim()),
+    valores: () => valida().map((l) => ({ servico_id: l.servico_id || null, nome: l.nome.trim(), valor_cents: l.valor_cents || 0, parcelas: l.parcelas || 1,
+      primeiro_vencimento: l.primeiro_vencimento || null, ...(l.lancamento_id ? { lancamento_id: l.lancamento_id } : {}) })),
+    nomes: () => valida().map((l) => l.nome.trim()),
     primeiraCategoria: () => linhas.map((l) => catalogo.find((s) => s.id === l.servico_id)?.categoria_id).find(Boolean) || '',
+    // serviços com valor que ainda não geraram recebimentos
+    pendentes: () => linhas.map((l, i) => ({ i, l })).filter(({ l }) => l.nome.trim() && l.valor_cents > 0 && !l.lancamento_id),
+    marcarGerado(i, id) { linhas[i].lancamento_id = id; },
+    categoriaDe: (l) => catalogo.find((s) => s.id === l.servico_id)?.categoria_id || null,
+    estado: () => JSON.parse(JSON.stringify(linhas)),
+    definir(novas) { linhas = (novas || []).map((s) => ({ parcelas: 1, primeiro_vencimento: '', ...s })); desenhar(); aoMudar?.(); },
+    redesenhar: desenhar,
   };
 }
 
+// Cria uma receita parcelada para cada serviço que ainda não tem recebimentos. Devolve quantas criou.
+async function gerarRecebimentos(ed, { pessoaId, contratoId, projeto, competencia, contaId }) {
+  let n = 0;
+  for (const { i, l } of ed.pendentes()) {
+    const venc = l.primeiro_vencimento || hojeISO();
+    const r = await api('lancamentos', { method: 'POST', body: { tipo: 'receita', nome: `${l.nome.trim()} — ${projeto}`, valor_total_cents: l.valor_cents, primeiro_vencimento: venc,
+      competencia: competencia || venc, parcelas: l.parcelas || 1, pessoa_id: pessoaId || null, contrato_id: contratoId, categoria_id: ed.categoriaDe(l), conta_id: contaId || null } });
+    ed.marcarGerado(i, r.id); n++;
+  }
+  return n;
+}
 
 const ESTADOS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
 const CAMPOS_END = ['cep', 'endereco', 'numero', 'complemento', 'bairro', 'cidade', 'estado'];
@@ -154,7 +190,7 @@ export async function formPessoa({ reg = null, aoSalvar } = {}) {
   const m = modal(reg ? 'Editar cliente' : 'Novo cliente', `${blocoPessoa(reg || {}, sug)}
     <h3>Endereço do cliente</h3>${blocoEndereco('', reg || {})}
     <label class="f">Observações<textarea class="campo" name="observacoes" rows="3" placeholder="Observações">${esc(reg?.observacoes ?? '')}</textarea></label>`, {
-    rotulo: 'Confirmar', classe: 'folha-larga',
+    rotulo: 'Confirmar', classe: 'folha-larga', chave: `pessoa:${reg?.id ?? 'novo'}`,
     onSubmit: async (d) => {
       if (!validarPessoa(f)) throw new Error('Corrija os campos destacados.');
       await api(`cadastros/pessoas${reg ? '/' + reg.id : ''}`, { method: reg ? 'PUT' : 'POST', body: lerPessoa(d) });
@@ -187,37 +223,60 @@ export async function formContrato({ reg = null, pessoa_id = null, aoSalvar } = 
   const c = await cadastros();
   const sug = reg ? null : (await api('sugestoes-codigo')).projeto;
   const clientes = c.pessoas.filter((p) => p.tipo !== 'fornecedor');
+  let idContrato = reg?.id ?? null; // se algo falhar depois de salvar o projeto, repetir não duplica
   const m = modal(reg ? 'Editar projeto' : 'Novo projeto', `
     <label class="f">Cliente<select class="campo" name="pessoa_id">${opcoes(clientes, reg?.pessoa_id ?? pessoa_id, '—')}</select></label>
     ${camposProjeto(c, reg, sug)}
+    <div class="glass painel empilha" style="padding:var(--s4)" id="bloco-gerar">
+      <label class="switch"><input type="checkbox" name="gerar" checked><span class="trilho" aria-hidden="true"></span><span>Gerar os recebimentos (parcelas) dos serviços no fluxo de cobrança</span></label>
+      <label class="f" data-conta-gerar>Conta de recebimento<select class="campo" name="conta_id">${opcoes(c.contas, c.contas[0]?.id, '—')}</select></label>
+      <p class="suave" data-gerar-info></p>
+    </div>
     <div class="linha2">
       <label class="f" id="bloco-valor-manual">Valor do contrato (R$)<input class="campo" name="valor" inputmode="decimal" value="${reg?.valor_total_cents && !(reg.servicos || []).length ? dinheiroInput(reg.valor_total_cents) : ''}" placeholder="0,00"><span class="dica">Usado só quando não há serviços com valor.</span></label>
       <label class="f">Status<select class="campo" name="status">${Object.entries(STATUS_PROJETO).map(([k, r]) => `<option value="${k}"${(reg?.status || 'ativo') === k ? ' selected' : ''}>${r}</option>`).join('')}</select></label>
     </div>`, {
+    chave: `projeto:${reg?.id ?? 'novo'}`,
     onSubmit: async (d) => {
       if (!d.p_codigo.trim() || !d.p_nome.trim()) throw new Error('Informe o código e o nome do projeto.');
-      const servicos = ed.valores();
       const cli = c.pessoas.find((x) => x.id === d.pessoa_id);
-      const body = corpoProjeto(d, c, { pessoa_id: d.pessoa_id || null, status: d.status, servicos,
-        valor_total_cents: servicos.length ? ed.total() : (parseDinheiro(d.valor) ?? 0) }, cli ? Object.fromEntries(CAMPOS_END.map((k) => [k, cli[k] || null])) : null);
-      await api(`cadastros/contratos${reg ? '/' + reg.id : ''}`, { method: reg ? 'PUT' : 'POST', body });
-      limparCache();
+      const montar = () => {
+        const servicos = ed.valores();
+        return corpoProjeto(d, c, { pessoa_id: d.pessoa_id || null, status: d.status, servicos, valor_total_cents: servicos.length ? ed.total() : (parseDinheiro(d.valor) ?? 0) },
+          cli ? Object.fromEntries(CAMPOS_END.map((k) => [k, cli[k] || null])) : null);
+      };
+      const salvo = await api(`cadastros/contratos${idContrato ? '/' + idContrato : ''}`, { method: idContrato ? 'PUT' : 'POST', body: montar() });
+      idContrato = idContrato ?? salvo.id; limparCache();
+      if (d.gerar && ed.pendentes().length) {
+        const n = await gerarRecebimentos(ed, { pessoaId: d.pessoa_id, contratoId: idContrato, projeto: d.p_nome.trim(), competencia: d.p_competencia, contaId: d.conta_id });
+        if (n) { await api(`cadastros/contratos/${idContrato}`, { method: 'PUT', body: montar() }); limparCache(); toast(`${n} recebimento(s) gerado(s) no fluxo de cobrança.`); }
+      }
       toast('Projeto salvo.');
       aoSalvar?.();
     },
   });
-  ligarObra($('form', m.dlg)); ligarCep($('form', m.dlg));
-  const ed = editorServicos($('[data-servicos]', m.dlg), c.servicos, reg?.servicos || [], () => { $('#bloco-valor-manual', m.dlg).hidden = ed.valores().length > 0; });
-  $('#bloco-valor-manual', m.dlg).hidden = ed.valores().length > 0;
+  const f = $('form', m.dlg);
+  ligarObra(f); ligarCep(f);
+  const atualizar = () => {
+    $('#bloco-valor-manual', m.dlg).hidden = ed.valores().length > 0;
+    const pend = ed.pendentes().length;
+    $('#bloco-gerar', m.dlg).hidden = pend === 0;
+    $('[data-conta-gerar]', m.dlg).hidden = !f.gerar.checked;
+    $('[data-gerar-info]', m.dlg).textContent = pend ? `${pend} serviço(s) com valor ainda sem recebimentos. Eles entram em Receitas, A receber e no fluxo de caixa.` : '';
+    m.salvarRascunho();
+  };
+  const ed = editorServicos($('[data-servicos]', m.dlg), c.servicos, reg?.servicos || [], atualizar);
+  f.gerar.addEventListener('change', atualizar);
+  m.definirExtra({ ler: () => ed.estado(), aplicar: (x) => ed.definir(x) });
+  atualizar();
 }
 
-// ---------- novo cliente em 3 etapas: dados → projeto e serviços → cobrança ----------
+// ---------- novo cliente em 4 etapas: dados → endereço → projeto e serviços → cobrança ----------
 export async function formCliente(aoSalvar) {
   const c = await cadastros();
   const sug = await api('sugestoes-codigo');
-  const cats = c.categorias.filter((x) => x.tipo === 'receita');
   const NOMES = ['Dados do cliente', 'Endereço', 'Projeto e serviços', 'Cobrança'];
-  let pessoaId = null, contratoId = null, lancId = null; // permitem repetir o envio sem duplicar o que já foi criado
+  let pessoaId = null, contratoId = null; // permitem repetir o envio sem duplicar o que já foi criado
 
   const corpo = `
     <div class="passos" aria-hidden="true" style="padding:0">${NOMES.map((n, i) => `<div class="passo" data-ind="${i + 1}"><i></i>${i + 1}. ${n}</div>`).join('')}</div>
@@ -231,17 +290,8 @@ export async function formCliente(aoSalvar) {
     <section data-passo="4" class="empilha" aria-label="Etapa 4: Cobrança" hidden>
       <div id="sem-cobranca" class="suave"></div>
       <div id="bloco-cobranca" class="empilha">
-        <label class="switch"><input type="checkbox" name="gerar" checked><span class="trilho" aria-hidden="true"></span><span>Já gerar a receita (parcelas a receber) deste projeto</span></label>
-        <div id="campos-cobranca" class="empilha">
-          <div class="linha2">
-            <label class="f">Parcelas<input class="campo" type="number" name="parcelas" min="1" max="360" value="1" inputmode="numeric"></label>
-            <label class="f">Primeiro vencimento<input class="campo" type="date" name="primeiro_vencimento" value="${hojeISO()}"></label>
-          </div>
-          <div class="linha2">
-            <label class="f">Categoria<select class="campo" name="categoria_id">${opcoes(cats, '', 'Escolha…')}</select></label>
-            <label class="f">Conta de recebimento<select class="campo" name="conta_id">${opcoes(c.contas, c.contas[0]?.id, '—')}</select></label>
-          </div>
-        </div>
+        <label class="switch"><input type="checkbox" name="gerar" checked><span class="trilho" aria-hidden="true"></span><span>Gerar os recebimentos (parcelas) dos serviços no fluxo de cobrança</span></label>
+        <label class="f" id="campos-cobranca">Conta de recebimento<select class="campo" name="conta_id">${opcoes(c.contas, c.contas[0]?.id, '—')}</select></label>
       </div>
       <div class="glass painel" id="resumo-cli" style="padding:var(--s4)"></div>
     </section>`;
@@ -251,33 +301,29 @@ export async function formCliente(aoSalvar) {
 
   let ed;
   const m = modal('Novo cliente', corpo, {
-    rotulo: 'Cadastrar cliente', rodape, classe: 'folha-passos',
+    rotulo: 'Cadastrar cliente', rodape, classe: 'folha-passos', chave: 'cliente:novo',
     onSubmit: async (d) => {
       const temProjeto = !!(d.p_nome.trim() || ed.valores().length);
       if (!pessoaId) {
         const r = await api('cadastros/pessoas', { method: 'POST', body: lerPessoa(d) });
         pessoaId = r.id; limparCache();
       }
+      const montar = () => { const servicos = ed.valores(); return corpoProjeto(d, c, { pessoa_id: pessoaId, status: 'ativo', servicos, valor_total_cents: ed.total() }, lerEndereco(d, '')); };
       if (temProjeto && !contratoId) {
-        const servicos = ed.valores();
-        const r = await api('cadastros/contratos', { method: 'POST', body: corpoProjeto(d, c, { pessoa_id: pessoaId, status: 'ativo', servicos, valor_total_cents: ed.total() }, lerEndereco(d, '')) });
+        const r = await api('cadastros/contratos', { method: 'POST', body: montar() });
         contratoId = r.id; limparCache();
       }
-      const total = ed.total();
-      if (temProjeto && d.gerar && total > 0 && !lancId) {
-        const parcelas = Number(d.parcelas || 1);
-        const r = await api('lancamentos', { method: 'POST', body: { tipo: 'receita', nome: `${ed.nomes().join(' + ') || 'Projeto'} — ${d.p_nome.trim()}`, valor_total_cents: total,
-          primeiro_vencimento: d.primeiro_vencimento, competencia: d.p_competencia || d.primeiro_vencimento, parcelas, pessoa_id: pessoaId, contrato_id: contratoId,
-          categoria_id: d.categoria_id || null, conta_id: d.conta_id || null } });
-        lancId = r.id;
+      if (temProjeto && d.gerar && ed.pendentes().length) {
+        const n = await gerarRecebimentos(ed, { pessoaId, contratoId, projeto: d.p_nome.trim(), competencia: d.p_competencia, contaId: d.conta_id });
+        if (n) { await api(`cadastros/contratos/${contratoId}`, { method: 'PUT', body: montar() }); limparCache(); }
       }
       toast(`Cliente ${d.nome} cadastrado.`);
       aoSalvar?.();
     },
   });
   const f = $('form', m.dlg);
-  ed = editorServicos($('[data-servicos]', m.dlg), c.servicos, [], () => { if (passo === 4) atualizarResumo(); });
   let passo = 1;
+  ed = editorServicos($('[data-servicos]', m.dlg), c.servicos, [], () => { if (passo === 4) atualizarResumo(); m.salvarRascunho(); });
 
   function atualizarResumo() {
     const total = ed.total(), temProjeto = !!(f.p_nome.value.trim() || ed.valores().length);
@@ -285,12 +331,11 @@ export async function formCliente(aoSalvar) {
     $('#bloco-cobranca', f).hidden = !cobrar;
     $('#campos-cobranca', f).hidden = !cobrar || !f.gerar.checked;
     $('#sem-cobranca', f).textContent = cobrar ? '' : (temProjeto ? 'Nenhum serviço com valor: não há o que cobrar agora. Você poderá lançar a receita depois.' : 'Sem projeto neste cadastro: nada a cobrar agora.');
-    if (cobrar && !f.categoria_id.value) f.categoria_id.value = ed.primeiraCategoria();
+    const plano = ed.valores().filter((l) => l.valor_cents > 0);
     $('#resumo-cli', f).innerHTML = `<h3>Resumo</h3><ul class="lista">
       <li><span><b>${esc(f.codigo.value)}</b> · ${esc(f.nome.value || '—')}</span></li>
       ${temProjeto ? `<li><span>${esc(f.p_codigo.value)} · ${esc(f.p_nome.value || '—')}${f.p_area.value ? ` · ${esc(f.p_area.value)} m²` : ''}</span><b class="num">${brl(total)}</b></li>
-      <li><span class="suave">${esc(ed.nomes().join(', ') || 'Sem serviços informados')}</span></li>` : '<li><span class="suave">Somente o cadastro do cliente.</span></li>'}
-      ${cobrar && f.gerar.checked ? `<li><span class="suave">${f.parcelas.value || 1} parcela(s) a partir de ${dataBR(f.primeiro_vencimento.value)}</span></li>` : ''}</ul>`;
+      ${plano.map((l) => `<li><span>${esc(l.nome)}<small>${esc(planoTxt(l))}</small></span><b class="num">${brl(l.valor_cents)}</b></li>`).join('') || '<li><span class="suave">Sem serviços informados</span></li>'}` : '<li><span class="suave">Somente o cadastro do cliente.</span></li>'}</ul>`;
   }
   const validar = {
     1: () => validarPessoa(f),
@@ -316,14 +361,15 @@ export async function formCliente(aoSalvar) {
     if (n === 4) atualizarResumo();
     const primeiro = $(`[data-passo="${n}"] .campo`, f);
     if (primeiro) setTimeout(() => primeiro.focus({ preventScroll: true }), 30);
+    m.salvarRascunho();
   };
   $('#passo-seguir', f).onclick = () => { if (validar[passo]()) ir(passo + 1); };
   $('#passo-voltar', f).onclick = () => { if (passo > 1) ir(passo - 1); else m.fechar(); };
   f.addEventListener('submit', (e) => { if (passo < 4) { e.preventDefault(); e.stopImmediatePropagation(); if (validar[passo]()) ir(passo + 1); } }, true);
   ligarNatureza(f); ligarObra(f); ligarCep(f);
   f.gerar.onchange = atualizarResumo;
-  f.parcelas.oninput = f.primeiro_vencimento.onchange = atualizarResumo;
   ir(1);
+  m.definirExtra({ ler: () => ed.estado(), aplicar: (x) => ed.definir(x), passo: () => passo, irPasso: (n) => ir(Math.min(4, Math.max(1, n))) });
 }
 
 // ---------- ficha do cliente ----------

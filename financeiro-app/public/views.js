@@ -415,7 +415,7 @@ export async function cadastrosView(el, query = {}) {
     const rot = esc(cfg.colunas.find((c) => c[0] === k)[1]);
     if (t === 'grupo') return `<td data-label="${rot}">${esc(GRUPOS[v] || v)}</td>`;
     if (k === 'tipo' && aba === 'categorias') return `<td data-label="${rot}"><span class="chip tipo-${esc(v)}">${esc(v)}</span></td>`;
-    if (k === 'nome' || k === 'codigo') return `<td class="${k === 'nome' && aba !== 'contratos' ? 'nome' : ''}" data-label="${rot}"><strong>${esc(v ?? '')}</strong></td>`;
+    if (k === 'nome' || k === 'codigo') return `<td class="${k === 'nome' && aba !== 'contratos' ? 'nome' : ''}" data-label="${rot}"><strong>${aba === 'categorias' && r.pai_id ? '<span class="suave">└ </span>' : ''}${esc(v ?? '')}</strong></td>`;
     return `<td data-label="${rot}">${esc(v ?? '')}</td>`;
   };
   el.innerHTML = `${tabs(Object.entries(CADASTROS).map(([k, c]) => [k, c.titulo]), aba)}

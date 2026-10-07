@@ -91,7 +91,12 @@ export async function tratar(req, ctx) {
       if (metodo === 'GET' && !c) {
         const lista = [...d[b]];
         if (b === 'contratos') return ok(lista.sort((x, y) => y.codigo.localeCompare(x.codigo)).map((x) => ({ ...x, pessoa_nome: d.mapa.pessoas.get(x.pessoa_id)?.nome ?? null })));
-        if (b === 'categorias') return ok(lista.sort((x, y) => x.tipo.localeCompare(y.tipo) || x.nome.localeCompare(y.nome)));
+        if (b === 'categorias') {
+          // subcategorias logo abaixo da categoria principal
+          const comCaminho = lista.map((x) => ({ ...x, caminho: F.caminhoCategoria(d, x), nivel: x.pai_id ? 1 : 0 }));
+          const chave = (x) => (x.pai_id ? F.caminhoCategoria(d, d.mapa.categorias.get(x.pai_id)) : x.caminho);
+          return ok(comCaminho.sort((x, y) => x.tipo.localeCompare(y.tipo) || chave(x).localeCompare(chave(y)) || x.nivel - y.nivel || x.nome.localeCompare(y.nome)));
+        }
         return ok(lista.sort((x, y) => x.nome.localeCompare(y.nome)));
       }
       if (metodo === 'POST' && !c) {
@@ -108,6 +113,10 @@ export async function tratar(req, ctx) {
         if (!existente) throw new F.ErroValidacao('Registro não encontrado.', 404);
         const reg = { ...existente, ...F.validarCadastro(d, b, body, existente), id: c };
         await gravar(store, b, reg);
+        if (b === 'categorias' && !reg.pai_id) {
+          // tipo e grupo da DRE da categoria principal valem para as subcategorias
+          for (const f of d.categorias.filter((x) => x.pai_id === c && (x.tipo !== reg.tipo || x.grupo_dre !== reg.grupo_dre))) await gravar(store, 'categorias', { ...f, tipo: reg.tipo, grupo_dre: reg.grupo_dre });
+        }
         return ok(reg);
       }
       if (metodo === 'DELETE' && c) {

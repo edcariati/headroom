@@ -34,3 +34,11 @@ export function registrosDoPlano() {
     centros: CENTROS.map((nome, i) => ({ id: `cc${i + 1}`, nome })),
   };
 }
+
+// Segundo lote do plano: categoria com subcategorias (exemplo do escritório). Criado uma única vez, sem mexer no que já existe.
+export const MARCADOR_PLANO2 = 'dados/meta/plano2.json';
+export function registrosPlano2() {
+  const subs = ['Combustível', 'Estacionamento', 'Pedágios', 'Mecânico', 'Higienização'];
+  return [{ id: 'cat25', nome: 'Automóvel', tipo: 'despesa', grupo_dre: 'despesas_operacionais', pai_id: null },
+    ...subs.map((nome, i) => ({ id: `cat${26 + i}`, nome, tipo: 'despesa', grupo_dre: 'despesas_operacionais', pai_id: 'cat25' }))];
+}

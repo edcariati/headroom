@@ -16,6 +16,9 @@ test('primeiro acesso cria o plano de contas padrão uma única vez', async () =
   const cats = await j(store, 'GET', 'cadastros/categorias');
   assert.equal(cats.status, 200);
   assert.ok(cats.corpo.length >= 20 && cats.corpo.every((c) => c.grupo_dre));
+  const auto = cats.corpo.find((c) => c.nome === 'Automóvel');
+  assert.ok(auto && cats.corpo.filter((c) => c.pai_id === auto.id).map((c) => c.nome).sort().join() === 'Combustível,Estacionamento,Higienização,Mecânico,Pedágios');
+  assert.equal(cats.corpo.find((c) => c.nome === 'Combustível').caminho, 'Automóvel › Combustível');
   await j(store, 'GET', 'cadastros/categorias');
   assert.equal((await j(store, 'GET', 'cadastros/categorias')).corpo.length, cats.corpo.length);
 });

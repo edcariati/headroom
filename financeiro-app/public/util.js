@@ -103,8 +103,35 @@ export function ligarPeriodo(raiz, aoMudar) {
   };
 }
 
+// Rascunho dos formulários: o que foi digitado fica guardado no navegador até salvar ou descartar.
+const RASC_VALIDADE_MS = 7 * 24 * 3600 * 1000;
+const lerRasc = (k) => { try { const r = JSON.parse(localStorage.getItem(k)); return r && Date.now() - r.t < RASC_VALIDADE_MS ? r : null; } catch { return null; } };
+const gravarRasc = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* sem storage */ } };
+const apagarRasc = (k) => { try { localStorage.removeItem(k); } catch { /* sem storage */ } };
+function coletar(form) {
+  const v = {};
+  for (const el of form.elements) {
+    if (!el.name || el.type === 'password' || el.type === 'file' || el.type === 'submit' || el.type === 'button') continue;
+    if (el.type === 'radio') { if (el.checked) v[el.name] = el.value; } else if (el.type === 'checkbox') v[el.name] = el.checked; else v[el.name] = el.value;
+  }
+  return v;
+}
+function aplicar(form, v) {
+  for (const [nome, valor] of Object.entries(v)) {
+    const els = [...form.elements].filter((e) => e.name === nome);
+    for (const el of els) {
+      if (el.type === 'radio') el.checked = el.value === valor;
+      else if (el.type === 'checkbox') el.checked = !!valor;
+      else if (el.tagName === 'SELECT' && ![...el.options].some((o) => o.value === valor)) continue;
+      else el.value = valor;
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
+}
+
 // Modal (vira "bottom sheet" no celular). onSubmit(dados) pode lançar erro: a mensagem aparece no formulário.
-export function modal(titulo, corpo, { onSubmit, rotulo = 'Salvar', pequeno = false, rodape = null, classe = '', perigo = false } = {}) {
+// chave: identifica o rascunho (inclua o id ao editar um registro); chave: false desliga o rascunho.
+export function modal(titulo, corpo, { onSubmit, rotulo = 'Salvar', pequeno = false, rodape = null, classe = '', perigo = false, chave, proteger = false } = {}) {
   const dlg = document.createElement('dialog');
   dlg.innerHTML = `<form method="dialog" class="folha ${classe}" novalidate>
     <div class="folha-topo"><h2>${esc(titulo)}</h2><button type="button" class="icon-btn" data-fechar aria-label="Fechar">${icon('x')}</button></div>
@@ -112,11 +139,38 @@ export function modal(titulo, corpo, { onSubmit, rotulo = 'Salvar', pequeno = fa
     <div class="folha-rodape">${rodape ?? `<button type="button" class="btn btn-ghost" data-fechar>Cancelar</button>${onSubmit ? `<button class="btn ${perigo ? 'btn-danger' : 'btn-primary'}" type="submit">${esc(rotulo)}</button>` : ''}`}</div></form>`;
   if (pequeno) dlg.style.width = 'min(440px, calc(100vw - 24px))';
   document.body.append(dlg);
-  const fechar = () => { dlg.close(); dlg.remove(); };
-  $$('[data-fechar]', dlg).forEach((b) => { b.onclick = fechar; });
-  dlg.addEventListener('cancel', (e) => { e.preventDefault(); fechar(); });
-  dlg.addEventListener('click', (e) => { if (e.target === dlg) fechar(); });
   const form = $('form', dlg);
+  const rascunho = onSubmit && chave !== false && !(chave === undefined && /^Editar/.test(titulo)) ? `rasc:${chave ?? titulo}` : null;
+  let sujo = false, extra = null, tmr = null, fim = false;
+  const salvar = () => {
+    if (!rascunho || fim) return;
+    clearTimeout(tmr);
+    const v = coletar(form);
+    gravarRasc(rascunho, { t: Date.now(), v, x: extra?.ler?.() ?? null, passo: extra?.passo?.() ?? null });
+  };
+  const agendar = () => { sujo = true; clearTimeout(tmr); tmr = setTimeout(salvar, 350); };
+  let restaurado = rascunho ? lerRasc(rascunho) : null;
+  const aviso = () => {
+    const el = document.createElement('div');
+    el.className = 'aviso-rascunho';
+    el.innerHTML = `${icon('info')}<span style="flex:1">Rascunho recuperado: você pode continuar de onde parou.</span><button type="button" class="btn btn-ghost btn-sm" data-descartar>Descartar</button>`;
+    $('.folha-corpo', dlg).prepend(el);
+    $('[data-descartar]', el).onclick = () => { fim = true; apagarRasc(rascunho); sujo = false; clearTimeout(tmr); fechar(true); toast('Rascunho descartado.'); };
+  };
+  if (restaurado) { aplicar(form, restaurado.v); sujo = true; aviso(); }
+  form.addEventListener('input', agendar);
+  form.addEventListener('change', agendar);
+  const fechar = (sem = false) => {
+    if (!sem && sujo && rascunho) { salvar(); toast('Rascunho guardado. Abra de novo para continuar de onde parou.', { tipo: 'info' }); }
+    window.removeEventListener('pagehide', salvar);
+    dlg.close(); dlg.remove();
+  };
+  $$('[data-fechar]', dlg).forEach((b) => { b.onclick = () => fechar(); });
+  // clicar fora ou apertar Esc com algo digitado não fecha: evita perder o que está na tela
+  const protegido = () => { if (!sujo || !(rascunho || proteger)) return false; dlg.classList.remove('chacoalha'); void dlg.offsetWidth; dlg.classList.add('chacoalha'); return true; };
+  dlg.addEventListener('cancel', (e) => { e.preventDefault(); if (!protegido()) fechar(); });
+  dlg.addEventListener('click', (e) => { if (e.target === dlg && !protegido()) fechar(); });
+  window.addEventListener('pagehide', salvar);
   form.onsubmit = async (e) => {
     e.preventDefault();
     if (!onSubmit) return fechar();
@@ -134,20 +188,30 @@ export function modal(titulo, corpo, { onSubmit, rotulo = 'Salvar', pequeno = fa
       const dados = Object.fromEntries(new FormData(form));
       $$('input[type=checkbox]', form).forEach((c) => { dados[c.name] = c.checked; });
       await onSubmit(dados, form);
-      fechar();
+      fim = true; clearTimeout(tmr);
+      if (rascunho) apagarRasc(rascunho);
+      sujo = false;
+      fechar(true);
     } catch (err) {
       $('.erro', dlg).innerHTML = `${icon('alert')}<span>${esc(err.message)}</span>`;
       if (botao) botao.disabled = false;
     }
   };
   dlg.showModal();
-  return { fechar, dlg };
+  return {
+    fechar: () => fechar(true), dlg, salvarRascunho: agendar,
+    // editores próprios (lista de serviços, etapa atual...) entram no rascunho: { ler, aplicar, passo, irPasso }
+    definirExtra(obj) {
+      extra = obj;
+      if (restaurado) { if (restaurado.x != null) obj.aplicar?.(restaurado.x); if (restaurado.passo != null) obj.irPasso?.(restaurado.passo); restaurado = null; }
+    },
+  };
 }
 
 export function confirmar(msg, rotulo = 'Excluir') {
   return new Promise((resolve) => {
     let ok = false;
-    const m = modal('Confirmar ação', `<p>${esc(msg)}</p><p class="suave">Você poderá desfazer por alguns segundos.</p>`, { onSubmit: async () => { ok = true; }, rotulo, pequeno: true, perigo: true });
+    const m = modal('Confirmar ação', `<p>${esc(msg)}</p><p class="suave">Você poderá desfazer por alguns segundos.</p>`, { onSubmit: async () => { ok = true; }, rotulo, pequeno: true, perigo: true, chave: false });
     m.dlg.addEventListener('close', () => resolve(ok));
   });
 }

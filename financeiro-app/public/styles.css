@@ -618,11 +618,12 @@ body.gaveta-aberta .cta, body.gaveta-aberta .bottomnav { display: none !importan
 /* ---------- clientes: serviços contratados ---------- */
 textarea.campo { min-height: 72px; padding: var(--s3) var(--s4); resize: vertical; line-height: 1.45; }
 .servicos-lista { display: grid; gap: var(--s2); margin-bottom: var(--s2); }
-.servico-linha { display: grid; grid-template-columns: minmax(0, 1fr) 130px 44px; gap: var(--s2); align-items: center; }
+.servico-linha { display: grid; grid-template-columns: minmax(0, 1fr) 120px 76px 150px 44px; gap: var(--s2); align-items: center; }
+.servico-plano { grid-column: 1 / -1; font-size: .8rem; min-height: 1em; padding-left: 4px; }
 .servicos-total { display: flex; justify-content: space-between; align-items: center; padding: var(--s2) var(--s1); }
 .tbl tr.clicavel { cursor: pointer; }
 .tbl tr.clicavel:focus-visible { outline: 2px solid var(--amber); outline-offset: -2px; }
-@media (max-width: 520px) { .servico-linha { grid-template-columns: minmax(0, 1fr) 104px 44px; } }
+@media (max-width: 640px) { .servico-linha { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px; } .servico-linha [data-nome] { grid-column: 1 / -1; } .servico-linha [data-valor] { grid-column: 1 / 3; grid-row: 2; } .servico-linha [data-rm] { grid-column: 3; grid-row: 2; } .servico-linha [data-parc] { grid-column: 1; grid-row: 3; } .servico-linha [data-venc] { grid-column: 2 / 4; grid-row: 3; } .servico-linha .servico-plano { grid-row: 4; } }
 .tbl td[data-label="Código"] { white-space: nowrap; }
 .segmento { display: inline-flex; padding: 3px; border-radius: var(--r-md); background: var(--glass); border: 1px solid var(--linha); }
 .segmento label, .radios label { cursor: pointer; }
@@ -685,3 +686,7 @@ textarea.campo { min-height: 72px; padding: var(--s3) var(--s4); resize: vertica
 .parcelas-prog small { color: var(--text-2); }
 .tbl td small { display: block; color: var(--text-2); }
 .tbl-mes th, .tbl-mes td { padding: 9px var(--s3); }
+
+@keyframes chacoalha { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-6px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(4px); } }
+dialog.chacoalha { animation: chacoalha .35s ease; }
+@media (prefers-reduced-motion: reduce) { dialog.chacoalha { animation: none; } }

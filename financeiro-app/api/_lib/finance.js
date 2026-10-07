@@ -40,6 +40,8 @@ export function criarDados(colecoes = {}) {
   d.mapa = Object.fromEntries(COLECOES.map((c) => [c, new Map(d[c].map((x) => [x.id, x]))]));
   return d;
 }
+// Nome completo da categoria: "Automóvel › Combustível" para subcategorias.
+export const caminhoCategoria = (d, cat) => (!cat ? null : cat.pai_id && d.mapa.categorias.get(cat.pai_id) ? `${d.mapa.categorias.get(cat.pai_id).nome} › ${cat.nome}` : cat.nome);
 const achar = (d, colecao, id, msg) => {
   const x = d.mapa[colecao].get(id);
   exigir(x, msg, 404);
@@ -65,7 +67,7 @@ function expandir(d, hoje) {
         conta_id: ult?.conta_id ?? l.conta_id ?? null, tipo: l.tipo, lancamento_nome: l.nome, nota_fiscal: l.nota_fiscal,
         etiquetas: l.etiquetas, recorrente: !!l.recorrente, criado_em: l.criado_em || '',
         pessoa_id: l.pessoa_id, categoria_id: l.categoria_id, centro_custo_id: l.centro_custo_id, contrato_id: l.contrato_id,
-        pessoa_nome: pe?.nome ?? null, categoria_nome: cat?.nome ?? null, grupo_dre: cat?.grupo_dre ?? null,
+        pessoa_nome: pe?.nome ?? null, categoria_nome: caminhoCategoria(d, cat), grupo_dre: cat?.grupo_dre ?? null,
         centro_custo_nome: cc?.nome ?? null, contrato_codigo: ct?.codigo ?? null, contrato_nome: ct?.nome ?? null,
         conta_nome: d.mapa.contas.get(ult?.conta_id ?? l.conta_id)?.nome ?? null,
       };
@@ -490,7 +492,7 @@ export function outrosRelatorios(d, f = {}, hoje = hojeISO()) {
 
 const ENUMS = { tipo_pessoa: ['cliente', 'fornecedor', 'ambos'], status_contrato: ['ativo', 'concluido', 'cancelado'] };
 const CAMPOS = {
-  contas: ['nome', 'banco', 'saldo_inicial_cents', 'ativa'], categorias: ['nome', 'tipo', 'grupo_dre'], centros: ['nome'],
+  contas: ['nome', 'banco', 'saldo_inicial_cents', 'ativa'], categorias: ['nome', 'tipo', 'grupo_dre', 'pai_id'], centros: ['nome'],
   pessoas: ['codigo', 'nome', 'tipo', 'natureza', 'data_nascimento', 'documento', 'rg', 'email', 'telefone', 'consumidor_final_nfse',
     'cep', 'endereco', 'numero', 'complemento', 'bairro', 'cidade', 'estado', 'observacoes'],
   servicos: ['nome', 'descricao', 'valor_padrao_cents', 'categoria_id', 'ativo'],
@@ -507,6 +509,16 @@ export function validarCadastro(d, tipo, b, existente = null) {
   exigir(texto(r.nome), 'Informe o nome.');
   r.nome = texto(r.nome);
   if (tipo === 'categorias') {
+    // Subcategoria: herda tipo e grupo da DRE da categoria principal (só há um nível).
+    r.pai_id = r.pai_id || null;
+    if (r.pai_id) {
+      const pai = achar(d, 'categorias', r.pai_id, 'Categoria principal não encontrada.');
+      exigir(!pai.pai_id, 'Só existe um nível de subcategoria.');
+      exigir(pai.id !== existente?.id, 'Uma categoria não pode ser subcategoria de si mesma.');
+      exigir(!existente || !d.categorias.some((c) => c.pai_id === existente.id), 'Esta categoria tem subcategorias e não pode virar subcategoria.');
+      r.tipo = pai.tipo; r.grupo_dre = pai.grupo_dre;
+    }
+    exigir(!d.categorias.some((c) => c.id !== existente?.id && (c.pai_id || null) === r.pai_id && String(c.nome).toLowerCase() === r.nome.toLowerCase()), 'Já existe uma categoria com este nome aqui.', 409);
     exigir(['receita', 'despesa'].includes(r.tipo), 'Tipo deve ser receita ou despesa.');
     exigir(GRUPOS.includes(r.grupo_dre), 'Grupo da DRE inválido.');
     exigir(!(r.tipo === 'despesa' && GRUPOS_SO_RECEITA.includes(r.grupo_dre)), 'Despesa não pode ficar em receita bruta.');
@@ -562,7 +574,12 @@ export function validarCadastro(d, tipo, b, existente = null) {
       exigir(texto(s?.nome), 'Informe o nome do serviço.');
       exigir(Number.isInteger(s.valor_cents) && s.valor_cents >= 0, 'Valor do serviço inválido.');
       if (s.servico_id) achar(d, 'servicos', s.servico_id, 'Serviço não encontrado.');
-      return { servico_id: s.servico_id || null, nome: texto(s.nome), valor_cents: s.valor_cents };
+      const item = { servico_id: s.servico_id || null, nome: texto(s.nome), valor_cents: s.valor_cents };
+      // plano de recebimento do serviço: parcelas, primeiro vencimento e a receita gerada a partir dele
+      if (s.parcelas !== undefined && s.parcelas !== null) { exigir(Number.isInteger(s.parcelas) && s.parcelas >= 1 && s.parcelas <= 360, 'Parcelas do serviço devem ficar entre 1 e 360.'); item.parcelas = s.parcelas; }
+      if (s.primeiro_vencimento) { exigir(ehISO(s.primeiro_vencimento), 'Primeiro vencimento do serviço inválido.'); item.primeiro_vencimento = s.primeiro_vencimento; }
+      if (s.lancamento_id) item.lancamento_id = String(s.lancamento_id);
+      return item;
     });
     if (r.servicos.length) r.valor_total_cents = soma(r.servicos, (s) => s.valor_cents);
   }
@@ -571,7 +588,7 @@ export function validarCadastro(d, tipo, b, existente = null) {
 
 export function emUso(d, tipo, id) {
   const usa = (campo) => d.lancamentos.some((l) => l[campo] === id);
-  if (tipo === 'categorias') return usa('categoria_id') || d.servicos.some((s) => s.categoria_id === id);
+  if (tipo === 'categorias') return usa('categoria_id') || d.servicos.some((s) => s.categoria_id === id) || d.categorias.some((c) => c.pai_id === id);
   if (tipo === 'centros') return usa('centro_custo_id');
   if (tipo === 'pessoas') return usa('pessoa_id') || d.contratos.some((c) => c.pessoa_id === id);
   if (tipo === 'contratos') return usa('contrato_id');
