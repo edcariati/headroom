@@ -34,7 +34,7 @@ export function statusParcela(p, hoje) {
 
 // ---------- dados em memória ----------
 
-const COLECOES = ['contas', 'categorias', 'centros', 'pessoas', 'servicos', 'contratos', 'lancamentos', 'transferencias', 'contatos', 'conferencias', 'entregas'];
+const COLECOES = ['contas', 'categorias', 'centros', 'pessoas', 'servicos', 'contratos', 'lancamentos', 'transferencias', 'contatos', 'conferencias', 'entregas', 'anexos', 'recibos', 'notas'];
 export function criarDados(colecoes = {}) {
   const d = Object.fromEntries(COLECOES.map((c) => [c, colecoes[c] ? [...colecoes[c]] : []]));
   d.mapa = Object.fromEntries(COLECOES.map((c) => [c, new Map(d[c].map((x) => [x.id, x]))]));
@@ -117,7 +117,7 @@ export function criarLancamento(d, i, agora = new Date().toISOString()) {
     id: novoId(), tipo: i.tipo, nome: texto(i.nome), pessoa_id: i.pessoa_id || null, categoria_id: i.categoria_id || null,
     centro_custo_id: i.centro_custo_id || null, contrato_id: i.contrato_id || null, conta_id: i.conta_id || null,
     competencia, nota_fiscal: texto(i.nota_fiscal) || null, etiquetas: texto(i.etiquetas) || null, observacao: texto(i.observacao) || null,
-    recorrente, criado_em: agora,
+    recorrente, nf_solicitada: !!i.nf_solicitada, criado_em: agora,
     parcelas: valores.map((v, k) => {
       const venc = addMeses(i.primeiro_vencimento, k);
       // Recorrente: a competência acompanha cada mês. Parcelado: toda a venda fica na competência informada.
@@ -747,7 +747,8 @@ export function fluxos(d, hoje = hojeISO()) {
     passo(3, 'receita', 'Receita e parcelas', 'Receita ligada ao cliente e ao projeto, com parcelas, categoria e conta de recebimento.', { rota: 'receitas', rotulo: 'Receitas' }, 'Junto com o contrato assinado',
       ativos.filter((c) => c.valor_total_cents > 0 && !comLanc.has(c.id)).map((c) => `${c.codigo} ${c.nome}: sem receita lançada`)),
     passo(4, 'cobranca', 'Cobrança', 'Boleto ou Pix emitido no banco e enviado ao cliente; nota fiscal anotada no lançamento.', { rota: 'receitas', rotulo: 'Receitas' }, 'Antes do vencimento',
-      rec.filter((p) => p.aberto_cents > 0 && p.vencimento >= hoje && p.vencimento <= em7 && !p.nota_fiscal).map((p) => `${p.nome}: vence ${p.vencimento.split('-').reverse().join('/')} sem nota fiscal`)),
+      [...rec.filter((p) => p.aberto_cents > 0 && p.vencimento >= hoje && p.vencimento <= em7 && !p.nota_fiscal && !d.notas.some((n) => n.lancamento_id === p.lancamento_id)).map((p) => `${p.nome}: vence ${p.vencimento.split('-').reverse().join('/')} sem nota fiscal`),
+        ...d.notas.filter((n) => n.status === 'a_emitir').map((n) => `${n.descricao_servico}: nota fiscal pedida pelo cliente e ainda não emitida`)]),
     passo(5, 'acompanhamento', 'Acompanhamento diário', 'Vencidos e vencimentos da semana conferidos; contato com cada cliente em atraso registrado.', { rota: 'areceber', rotulo: 'A receber' }, 'Todo dia útil',
       semContato.map((pid) => `${nomeCli(pid)}: em atraso sem contato registrado nos últimos 7 dias`),
       { ultimo: ultimo(d.contatos)?.data ?? null, ultimo_rotulo: 'Último contato registrado' }),
@@ -855,3 +856,137 @@ export function painel(d, hoje = hojeISO()) {
     parcelados: parcelados.slice(0, 12), parcelados_total: parcelados.length, cobrar, carteira,
   };
 }
+
+// ---------- anexos (comprovantes e notas fiscais), recibos, notas fiscais e busca ----------
+
+export const TIPOS_ANEXO = { 'application/pdf': 'pdf', 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'text/xml': 'xml', 'application/xml': 'xml' };
+export const LIMITE_ANEXO_BYTES = 3 * 1024 * 1024;
+export const CATEGORIAS_ANEXO = ['comprovante', 'nota_fiscal', 'recibo', 'contrato', 'outro'];
+const VINCULOS = { parcela: null, lancamento: 'lancamentos', pessoa: 'pessoas', contrato: 'contratos', nota: 'notas' };
+
+// Lê número, valor, data e partes de uma NF-e ou NFS-e em XML. Devolve só o que encontrar.
+export function extrairNotaXml(xml) {
+  const texto1 = (...tags) => { for (const t of tags) { const m = new RegExp(`<(?:\\w+:)?${t}[^>]*>([^<]{1,200})</(?:\\w+:)?${t}>`, 'i').exec(xml); if (m) return m[1].trim(); } return null; };
+  const dentro = (pai, ...tags) => { const m = new RegExp(`<(?:\\w+:)?${pai}[^>]*>([\\s\\S]{0,2000}?)</(?:\\w+:)?${pai}>`, 'i').exec(xml); if (!m) return null; const sub = m[1]; for (const t of tags) { const r = new RegExp(`<(?:\\w+:)?${t}[^>]*>([^<]{1,200})</(?:\\w+:)?${t}>`, 'i').exec(sub); if (r) return r[1].trim(); } return null; };
+  const valor = texto1('vNF', 'ValorLiquidoNfse', 'ValorServicos', 'vServ', 'vLiq');
+  const cents = valor && /^\d+(\.\d{1,2})?$/.test(valor) ? Math.round(Number(valor) * 100) : null;
+  const dataBruta = texto1('dhEmi', 'DataEmissao', 'dEmi', 'dhProc');
+  const chave = texto1('chNFe') || (/Id="NFe(\d{44})"/.exec(xml) || [])[1] || null;
+  const out = {
+    numero: texto1('nNF', 'NumeroNfse', 'Numero', 'nNFSe'), valor_cents: cents, data_emissao: dataBruta && /^\d{4}-\d{2}-\d{2}/.test(dataBruta) ? dataBruta.slice(0, 10) : null,
+    emitente: dentro('emit', 'xNome') || dentro('PrestadorServico', 'RazaoSocial') || dentro('prest', 'xNome'),
+    tomador: dentro('dest', 'xNome') || dentro('TomadorServico', 'RazaoSocial') || dentro('toma', 'xNome'), chave,
+  };
+  return Object.fromEntries(Object.entries(out).filter(([, v]) => v !== null && v !== ''));
+}
+
+// Valida o anexo e devolve { meta, bytes }. Os bytes ficam fora da lista de registros (arquivos/<id>).
+export function prepararAnexo(d, i, agora = new Date().toISOString()) {
+  const nome = texto(i.nome).replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').slice(0, 120);
+  exigir(nome, 'Informe o nome do arquivo.');
+  const mime = String(i.tipo || '').toLowerCase();
+  exigir(TIPOS_ANEXO[mime], 'Tipo de arquivo não aceito. Use PDF, imagem (PNG, JPG, WEBP) ou XML.');
+  exigir(typeof i.dados === 'string' && /^[A-Za-z0-9+/=\s]+$/.test(i.dados), 'Arquivo inválido.');
+  const bytes = Buffer.from(i.dados, 'base64');
+  exigir(bytes.length > 0, 'O arquivo está vazio.');
+  exigir(bytes.length <= LIMITE_ANEXO_BYTES, 'O arquivo passa de 3 MB. Reduza o tamanho e tente de novo.', 413);
+  const categoria = i.categoria || 'outro';
+  exigir(CATEGORIAS_ANEXO.includes(categoria), 'Categoria do anexo inválida.');
+  const v = i.vinculo || {};
+  exigir(Object.hasOwn(VINCULOS, v.tipo), 'Informe a que o anexo pertence.');
+  let lancamento_id = null;
+  if (v.tipo === 'parcela') { const [lid] = String(v.id).split(':'); achar(d, 'lancamentos', lid, 'Lançamento não encontrado.'); lancamento_id = lid; } else achar(d, VINCULOS[v.tipo], v.id, 'Registro do anexo não encontrado.');
+  if (v.tipo === 'lancamento') lancamento_id = v.id;
+  const meta = { id: novoId(), nome, mime, tamanho: bytes.length, categoria, descricao: texto(i.descricao).slice(0, 300) || null, vinculo: { tipo: v.tipo, id: String(v.id) }, lancamento_id, criado_em: agora };
+  if (TIPOS_ANEXO[mime] === 'xml') { const x = extrairNotaXml(bytes.toString('utf8')); if (Object.keys(x).length) meta.extraido = x; }
+  return { meta, bytes };
+}
+
+// ----- recibos -----
+export function criarRecibo(d, i, agora = new Date().toISOString(), hoje = hojeISO()) {
+  const p = expandir(d, hoje).find((x) => x.id === i.parcela_id);
+  exigir(p, 'Parcela não encontrada.', 404);
+  exigir(p.tipo === 'receita', 'Recibo só pode ser emitido para receitas.');
+  exigir(p.pagamentos.length > 0, 'Registre o recebimento antes de emitir o recibo.');
+  const idx = i.indice_pagamento === undefined || i.indice_pagamento === null ? p.pagamentos.length - 1 : Number(i.indice_pagamento);
+  const pg = p.pagamentos[idx];
+  exigir(pg, 'Recebimento não encontrado.', 404);
+  const existente = d.recibos.find((r) => r.parcela_id === p.id && r.indice_pagamento === idx);
+  if (existente) return { recibo: existente, novo: false };
+  const pe = d.mapa.pessoas.get(p.pessoa_id);
+  const n = d.recibos.reduce((m, r) => Math.max(m, Number(String(r.numero).replace(/\D/g, '')) || 0), 0) + 1;
+  const recibo = { id: novoId(), numero: `REC-${String(n).padStart(4, '0')}`, parcela_id: p.id, indice_pagamento: idx, pessoa_id: p.pessoa_id || null,
+    pessoa_nome: pe?.nome ?? null, pessoa_documento: pe?.documento ?? null, valor_cents: pg.valor_cents, data: pg.data, descricao: p.nome,
+    conta_nome: d.mapa.contas.get(pg.conta_id)?.nome ?? null, forma: texto(i.forma).slice(0, 40) || null, observacao: texto(i.observacao).slice(0, 300) || null, criado_em: agora };
+  return { recibo, novo: true };
+}
+
+// ----- notas fiscais (preparação da emissão e registro da nota emitida) -----
+export function criarNota(d, i, agora = new Date().toISOString(), hoje = hojeISO()) {
+  const l = achar(d, 'lancamentos', i.lancamento_id, 'Lançamento não encontrado.');
+  exigir(l.tipo === 'receita', 'Nota fiscal de serviço só se aplica a receitas.');
+  const valor = i.valor_cents ?? soma(l.parcelas, (p) => p.valor_cents);
+  exigir(inteiroPos(valor), 'Informe o valor da nota.');
+  const comp = i.competencia || l.competencia || hoje;
+  exigir(ehISO(comp), 'Competência inválida.');
+  return { id: novoId(), tipo: 'nfse', status: 'a_emitir', lancamento_id: l.id, parcela_id: i.parcela_id || null, pessoa_id: l.pessoa_id || null, valor_cents: valor,
+    competencia: comp, descricao_servico: texto(i.descricao_servico) || l.nome, numero: null, data_emissao: null, anexo_id: null, observacao: texto(i.observacao).slice(0, 300) || null, criado_em: agora };
+}
+export function atualizarNota(d, existente, i) {
+  const n = { ...existente };
+  for (const k of ['descricao_servico', 'observacao']) if (i[k] !== undefined) n[k] = texto(i[k]) || (k === 'descricao_servico' ? n[k] : null);
+  if (i.valor_cents !== undefined) { exigir(inteiroPos(i.valor_cents), 'Valor inválido.'); n.valor_cents = i.valor_cents; }
+  if (i.status !== undefined) { exigir(['a_emitir', 'emitida'].includes(i.status), 'Situação inválida.'); n.status = i.status; }
+  if (i.numero !== undefined) n.numero = texto(i.numero) || null;
+  if (i.data_emissao !== undefined) { exigir(!i.data_emissao || ehISO(i.data_emissao), 'Data de emissão inválida.'); n.data_emissao = i.data_emissao || null; }
+  if (i.anexo_id !== undefined) { if (i.anexo_id) achar(d, 'anexos', i.anexo_id, 'Anexo não encontrado.'); n.anexo_id = i.anexo_id || null; }
+  if (n.status === 'emitida') { exigir(n.numero, 'Informe o número da nota emitida.'); n.data_emissao = n.data_emissao || hojeISO(); } else { n.numero = n.numero ?? null; }
+  return n;
+}
+
+// ----- editar o lançamento inteiro -----
+export function editarLancamento(d, id, i) {
+  const original = achar(d, 'lancamentos', id, 'Lançamento não encontrado.');
+  const l = structuredClone(original);
+  if (i.nome !== undefined) { exigir(texto(i.nome), 'Informe o nome do lançamento.'); l.nome = texto(i.nome); }
+  if (i.categoria_id !== undefined) {
+    if (i.categoria_id) { const cat = achar(d, 'categorias', i.categoria_id, 'Categoria não encontrada.'); exigir(cat.tipo === l.tipo, `Esta categoria é de ${cat.tipo}, não de ${l.tipo}.`); }
+    l.categoria_id = i.categoria_id || null;
+  }
+  for (const [campo, colecao, msg] of [['pessoa_id', 'pessoas', 'Cliente/fornecedor não encontrado.'], ['centro_custo_id', 'centros', 'Centro de custo não encontrado.'], ['contrato_id', 'contratos', 'Projeto não encontrado.'], ['conta_id', 'contas', 'Conta não encontrada.']]) {
+    if (i[campo] !== undefined) { if (i[campo]) achar(d, colecao, i[campo], msg); l[campo] = i[campo] || null; }
+  }
+  for (const k of ['nota_fiscal', 'etiquetas', 'observacao']) if (i[k] !== undefined) l[k] = texto(i[k]) || null;
+  if (i.nf_solicitada !== undefined) l.nf_solicitada = !!i.nf_solicitada;
+  if (i.competencia) {
+    exigir(ehISO(i.competencia), 'Competência inválida.');
+    l.competencia = i.competencia;
+    if (!l.recorrente) for (const p of l.parcelas) p.competencia = i.competencia;
+  }
+  return l;
+}
+
+// ----- busca em tudo -----
+export function buscar(d, q, hoje = hojeISO()) {
+  const termo = String(q || '').trim().toLowerCase();
+  exigir(termo.length >= 2, 'Digite pelo menos 2 letras para buscar.');
+  const tem = (...partes) => partes.filter(Boolean).join(' ').toLowerCase().includes(termo);
+  const limite = (l) => l.slice(0, 8);
+  const clientesAch = d.pessoas.filter((p) => tem(p.codigo, p.nome, p.documento, p.email, p.telefone, p.cidade, p.endereco, p.bairro, p.rg));
+  const projetos = d.contratos.filter((c) => tem(c.codigo, c.nome, (c.servicos || []).map((s) => s.nome).join(' '), c.obra?.endereco, c.obra?.cidade));
+  const lanc = d.lancamentos.filter((l) => tem(l.nome, l.nota_fiscal, l.etiquetas, l.observacao, d.mapa.pessoas.get(l.pessoa_id)?.nome, d.mapa.contratos.get(l.contrato_id)?.codigo, caminhoCategoria(d, d.mapa.categorias.get(l.categoria_id))));
+  const anexos = d.anexos.filter((a) => tem(a.nome, a.descricao, a.categoria, a.extraido?.numero, a.extraido?.emitente, a.extraido?.tomador, a.extraido?.chave));
+  const recibos = d.recibos.filter((r) => tem(r.numero, r.pessoa_nome, r.descricao, r.observacao));
+  const notas = d.notas.filter((n) => tem(n.numero, n.descricao_servico, d.mapa.pessoas.get(n.pessoa_id)?.nome, n.observacao));
+  const rotuloLanc = (l) => `${d.mapa.pessoas.get(l.pessoa_id)?.nome ?? 'Sem pessoa'} · ${l.tipo === 'receita' ? 'Receita' : 'Despesa'} · ${brlTxt(soma(l.parcelas, (p) => p.valor_cents))}`;
+  return {
+    termo,
+    clientes: limite(clientesAch).map((p) => ({ id: p.id, titulo: p.nome, sub: [p.codigo, p.documento, p.telefone].filter(Boolean).join(' · '), rota: 'clientes', busca: p.nome })),
+    projetos: limite(projetos).map((c) => ({ id: c.id, titulo: `${c.codigo} · ${c.nome}`, sub: d.mapa.pessoas.get(c.pessoa_id)?.nome ?? '', rota: 'clientes', busca: c.codigo })),
+    lancamentos: limite(lanc).map((l) => ({ id: l.id, titulo: l.nome, sub: rotuloLanc(l), rota: l.tipo === 'receita' ? 'receitas' : 'despesas', busca: l.nome })),
+    anexos: limite(anexos).map((a) => ({ id: a.id, titulo: a.nome, sub: [a.categoria.replace('_', ' '), a.extraido?.numero && `nota ${a.extraido.numero}`, a.descricao].filter(Boolean).join(' · '), rota: 'documentos', busca: a.nome, arquivo: true })),
+    recibos: limite(recibos).map((r) => ({ id: r.id, titulo: `${r.numero} · ${r.pessoa_nome ?? 'Cliente'}`, sub: `${r.descricao} · ${brlTxt(r.valor_cents)}`, rota: 'documentos', busca: r.numero, recibo: true })),
+    notas: limite(notas).map((n) => ({ id: n.id, titulo: n.numero ? `NFS-e ${n.numero}` : 'NFS-e a emitir', sub: `${n.descricao_servico} · ${brlTxt(n.valor_cents)}`, rota: 'notas', busca: n.numero || n.descricao_servico })),
+  };
+}
+const brlTxt = (c) => `R$ ${(c / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
