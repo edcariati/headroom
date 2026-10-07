@@ -18,6 +18,15 @@ const CATEGORIAS = [
 const CENTROS = ['Administrativo', 'Comercial e marketing', 'Projetos', 'Obras'];
 
 export const MARCADOR = 'dados/meta/plano.json';
+export const MARCADOR_SERVICOS = 'dados/meta/servicos.json';
+
+// Catálogo inicial de serviços (cada um aponta para a categoria de receita correspondente).
+const SERVICOS = [
+  ['Projeto arquitetônico', 'cat01'], ['Projeto de interiores', 'cat02'], ['Gestão de obras', 'cat03'],
+  ['Regularização e documentação', 'cat04'], ['Visita técnica e consultoria', 'cat05'], ['Compatibilização de projetos', 'cat06'],
+];
+export const registrosDeServicos = () => SERVICOS.map(([nome, categoria_id], i) => ({
+  id: `srv${String(i + 1).padStart(2, '0')}`, nome, descricao: null, valor_padrao_cents: 0, categoria_id, ativo: 1 }));
 
 export function registrosDoPlano() {
   return {

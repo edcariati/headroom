@@ -1,7 +1,8 @@
 // Todas as rotas da API. Usado pela função da Vercel e pelo servidor local.
 import * as F from './finance.js';
 import { carregarDados, excluir, gravar } from './dados.js';
-import { cookieLimpo, cookieSessao, criarSessao, lerCookie, senhaConfere, sessaoValida } from './auth.js';
+import { cookieLimpo, cookieSessao, criarSessao, hashConfere, lerCookie, lerSessao, senhaConfere } from './auth.js';
+import * as U from './usuarios.js';
 import { hojeISO } from './dates.js';
 
 const ok = (corpo, status = 200) => ({ status, corpo });
@@ -26,7 +27,7 @@ function filtrosParcela(q) {
 const ano = (q) => Number(q.ano) || new Date().getFullYear();
 
 export async function tratar(req, ctx) {
-  const { store, senha, producao = false, hoje = hojeISO, agora = () => new Date().toISOString() } = ctx;
+  const { store, senha, semente = '', producao = false, hoje = hojeISO, agora = () => new Date().toISOString() } = ctx;
   const { metodo, query = {}, corpo = {}, cookie, ip = '' } = req;
   const seguro = req.https || producao;
   const partes = String(req.rota || '').split('/').filter(Boolean);
@@ -37,24 +38,51 @@ export async function tratar(req, ctx) {
   try {
     if (producao && !senha) return ok({ erro: 'Sistema sem senha configurada (ADMIN_SENHA). Acesso bloqueado.' }, 503);
     const exigeSenha = !!senha;
-    const autenticado = !exigeSenha || sessaoValida(lerCookie(cookie, 'sessao'), senha);
+    const sessao = lerSessao(lerCookie(cookie, 'sessao'), senha);
+    // Sessão de usuário só vale enquanto o usuário existir e estiver ativo.
+    const usuario = sessao?.usuario ? await U.acharPorEmail(store, sessao.usuario) : null;
+    const autenticado = !exigeSenha || (!!sessao && (!sessao.usuario || !!usuario?.ativo));
 
-    if (a === 'sessao' && metodo === 'GET') return ok({ autenticado, exige_senha: exigeSenha });
+    if (a === 'sessao' && metodo === 'GET') return ok({ autenticado, exige_senha: exigeSenha, usuario: autenticado && usuario ? U.publico(usuario) : null });
     if (a === 'login' && metodo === 'POST') {
       if (!exigeSenha) return ok({ ok: true });
       const f = falhas.get(ip);
       if (f && f.n >= 8 && Date.now() - f.desde < JANELA_MS) return ok({ erro: 'Muitas tentativas. Aguarde alguns minutos.' }, 429);
-      if (!senhaConfere(body.senha, senha)) {
+      let entrou = null; // '' = administrador; senão o e-mail do usuário
+      if (body.email && String(body.email).trim()) {
+        if (semente) await U.semear(store, semente);
+        const u = await U.entrar(store, body.email, body.senha);
+        if (u) entrou = u.email;
+      } else if (senhaConfere(body.senha, senha)) entrou = '';
+      if (entrou === null) {
         const atual = f && Date.now() - f.desde < JANELA_MS ? f : { n: 0, desde: Date.now() };
         falhas.set(ip, { n: atual.n + 1, desde: atual.desde });
         await dormir(800);
-        return ok({ erro: 'Senha incorreta.' }, 401);
+        return ok({ erro: body.email ? 'E-mail ou senha incorretos.' : 'Senha incorreta.' }, 401);
       }
       falhas.delete(ip);
-      return { ...ok({ ok: true }), cabecalhos: { 'Set-Cookie': cookieSessao(criarSessao(senha), seguro) } };
+      return { ...ok({ ok: true }), cabecalhos: { 'Set-Cookie': cookieSessao(criarSessao(senha, Date.now(), entrou), seguro) } };
     }
     if (a === 'logout' && metodo === 'POST') return { ...ok({ ok: true }), cabecalhos: { 'Set-Cookie': cookieLimpo(seguro) } };
     if (!autenticado) return ok({ erro: 'Sessão expirada. Entre novamente.' }, 401);
+
+    // ----- usuários (todos têm o mesmo acesso do administrador) -----
+    if (a === 'usuarios') {
+      if (metodo === 'GET' && !b) return ok((await U.listarUsuarios(store)).map(U.publico));
+      if (metodo === 'POST' && !b) return ok(await U.criarUsuario(store, body, agora()), 201);
+      if (metodo === 'POST' && b && c === 'senha') return ok({ senha_provisoria: await U.definirSenha(store, b, null) });
+      if (metodo === 'DELETE' && b) {
+        if (usuario?.id === b) throw new F.ErroValidacao('Você não pode excluir o próprio usuário.', 409);
+        await U.excluirUsuario(store, b);
+        return ok({ ok: true });
+      }
+    }
+    if (a === 'minha-senha' && metodo === 'POST') {
+      if (!usuario) throw new F.ErroValidacao('Só usuários com e-mail podem trocar a senha por aqui. A senha de administrador é trocada na Vercel.', 400);
+      if (!hashConfere(body.atual, usuario.senha_hash)) throw new F.ErroValidacao('A senha atual está incorreta.', 400);
+      await U.definirSenha(store, usuario.id, String(body.nova || ''));
+      return ok({ ok: true });
+    }
 
     const d = await carregarDados(store);
 
@@ -68,6 +96,10 @@ export async function tratar(req, ctx) {
       }
       if (metodo === 'POST' && !c) {
         const reg = { ...F.validarCadastro(d, b, body), id: F.novoId() };
+        if (b === 'pessoas') {
+          reg.criado_em = agora();
+          if (!reg.codigo && reg.tipo !== 'fornecedor') reg.codigo = F.sugestoesCodigo(d, H).cliente;
+        }
         await gravar(store, b, reg);
         return ok(reg, 201);
       }
@@ -131,6 +163,9 @@ export async function tratar(req, ctx) {
 
     // ----- dashboard e relatórios -----
     if (metodo === 'GET') {
+      if (a === 'a-receber') return ok(F.aReceber(d, query, H));
+      if (a === 'clientes') return ok(F.clientes(d, query, H));
+      if (a === 'sugestoes-codigo') return ok(F.sugestoesCodigo(d, H));
       if (a === 'resumo') return ok(F.resumo(d, query, H));
       if (a === 'pagamentos-cliente') return ok(F.pagamentosCliente(d, query, H));
       if (a === 'relatorios' && b === 'fluxo-caixa') return ok(F.fluxoCaixa(d, ano(query), H));

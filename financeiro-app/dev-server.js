@@ -12,7 +12,7 @@ import { semearDemo } from './dev/demo.js';
 const raiz = path.dirname(fileURLToPath(import.meta.url));
 const pasta = process.env.DATA_DIR || path.join(raiz, process.env.DEMO ? '.dados-demo' : '.dados-dev');
 const store = new StoreArquivo(pasta);
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml' };
+const MIME = { '.webmanifest': 'application/manifest+json', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml' };
 
 if (process.env.DEMO) {
   const d = await carregarDados(store);
@@ -29,7 +29,7 @@ export const servidor = http.createServer(async (req, res) => {
     const query = Object.fromEntries(url.searchParams);
     const rota = query.rota || '';
     delete query.rota;
-    const r = await tratar({ metodo: req.method, rota, query, corpo, cookie: req.headers.cookie, ip: req.socket.remoteAddress }, { store, senha: process.env.ADMIN_SENHA });
+    const r = await tratar({ metodo: req.method, rota, query, corpo, cookie: req.headers.cookie, ip: req.socket.remoteAddress }, { store, senha: process.env.ADMIN_SENHA, semente: process.env.USUARIOS_SEMENTE });
     for (const [k, v] of Object.entries(r.cabecalhos || {})) res.setHeader(k, v);
     res.writeHead(r.status, { 'Content-Type': r.tipo || 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     return res.end(r.tipo ? r.corpo : JSON.stringify(r.corpo));

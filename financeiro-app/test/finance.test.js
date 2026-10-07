@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   criarDados, criarLancamento, baixarParcela, estornarParcela, editarParcela, dividirCentavos, resumo, fluxoCaixa, dre, listarParcelas,
   criarTransferencia, saldoContas, extratoConta, ErroValidacao, resultadosGerais, resultadosPorProjeto, outrosRelatorios,
-  validarCadastro, emUso, pagamentosCliente,
+  validarCadastro, emUso, pagamentosCliente, clientes, sugestoesCodigo, aReceber,
 } from '../api/_lib/finance.js';
 
 const HOJE = '2026-06-15';
@@ -192,4 +192,77 @@ test('cadastros: categoria com grupo incoerente é recusada; item em uso não po
   rec(d, { valor_total_cents: 100, primeiro_vencimento: '2026-01-01', pessoa_id: 'p1', contrato_id: 't1' });
   assert.ok(emUso(d, 'categorias', 'k1') && emUso(d, 'pessoas', 'p1') && emUso(d, 'contas', 'c1') && emUso(d, 'contratos', 't1'));
   assert.ok(!emUso(d, 'categorias', 'k5'));
+});
+
+test('cliente: código único, documento válido, serviços somam o valor do projeto', () => {
+  const d = base();
+  d.pessoas[0].codigo = 'CLI-0001';
+  assert.throws(() => validarCadastro(d, 'pessoas', { nome: 'X', codigo: 'cli-0001' }), /código/);
+  assert.throws(() => validarCadastro(d, 'pessoas', { nome: 'X', documento: '123' }), /CPF/);
+  assert.equal(validarCadastro(d, 'pessoas', { nome: 'X', documento: '123.456.789-09', codigo: 'cli-0002' }).codigo, 'CLI-0002');
+  assert.throws(() => validarCadastro(d, 'contratos', { codigo: 'ca260101', nome: 'Dup' }), /código/);
+  d.servicos.push({ id: 's1', nome: 'Projeto arquitetônico', categoria_id: 'k1' }); d.mapa.servicos.set('s1', d.servicos[0]);
+  const c = validarCadastro(d, 'contratos', { codigo: 'CA260102', nome: 'Casa B', pessoa_id: 'p1', area_m2: '120.5', valor_total_cents: 1,
+    servicos: [{ servico_id: 's1', nome: 'Projeto arquitetônico', valor_cents: 800000 }, { nome: 'Consultoria', valor_cents: 200000 }] });
+  assert.equal(c.valor_total_cents, 1000000);
+  assert.equal(c.area_m2, 120.5);
+  assert.throws(() => validarCadastro(d, 'contratos', { codigo: 'CA260103', nome: 'x', servicos: [{ servico_id: 'nao', nome: 'y', valor_cents: 1 }] }), /Serviço não encontrado/);
+  d.contratos.push({ ...c, id: 't2' }); d.mapa.contratos.set('t2', d.contratos.at(-1));
+  assert.ok(emUso(d, 'servicos', 's1'));
+});
+
+test('clientes: serviços contratados, situação financeira e códigos sugeridos', () => {
+  const d = base();
+  d.pessoas[0].codigo = 'CLI-0007';
+  Object.assign(d.contratos[0], { valor_total_cents: 150000, servicos: [{ nome: 'Projeto arquitetônico', valor_cents: 150000 }], area_m2: 90 });
+  rec(d, { nome: 'P1', contrato_id: 't1', pessoa_id: 'p1', valor_total_cents: 100000, primeiro_vencimento: '2026-05-01', primeira_paga: true });
+  rec(d, { nome: 'P2', contrato_id: 't1', pessoa_id: 'p1', valor_total_cents: 50000, parcelas: 1, primeiro_vencimento: '2026-05-10' });
+  const r = clientes(d, {}, HOJE);
+  assert.equal(r.itens.length, 1); // fornecedor fica de fora
+  const c = r.itens[0];
+  assert.deepEqual([c.contratado_cents, c.pago_cents, c.vencido_cents, c.aberto_cents], [150000, 100000, 50000, 0]);
+  assert.deepEqual(c.servicos, ['Projeto arquitetônico']);
+  assert.equal(c.projetos[0].area_m2, 90);
+  assert.equal(clientes(d, { busca: 'arquitet' }, HOJE).itens.length, 1);
+  assert.equal(clientes(d, { busca: 'zzz' }, HOJE).itens.length, 0);
+  assert.deepEqual(sugestoesCodigo(d, HOJE), { cliente: 'CLI-0008', projeto: 'CA260601' });
+  d.contratos[0].codigo = 'CA260601';
+  assert.equal(sugestoesCodigo(d, HOJE).projeto, 'CA260602');
+});
+
+test('cliente: pessoa física/jurídica, documento por natureza, endereço do cliente e da obra', () => {
+  const d = base();
+  assert.throws(() => validarCadastro(d, 'pessoas', { nome: 'X', natureza: 'fisica', documento: '12345678000199' }), /CPF/);
+  assert.throws(() => validarCadastro(d, 'pessoas', { nome: 'X', natureza: 'juridica', documento: '12345678909' }), /CNPJ/);
+  assert.throws(() => validarCadastro(d, 'pessoas', { nome: 'X', estado: 'São Paulo' }), /Estado/);
+  assert.throws(() => validarCadastro(d, 'pessoas', { nome: 'X', data_nascimento: '31/02/2000' }), /nascimento/);
+  const p = validarCadastro(d, 'pessoas', { nome: 'Djair', natureza: 'fisica', documento: '894.409.608-25', rg: '8375443 SSP/SP', cep: '18270-000',
+    endereco: 'Estrada Municipal', numero: '22', bairro: 'Congonhal', cidade: 'Tatuí', estado: 'sp', consumidor_final_nfse: 'nao', data_nascimento: '1980-05-10' });
+  assert.equal(p.estado, 'SP'); assert.equal(p.consumidor_final_nfse, false);
+  assert.equal(validarCadastro(d, 'pessoas', { nome: 'Empresa', documento: '12.345.678/0001-99' }).natureza, 'juridica');
+  const c = validarCadastro(d, 'contratos', { codigo: 'CA260109', nome: 'Obra', obra: { endereco: ' Rua A ', cidade: 'Tatuí', estado: 'sp', numero: '' } });
+  assert.deepEqual([c.obra.endereco, c.obra.estado, c.obra.numero], ['Rua A', 'SP', null]);
+  assert.equal(validarCadastro(d, 'contratos', { codigo: 'CA260110', nome: 'Sem obra', obra: { endereco: '' } }).obra, null);
+});
+
+test('a receber: atrasos por cliente, faixas de atraso, agenda e projeção de caixa', () => {
+  const d = base(); // hoje = 2026-06-15; Inter começa com 1.000,00
+  rec(d, { nome: 'Atrasada', pessoa_id: 'p1', contrato_id: 't1', valor_total_cents: 30000, primeiro_vencimento: '2026-05-16' }); // 30 dias
+  rec(d, { nome: 'Muito atrasada', pessoa_id: 'p1', valor_total_cents: 20000, primeiro_vencimento: '2026-02-01' }); // 134 dias
+  rec(d, { nome: 'Semana que vem', pessoa_id: 'p1', valor_total_cents: 10000, primeiro_vencimento: '2026-06-20' });
+  rec(d, { nome: 'Paga', pessoa_id: 'p1', valor_total_cents: 99900, primeiro_vencimento: '2026-06-01', primeira_paga: true });
+  rec(d, { nome: 'Sem cliente', valor_total_cents: 5000, primeiro_vencimento: '2026-06-15' });
+  desp(d, { nome: 'Aluguel', valor_total_cents: 40000, primeiro_vencimento: '2026-06-25' });
+  const r = aReceber(d, {}, HOJE);
+  assert.deepEqual([r.totais.vencido.qtd, r.totais.vencido.valor_cents], [2, 50000]);
+  assert.deepEqual([r.totais.vence_hoje.qtd, r.totais.proximos_7.valor_cents, r.totais.clientes_em_atraso], [1, 15000, 1]);
+  assert.equal(r.aging[0].valor_cents, 30000); assert.equal(r.aging[3].valor_cents, 20000);
+  assert.equal(r.clientes[0].nome, 'Cliente A'); assert.equal(r.clientes[0].max_atraso_dias, 134);
+  assert.equal(r.clientes[0].parcelas.length, 3); assert.equal(r.clientes[1].nome, 'Sem cliente informado');
+  assert.equal(r.agenda[0].nome, 'Sem cliente');
+  const caixa = 100000 + 99900; // saldo inicial + recebido
+  assert.equal(r.caixa.saldo_cents, caixa);
+  assert.equal(r.caixa.projecao[0].saldo_projetado_cents, caixa + 15000); // 7 dias: entra 150,00
+  assert.equal(r.caixa.projecao[2].saldo_projetado_cents, caixa + 15000 - 40000);
+  assert.equal(aReceber(d, { busca: 'zzz' }, HOJE).clientes.length, 0);
 });
