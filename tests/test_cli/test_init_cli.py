@@ -6,6 +6,7 @@ import os
 import sys
 import types
 from contextlib import contextmanager
+from hashlib import sha1
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -17,6 +18,8 @@ except ModuleNotFoundError:  # Python < 3.11
 import click
 import pytest
 from click.testing import CliRunner
+
+from headroom.install.paths import _PROFILE_RE as PROFILE_RE
 
 
 def _load_init_module(monkeypatch):
@@ -228,6 +231,7 @@ def test_init_codex_creates_hooks_feature_flag_on_first_init(
     parsed = tomllib.loads(content)
     assert parsed["model_provider"] == "headroom"
     assert parsed["features"]["hooks"] is True
+    assert parsed["model_providers"]["headroom"]["name"] == "OpenAI"
     assert "codex_hooks" not in content
 
 
@@ -389,6 +393,22 @@ def test_json_file_handles_missing_empty_and_non_mapping(monkeypatch, tmp_path: 
     assert init_cli._json_file(array_payload) == {}
 
 
+def test_json_file_rejects_malformed_json(monkeypatch, tmp_path: Path) -> None:
+    # A user-owned settings file with a hand-edit typo (trailing comma) must
+    # fail with an actionable error rather than crashing init with a raw
+    # JSONDecodeError or silently overwriting the file (which the caller's
+    # subsequent _write_json would do if this returned {}).
+    init_cli, _ = _load_init_module(monkeypatch)
+    malformed = tmp_path / "settings.json"
+    malformed.write_text('{"env": {"A": "B",}}\n', encoding="utf-8")
+
+    with pytest.raises(click.ClickException, match="invalid JSON"):
+        init_cli._json_file(malformed)
+
+    # The file is left untouched (not overwritten).
+    assert malformed.read_text(encoding="utf-8") == '{"env": {"A": "B",}}\n'
+
+
 def test_ensure_claude_hooks_rewrites_existing_entries(monkeypatch, tmp_path: Path) -> None:
     init_cli, _ = _load_init_module(monkeypatch)
     settings_path = tmp_path / "settings.json"
@@ -436,6 +456,46 @@ def test_ensure_claude_hooks_rewrites_existing_entries(monkeypatch, tmp_path: Pa
     assert session_entries[-1]["hooks"][0]["command"].endswith("--marker headroom-init-claude")
 
 
+def test_ensure_claude_hooks_timeout_exceeds_cold_start_wait(monkeypatch, tmp_path: Path) -> None:
+    """The external hook timeout must stay above the internal wait_ready(45s)
+    call _ensure_profile_running makes after a cold start (#3417), or the host
+    kills the hook before a first-ever proxy start can ever report ready."""
+    init_cli, _ = _load_init_module(monkeypatch)
+    settings_path = tmp_path / "settings.json"
+    monkeypatch.setattr(init_cli, "_hook_command", lambda *parts: "headroom init hook ensure")
+
+    init_cli._ensure_claude_hooks(settings_path, "init-local-demo", 9001)
+
+    payload = json.loads(settings_path.read_text(encoding="utf-8"))
+    for event in ("SessionStart", "PreToolUse"):
+        timeout = payload["hooks"][event][-1]["hooks"][0]["timeout"]
+        assert timeout > 45
+
+
+def test_ensure_copilot_hooks_timeout_exceeds_cold_start_wait(monkeypatch, tmp_path: Path) -> None:
+    init_cli, _ = _load_init_module(monkeypatch)
+    config_path = tmp_path / "copilot.json"
+    monkeypatch.setattr(init_cli, "_hook_command", lambda *parts: "headroom init hook ensure")
+
+    init_cli._ensure_copilot_hooks(config_path, "init-user")
+
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    for event in ("SessionStart", "PreToolUse"):
+        assert payload["hooks"][event][-1]["timeout"] > 45
+
+
+def test_ensure_codex_hooks_timeout_exceeds_cold_start_wait(monkeypatch, tmp_path: Path) -> None:
+    init_cli, _ = _load_init_module(monkeypatch)
+    path = tmp_path / "hooks.json"
+    monkeypatch.setattr(init_cli, "_hook_command", lambda *parts: "headroom init hook ensure")
+
+    init_cli._ensure_codex_hooks(path, "init-user")
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    for event in ("SessionStart", "PreToolUse"):
+        assert payload["hooks"][event][-1]["hooks"][0]["timeout"] > 45
+
+
 def test_ensure_copilot_hooks_replaces_existing_marker(monkeypatch, tmp_path: Path) -> None:
     init_cli, _ = _load_init_module(monkeypatch)
     config_path = tmp_path / "copilot.json"
@@ -462,6 +522,42 @@ def test_ensure_copilot_hooks_replaces_existing_marker(monkeypatch, tmp_path: Pa
     payload = json.loads(config_path.read_text(encoding="utf-8"))
     commands = [entry["command"] for entry in payload["hooks"]["SessionStart"]]
     assert commands == ["echo keep", "headroom init hook ensure --marker headroom-init-copilot"]
+
+
+def test_ensure_codex_hooks_preserves_user_hooks(monkeypatch, tmp_path: Path) -> None:
+    """init codex must merge into hooks.json, not overwrite it — a user's own
+    hooks (and unrelated top-level keys) must survive."""
+    init_cli, _ = _load_init_module(monkeypatch)
+    path = tmp_path / "hooks.json"
+    path.write_text(
+        json.dumps(
+            {
+                "notify": True,  # unrelated top-level key
+                "hooks": {
+                    "SessionStart": [
+                        {
+                            "matcher": "startup",
+                            "hooks": [{"type": "command", "command": "echo keep"}],
+                        }
+                    ]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(init_cli, "_hook_command", lambda *parts: "headroom init hook ensure")
+
+    init_cli._ensure_codex_hooks(path, "init-user")
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    # The unrelated top-level key survives.
+    assert payload["notify"] is True
+    # The user's own hook is retained and Headroom's is appended exactly once.
+    ss_commands = [
+        item["command"] for entry in payload["hooks"]["SessionStart"] for item in entry["hooks"]
+    ]
+    assert "echo keep" in ss_commands
+    assert sum(1 for c in ss_commands if "headroom-init-codex" in c) == 1
 
 
 def test_replace_marker_block_replaces_existing_block(monkeypatch) -> None:
@@ -531,6 +627,33 @@ def test_ensure_codex_provider_replaces_existing_model_provider(
     parsed = tomllib.loads(path.read_text(encoding="utf-8"))  # raises on a duplicate key
     assert parsed["model_provider"] == "headroom"
     assert parsed["features"]["hooks"] is True
+
+
+def test_ensure_codex_provider_preserves_profile_overrides(monkeypatch, tmp_path: Path) -> None:
+    """Per-profile model_provider/openai_base_url overrides must survive init.
+
+    init owns the ROOT-level keys, but the same keys inside [profiles.*] are the
+    user's per-profile routing; a broad strip silently reroutes those profiles
+    to the injected "headroom" default (config corruption).
+    """
+    init_cli, _ = _load_init_module(monkeypatch)
+    path = tmp_path / "config.toml"
+    path.write_text(
+        'model_provider = "openai"\n\n'
+        "[profiles.work]\n"
+        'model_provider = "azure"\n'
+        'openai_base_url = "https://azure.example/v1"\n',
+        encoding="utf-8",
+    )
+
+    init_cli._ensure_codex_provider(path, 8787)
+
+    parsed = tomllib.loads(path.read_text(encoding="utf-8"))
+    # Root is replaced by headroom (no duplicate top-level key).
+    assert parsed["model_provider"] == "headroom"
+    # The user's per-profile overrides are untouched.
+    assert parsed["profiles"]["work"]["model_provider"] == "azure"
+    assert parsed["profiles"]["work"]["openai_base_url"] == "https://azure.example/v1"
 
 
 def test_ensure_codex_provider_emits_requires_openai_auth_for_chatgpt(
@@ -1404,6 +1527,48 @@ def test_init_codex_writes_openai_base_url(monkeypatch, tmp_path: Path) -> None:
     )
 
 
+def test_init_codex_provider_retags_existing_threads(monkeypatch, tmp_path: Path) -> None:
+    """`headroom init` injects `model_provider = "headroom"` for Codex, which
+    Codex Desktop filters its history menu by. Without retagging, existing native
+    `openai` threads vanish from the sidebar/search (#961). `_ensure_codex_provider`
+    must retag existing threads openai->headroom so the history stays visible —
+    the same reconciliation the install and wrap paths already perform."""
+    import sqlite3
+
+    init_cli, _ = _load_init_module(monkeypatch)
+
+    codex_home = tmp_path / ".codex"
+    config_path = codex_home / "config.toml"
+    # Codex Desktop reads <codex_home>/sqlite/state_5.sqlite.
+    db = codex_home / "sqlite" / "state_5.sqlite"
+    db.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(db))
+    try:
+        conn.execute("CREATE TABLE threads (id TEXT PRIMARY KEY, model_provider TEXT NOT NULL)")
+        conn.executemany(
+            "INSERT INTO threads (id, model_provider) VALUES (?, ?)",
+            [("t1", "openai"), ("t2", "openai"), ("t3", "anthropic")],
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    init_cli._ensure_codex_provider(config_path, 8787)
+
+    conn = sqlite3.connect(str(db))
+    try:
+        counts = dict(
+            conn.execute("SELECT model_provider, COUNT(*) FROM threads GROUP BY model_provider")
+        )
+    finally:
+        conn.close()
+    # Native threads now live under the active headroom provider (stay visible);
+    # third-party providers are left untouched.
+    assert counts.get("headroom") == 2, f"existing openai threads not retagged: {counts}"
+    assert counts.get("openai", 0) == 0, f"openai threads still hidden: {counts}"
+    assert counts.get("anthropic") == 1, f"third-party provider must be left alone: {counts}"
+
+
 def test_init_codex_strip_removes_openai_base_url(monkeypatch, tmp_path: Path) -> None:
     """_strip_codex_init_block must remove both the managed block and any orphaned
     openai_base_url lines left by a crashed or partial init."""
@@ -1433,3 +1598,50 @@ def test_init_codex_strip_removes_openai_base_url(monkeypatch, tmp_path: Path) -
         f"_strip_codex_init_block must remove orphaned openai_base_url:\n{orphan_stripped}"
     )
     assert 'model = "gpt-4o"' in orphan_stripped
+
+
+@pytest.mark.parametrize(
+    "dir_name",
+    [
+        "Мастеринг в HW",
+        "项目",
+        "café-app",
+        "Ünicode Projekt",
+    ],
+)
+def test_local_profile_accepts_non_ascii_directory_names(monkeypatch, tmp_path, dir_name) -> None:
+    """A non-ASCII working directory must still yield a valid profile name.
+
+    ``str.isalnum`` is Unicode-aware, so Cyrillic/CJK/accented letters survived
+    into the slug and ``validate_profile_name`` then rejected it, making
+    ``headroom init`` unusable from such a directory.
+    """
+    init_cli, _ = _load_init_module(monkeypatch)
+    root = tmp_path / dir_name
+    root.mkdir()
+
+    profile = init_cli._local_profile(root)
+
+    assert PROFILE_RE.fullmatch(profile), profile
+    assert profile.startswith("init-")
+
+
+def test_local_profile_is_unchanged_for_ascii_directory_names(monkeypatch, tmp_path) -> None:
+    """The ASCII slug path keeps its existing output."""
+    init_cli, _ = _load_init_module(monkeypatch)
+    root = tmp_path / "my-repo"
+    root.mkdir()
+
+    digest = sha1(str(root.resolve()).encode("utf-8")).hexdigest()[:8]
+    assert init_cli._local_profile(root) == f"init-my-repo-{digest}"
+
+
+def test_local_profile_distinguishes_identical_non_ascii_names(monkeypatch, tmp_path) -> None:
+    """Two folders sharing a fully non-ASCII name must not collide."""
+    init_cli, _ = _load_init_module(monkeypatch)
+    first = tmp_path / "a" / "项目"
+    second = tmp_path / "b" / "项目"
+    first.mkdir(parents=True)
+    second.mkdir(parents=True)
+
+    assert init_cli._local_profile(first) != init_cli._local_profile(second)

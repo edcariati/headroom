@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -37,6 +38,13 @@ def manifest_path(profile: str) -> Path:
     """Return the manifest path for a named profile."""
 
     return profile_root(profile) / "manifest.json"
+
+
+def recovery_manifest_path(profile: str) -> Path:
+    """Return the inactive recovery snapshot path for a named profile."""
+
+    validated = validate_profile_name(profile)
+    return deploy_root() / f"{validated}.recovery.json"
 
 
 def log_path(profile: str) -> Path:
@@ -108,13 +116,72 @@ def claude_settings_path() -> Path:
     return Path.home() / ".claude" / "settings.json"
 
 
-def codex_config_path() -> Path:
-    """Return the Codex config path."""
+def codex_home_dir() -> Path:
+    """Return Codex's user config directory, honoring ``CODEX_HOME``.
 
-    return Path.home() / ".codex" / "config.toml"
+    Codex itself resolves its home from ``CODEX_HOME`` (falling back to
+    ``~/.codex``); every Headroom reader and writer of Codex state must agree
+    with it, or ``doctor`` inspects one file while ``wrap``/``init`` write
+    another.
+    """
+
+    configured = os.environ.get("CODEX_HOME", "").strip()
+    if configured:
+        return Path(configured).expanduser()
+    return Path.home() / ".codex"
+
+
+def codex_config_path() -> Path:
+    """Return the user-level Codex config path (``$CODEX_HOME/config.toml``)."""
+
+    return codex_home_dir() / "config.toml"
+
+
+def codex_hooks_path() -> Path:
+    """Return the user-level Codex hooks file (``$CODEX_HOME/hooks.json``)."""
+
+    return codex_home_dir() / "hooks.json"
+
+
+def codex_project_config_path(cwd: Path | None = None) -> Path:
+    """Return the project-scoped Codex config (``<cwd>/.codex/config.toml``).
+
+    Codex layers a trusted project's ``.codex/config.toml`` over the user
+    config, and ``headroom init codex`` (without ``-g``) writes there.
+    """
+
+    return (cwd or Path.cwd()) / ".codex" / "config.toml"
 
 
 def openclaw_config_path() -> Path:
     """Return the OpenClaw config path."""
 
     return Path.home() / ".openclaw" / "openclaw.json"
+
+
+def opencode_config_path() -> Path:
+    """Return the OpenCode config path.
+
+    Resolves ``~/.config/opencode/opencode.json`` when ``OPENCODE_CONFIG``
+    is unset; otherwise the value of that environment variable. Honors
+    ``OPENCODE_HOME`` for the base directory, and checks for
+    ``opencode.jsonc`` as well.
+    """
+
+    env_path = os.environ.get("OPENCODE_CONFIG", "").strip()
+    if env_path:
+        return Path(env_path).expanduser()
+    home_path = os.environ.get("OPENCODE_HOME", "").strip()
+    base_dir = Path(home_path).expanduser() if home_path else Path.home() / ".config" / "opencode"
+    jsonc_path = base_dir / "opencode.jsonc"
+
+    if jsonc_path.exists():
+        return jsonc_path
+
+    return base_dir / "opencode.json"
+
+
+def zcode_config_dir() -> Path:
+    """Return the ZCode user configuration directory."""
+
+    return Path.home() / ".zcode"

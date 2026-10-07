@@ -93,6 +93,89 @@ class LogLine:
         return hash(self.line_number)
 
 
+def _scan_pytest_short_summary(
+    lines: list[tuple[int, str]],
+) -> tuple[dict[int, str], set[int], int | None]:
+    """Scan for pytest's "short test summary info" sections.
+
+    Mirrors Rust's ``scan_pytest_short_summary``: a section opens on a
+    complete ``=== ... short test summary info ... ===`` separator (a trailing
+    ``\\r`` is ignored) and closes at the next ``===`` line or EOF. For
+    ``FAILED <nodeid> - <msg>`` the id is the text before ``" - "``.
+
+    Args:
+        lines: ``(line_number, content)`` pairs in log order.
+
+    Returns:
+        ``(entries, totals_lines, first_header)``: line number -> node id for
+        each entry, the line numbers of the ``===`` lines closing a section
+        (pytest's run totals), and the first section header's line number.
+    """
+    entries: dict[int, str] = {}
+    totals_lines: set[int] = set()
+    first_header: int | None = None
+    in_short_summary = False
+
+    for line_number, line in lines:
+        recognition_line = line.removesuffix("\r")
+        if recognition_line.startswith("==="):
+            opens = (
+                recognition_line.endswith("===") and "short test summary info" in recognition_line
+            )
+            if opens:
+                if first_header is None:
+                    first_header = line_number
+            elif in_short_summary:
+                totals_lines.add(line_number)
+            in_short_summary = opens
+            continue
+        if not in_short_summary:
+            continue
+
+        rest = next(
+            (
+                line.removeprefix(prefix)
+                for prefix in ("FAILED ", "ERROR ")
+                if line.startswith(prefix)
+            ),
+            None,
+        )
+        if rest is not None:
+            node_id = rest.split(" - ", 1)[0].strip()
+            if node_id:
+                entries[line_number] = node_id
+
+    return entries, totals_lines, first_header
+
+
+def _pytest_short_summary_entries(lines: list[tuple[int, str]]) -> dict[int, str]:
+    """Map line numbers to node ids of pytest short-summary FAILED/ERROR entries.
+
+    See ``_scan_pytest_short_summary``.
+    """
+    return _scan_pytest_short_summary(lines)[0]
+
+
+def _pytest_cap_reserve(
+    log_lines: list[LogLine], totals_lines: set[int], first_header: int | None
+) -> set[int]:
+    """Return the lines the global cap must keep while a short summary competes.
+
+    Mirrors Rust's ``pytest_cap_reserve``: each section's totals line and the
+    first ``E `` assertion line before the summary. Short-summary entries win
+    equal-score ties, so without this reserve a long summary crowds out the run
+    totals and every error message.
+    """
+    reserved = set(totals_lines)
+    for line in log_lines:
+        if first_header is not None and line.line_number >= first_header:
+            break
+        if line.content.startswith("E "):
+            reserved.add(line.line_number)
+            break
+    return reserved
+
+
 @dataclass
 class LogCompressorConfig:
     """Configuration for log compression."""
@@ -109,6 +192,13 @@ class LogCompressorConfig:
     max_total_lines: int = 100
     enable_ccr: bool = True
     min_lines_for_ccr: int = 50
+    # Frame collapse: when a trace exceeds stack_trace_max_lines, keep the
+    # message/chain-head lines, the first trace_head_frames frames, and up to
+    # trace_app_frames app-code frames; runtime/stdlib frames collapse into a
+    # `[... N frames collapsed]` marker instead of blind tail-truncation.
+    collapse_runtime_frames: bool = True
+    trace_head_frames: int = 3
+    trace_app_frames: int = 5
 
 
 @dataclass
@@ -186,6 +276,9 @@ class LogCompressor:
                 enable_ccr=cfg.enable_ccr,
                 min_lines_for_ccr=cfg.min_lines_for_ccr,
                 min_compression_ratio_for_ccr=0.5,
+                collapse_runtime_frames=cfg.collapse_runtime_frames,
+                trace_head_frames=cfg.trace_head_frames,
+                trace_app_frames=cfg.trace_app_frames,
             )
         )
 
@@ -252,6 +345,20 @@ class LogCompressor:
             re.compile(r"^\s+at [\w.$]+\("),
             re.compile(r"^\s*--> .+:\d+:\d+"),
             re.compile(r"^\s*\d+:\s+0x[0-9a-f]+"),
+            # Rust panics (RustBacktrace flavor)
+            re.compile(r"^thread '[^']*' panicked at"),
+            re.compile(r"^stack backtrace:"),
+            re.compile(r"^\s+\d+: \S"),
+            # Go panics / goroutine dumps (GoPanic flavor)
+            re.compile(r"^(?:panic|fatal error): "),
+            re.compile(r"^goroutine \d+ \["),
+            re.compile(r"^\t\S+\.go:\d+(?: \+0x[0-9a-f]+)?$"),
+            # .NET (DotNet flavor)
+            re.compile(r"^Unhandled exception\."),
+            re.compile(r"^\s*at .+\) in .+:line \d+"),
+            # Java chained-exception continuations
+            re.compile(r"^Caused by: "),
+            re.compile(r"^\s*\.\.\. \d+ more$"),
         ]
         summary_patterns = [
             re.compile(r"^={3,}"),
@@ -265,6 +372,7 @@ class LogCompressor:
         log_lines: list[LogLine] = []
         in_stack_trace = False
         stack_trace_lines = 0
+        short_summary_entries = _pytest_short_summary_entries(list(enumerate(lines)))
 
         for i, line in enumerate(lines):
             log_line = LogLine(line_number=i, content=line)
@@ -290,6 +398,7 @@ class LogCompressor:
                 if pattern.search(line):
                     log_line.is_summary = True
                     break
+            log_line.is_summary = log_line.is_summary or i in short_summary_entries
 
             log_line.score = self._score_line(log_line)
             log_lines.append(log_line)
@@ -319,6 +428,9 @@ class LogCompressor:
         from headroom.transforms.adaptive_sizer import compute_optimal_k
 
         all_strings = [line.content for line in log_lines]
+        short_summary_entries, totals_lines, first_header = _scan_pytest_short_summary(
+            [(line.line_number, line.content) for line in log_lines]
+        )
         adaptive_max = compute_optimal_k(
             all_strings, bias=bias, min_k=10, max_k=self.config.max_total_lines
         )
@@ -365,7 +477,27 @@ class LogCompressor:
         selected = sorted(set(selected), key=lambda x: x.line_number)
 
         if len(selected) > adaptive_max:
-            selected = sorted(selected, key=lambda x: x.score, reverse=True)
+            if self.config.keep_summary_lines:
+                reserved: set[int] = set()
+                if short_summary_entries:
+                    reserved = _pytest_cap_reserve(log_lines, totals_lines, first_header)
+                    present = {line.line_number for line in selected}
+                    selected.extend(
+                        line
+                        for line in log_lines
+                        if line.line_number in reserved and line.line_number not in present
+                    )
+                selected = sorted(
+                    selected,
+                    key=lambda line: (
+                        -(line.line_number in reserved),
+                        -line.score,
+                        -(line.line_number in short_summary_entries),
+                        line.line_number,
+                    ),
+                )
+            else:
+                selected = sorted(selected, key=lambda line: (-line.score, line.line_number))
             selected = selected[:adaptive_max]
             selected = sorted(selected, key=lambda x: x.line_number)
 
@@ -437,6 +569,15 @@ class LogCompressor:
     def _format_output(
         self, selected: list[LogLine], all_lines: list[LogLine]
     ) -> tuple[str, dict[str, int]]:
+        short_summary_entries = _pytest_short_summary_entries(
+            [(line.line_number, line.content) for line in all_lines]
+        )
+        selected_numbers = {line.line_number for line in selected}
+        omitted_short_summary_ids = [
+            node_id
+            for line_number, node_id in short_summary_entries.items()
+            if line_number not in selected_numbers
+        ]
         stats: dict[str, int] = {
             "errors": sum(1 for line in all_lines if line.level == LogLevel.ERROR),
             "fails": sum(1 for line in all_lines if line.level == LogLevel.FAIL),
@@ -459,7 +600,15 @@ class LogCompressor:
                 if count > 0:
                     summary_parts.append(f"{count} {label}")
             if summary_parts:
-                output_lines.append(f"[{omitted} lines omitted: {', '.join(summary_parts)}]")
+                omitted_names = ""
+                if omitted_short_summary_ids:
+                    omitted_names = "; omitted: " + ", ".join(omitted_short_summary_ids[:5])
+                    overflow = len(omitted_short_summary_ids) - 5
+                    if overflow > 0:
+                        omitted_names += f", +{overflow} more"
+                output_lines.append(
+                    f"[{omitted} lines omitted: {', '.join(summary_parts)}{omitted_names}]"
+                )
         return "\n".join(output_lines), stats
 
     def _store_in_ccr(self, original: str, compressed: str, original_count: int) -> str | None:

@@ -12,10 +12,11 @@ anything else the user has configured.
 from __future__ import annotations
 
 import logging
-import os
 import sys
 from pathlib import Path
 from typing import Any
+
+from headroom import fsutil
 
 from .base import MCPRegistrar, RegisterResult, RegisterStatus, ServerSpec
 
@@ -42,6 +43,81 @@ def _marker_end(server_name: str) -> str:
     return f"# --- end Headroom MCP server: {server_name} ---"
 
 
+def _table_path(line: str) -> list[str] | None:
+    """Key path of a ``[table]`` or ``[[array]]`` header line, else ``None``.
+
+    Parsed by tomllib so quoted keys (``[mcp_servers."foo#bar"]``) and trailing
+    comments are read as TOML reads them. Only a header line starts with ``[``
+    and parses on its own; a continuation line of a multi-line array does not.
+    """
+    if not line.lstrip().startswith("["):
+        return None
+    try:
+        node: Any = tomllib.loads(line)
+    except tomllib.TOMLDecodeError:
+        return None
+    path: list[str] = []
+    while isinstance(node, dict) and node:
+        key, node = next(iter(node.items()))
+        path.append(key)
+    return path
+
+
+def _evict_foreign_tables(content: str, server_name: str, start: str, end: str) -> str:
+    """Move tables Headroom does not own out of its marker span.
+
+    Another app's TOML writer appends a new table before the document's
+    trailing comment, so when our span is last in the file (the ChatGPT app's
+    ``[mcp_servers.node_repl]`` in ``~/.codex/config.toml``) the table lands
+    between our markers and deleting the span would delete it too. Every table
+    other than ``mcp_servers.<server_name>`` and its subtables is moved, byte
+    for byte and in order, to just after the end marker. This is a line-level
+    move, so a header-like line inside a multi-line string can split a table
+    wrongly; callers must check the final result with ``_only_server_changed``.
+    """
+    lines = content.splitlines(keepends=True)
+    try:
+        i = next(n for n, line in enumerate(lines) if line.rstrip("\r\n") == start)
+        j = next(n for n in range(i + 1, len(lines)) if lines[n].rstrip("\r\n") == end)
+    except StopIteration:
+        return content
+    kept: list[str] = []
+    foreign: list[str] = []
+    in_foreign = False
+    for line in lines[i + 1 : j]:
+        path = _table_path(line)
+        if path is not None:
+            in_foreign = path[:2] != ["mcp_servers", server_name]
+        (foreign if in_foreign else kept).append(line)
+    if not foreign:
+        return content
+    end_line = lines[j] if lines[j].endswith("\n") else lines[j] + "\n"
+    return "".join(lines[: i + 1] + kept + [end_line] + foreign + lines[j + 1 :])
+
+
+def _without_server(data: dict[str, Any], server_name: str) -> dict[str, Any]:
+    servers = data.get("mcp_servers")
+    if not isinstance(servers, dict):
+        return data
+    rest = {k: v for k, v in data.items() if k != "mcp_servers"}
+    others = {k: v for k, v in servers.items() if k != server_name}
+    return {**rest, "mcp_servers": others} if others else rest
+
+
+def _only_server_changed(old: str, new: str, server_name: str) -> bool:
+    """True when ``new`` parses to ``old`` apart from ``mcp_servers.<server_name>``.
+
+    The fail-closed guard for every rewrite of the marker span: a foreign table
+    that could not be moved out of the span, or a file that does not parse,
+    makes this False and the rewrite is refused instead of written.
+    """
+    try:
+        before, after = tomllib.loads(old), tomllib.loads(new)
+    except tomllib.TOMLDecodeError:
+        return False
+    return _without_server(before, server_name) == _without_server(after, server_name)
+
+
 class CodexRegistrar(MCPRegistrar):
     """Register MCP servers with the OpenAI Codex CLI."""
 
@@ -51,10 +127,10 @@ class CodexRegistrar(MCPRegistrar):
     def __init__(self, *, home_dir: Path | None = None) -> None:
         if home_dir is not None:
             self._codex_dir = home_dir / ".codex"
-        elif os.environ.get("CODEX_HOME"):
-            self._codex_dir = Path(os.environ["CODEX_HOME"]).expanduser()
         else:
-            self._codex_dir = Path.home() / ".codex"
+            from headroom.install.paths import codex_home_dir
+
+            self._codex_dir = codex_home_dir()
         self._config_file = self._codex_dir / "config.toml"
 
     # ------------------------------------------------------------------
@@ -108,6 +184,22 @@ class CodexRegistrar(MCPRegistrar):
             # Drop any prior Headroom block before re-writing.
             self.unregister_server(spec.name)
 
+        # `existing is None` here can also mean the file is present but
+        # unparseable, or defines mcp_servers[.<name>] as a non-table.
+        # _write_block appends a `[mcp_servers.<name>]` table, so appending into
+        # an unparseable file corrupts it further, and appending alongside a
+        # non-table entry creates a duplicate `[mcp_servers.<name>]` key that
+        # tomllib/codex then reject — destroying a previously-valid user config.
+        # Refuse rather than clobber, mirroring the claude (#1660) / opencode
+        # (#1661) guards.
+        if existing is None:
+            reason = self._unmergeable_reason(spec.name)
+            if reason is not None:
+                return RegisterResult(
+                    RegisterStatus.FAILED,
+                    f"{reason}; refusing to overwrite. Fix or remove the file, then re-run.",
+                )
+
         return self._write_block(spec)
 
     def unregister_server(self, server_name: str) -> bool:
@@ -115,9 +207,10 @@ class CodexRegistrar(MCPRegistrar):
         # outside markers are intentionally preserved.
         if not self._config_file.exists():
             return False
-        content = self._read_text()
         marker_start = _marker_start(server_name)
         marker_end = _marker_end(server_name)
+        original = self._read_text()
+        content = _evict_foreign_tables(original, server_name, marker_start, marker_end)
         if marker_start not in content or marker_end not in content:
             return False
         try:
@@ -131,8 +224,16 @@ class CodexRegistrar(MCPRegistrar):
             new_content = before + "\n\n" + after
         else:
             new_content = (before or after).rstrip("\n") + ("\n" if (before or after) else "")
+        if not _only_server_changed(original, new_content, server_name):
+            logger.warning(
+                "Not removing the Headroom block for %s from %s: the file does not parse, "
+                "or the block holds entries Headroom could not move out safely.",
+                server_name,
+                self._config_file,
+            )
+            return False
         try:
-            self._config_file.write_text(new_content)
+            fsutil.write_text(self._config_file, new_content)
         except OSError:
             return False
         return True
@@ -145,25 +246,55 @@ class CodexRegistrar(MCPRegistrar):
         if not self._config_file.exists():
             return {}
         try:
-            with open(self._config_file, "rb") as f:
-                data = tomllib.load(f)
+            # Read via fsutil (UTF-8 with locale fallback) so a config that a
+            # tool wrote in the system locale (e.g. GBK) still parses instead
+            # of failing tomllib's UTF-8 requirement. See #733.
+            data = tomllib.loads(fsutil.read_text(self._config_file))
         except (tomllib.TOMLDecodeError, OSError):
             return {}
         return data if isinstance(data, dict) else {}
 
-    def _read_text(self) -> str:
+    def _unmergeable_reason(self, name: str) -> str | None:
+        """Return why the existing config cannot be safely merged, or ``None``.
+
+        ``_write_block`` appends a ``[mcp_servers.<name>]`` table. That is only
+        safe when the file is absent/empty or parses as a TOML table whose
+        ``mcp_servers`` (and ``mcp_servers.<name>``) are tables. A present-but-
+        unparseable file, or a non-table ``mcp_servers`` / ``mcp_servers.<name>``,
+        would be corrupted (unparseable) or made to hold a duplicate key
+        (non-table entry) by a blind append.
+        """
+        if not self._config_file.exists():
+            return None
+        raw = self._read_text()
+        if not raw.strip():
+            return None
         try:
-            return self._config_file.read_text()
-        except OSError:
-            return ""
+            data = tomllib.loads(fsutil.read_text(self._config_file))
+        except (tomllib.TOMLDecodeError, OSError) as exc:
+            return f"{self._config_file} is not valid TOML ({exc})"
+        if not isinstance(data, dict):
+            return f"{self._config_file} top-level TOML is not a table"
+        servers = data.get("mcp_servers")
+        if servers is not None and not isinstance(servers, dict):
+            return f"{self._config_file} has a non-table mcp_servers"
+        if isinstance(servers, dict):
+            entry = servers.get(name)
+            if entry is not None and not isinstance(entry, dict):
+                return f"{self._config_file} has a non-table mcp_servers.{name}"
+        return None
+
+    def _read_text(self) -> str:
+        return fsutil.read_text(self._config_file, default="")
 
     def _write_block(self, spec: ServerSpec) -> RegisterResult:
         block = _render_block(spec)
         try:
             self._codex_dir.mkdir(parents=True, exist_ok=True)
-            content = self._read_text()
             marker_start = _marker_start(spec.name)
             marker_end = _marker_end(spec.name)
+            original = self._read_text()
+            content = _evict_foreign_tables(original, spec.name, marker_start, marker_end)
             if marker_start in content and marker_end in content:
                 start = content.index(marker_start)
                 end = content.index(marker_end) + len(marker_end)
@@ -178,7 +309,13 @@ class CodexRegistrar(MCPRegistrar):
                 content = content.rstrip("\n") + "\n\n" + block + "\n"
             else:
                 content = block + "\n"
-            self._config_file.write_text(content)
+            if not _only_server_changed(original, content, spec.name):
+                return RegisterResult(
+                    RegisterStatus.FAILED,
+                    f"{self._config_file} does not parse, or the Headroom block holds "
+                    "entries Headroom could not move out safely; refusing to rewrite it.",
+                )
+            fsutil.write_text(self._config_file, content)
         except OSError as exc:
             return RegisterResult(
                 RegisterStatus.FAILED, f"could not write {self._config_file}: {exc}"
@@ -210,10 +347,37 @@ def _render_block(spec: ServerSpec) -> str:
     return "\n".join(lines)
 
 
+# TOML basic strings forbid literal control characters other than tab, so a
+# value carrying a newline/carriage-return (e.g. a multi-line PEM key in an
+# env var) must be escaped or the rendered block is unparseable TOML. Only
+# ``\`` and ``"`` were escaped before, so such a value produced invalid TOML
+# and the write guard rejected the whole registration with a misleading
+# "file does not parse" error.
+_TOML_ESCAPES = {
+    "\\": "\\\\",
+    '"': '\\"',
+    "\b": "\\b",
+    "\t": "\\t",
+    "\n": "\\n",
+    "\f": "\\f",
+    "\r": "\\r",
+}
+
+
 def _toml_str(s: str) -> str:
     """Render a Python string as a TOML basic string literal."""
-    escaped = s.replace("\\", "\\\\").replace('"', '\\"')
-    return f'"{escaped}"'
+    out: list[str] = []
+    for ch in s:
+        escape = _TOML_ESCAPES.get(ch)
+        if escape is not None:
+            out.append(escape)
+        elif ch < "\x20" or ch == "\x7f":
+            # Remaining C0 controls (and DEL) have no short escape; TOML requires
+            # the \uXXXX form.
+            out.append(f"\\u{ord(ch):04X}")
+        else:
+            out.append(ch)
+    return '"' + "".join(out) + '"'
 
 
 def _entry_to_spec(name: str, entry: dict[str, Any]) -> ServerSpec:

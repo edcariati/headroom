@@ -24,15 +24,22 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import json
 import logging
 import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from headroom import paths as _paths
+from headroom import savings_ledger
+from headroom.cache.compression_store import format_retrieval_miss_detail
+from headroom.telemetry import session as telemetry_session
+
+if TYPE_CHECKING:
+    from headroom.tokenizers.estimator import EstimatingTokenCounter
 
 # fcntl is Unix-only; on Windows we skip file locking (stats are best-effort).
 # Keep the module typed as Any so Windows mypy runs don't try to resolve Unix-only attrs.
@@ -85,11 +92,21 @@ _READ_ENABLED = os.environ.get("HEADROOM_MCP_READ", "off").lower().strip() in (
 
 DEFAULT_PROXY_URL = os.environ.get("HEADROOM_PROXY_URL", "http://127.0.0.1:8787")
 
+# How often the parent-death watchdog polls os.getppid() (seconds). When the
+# launching MCP client is SIGKILLed, stdin EOF may never arrive and the SDK's
+# blocking stdin-reader thread wedges server.run() forever, orphaning this
+# process under init/launchd. The watchdog reaps us once we are reparented.
+PARENT_DEATH_POLL_INTERVAL = 5.0
 
-def _format_session_summary(summary: dict[str, Any], local_stats: dict[str, Any]) -> str:
+
+def _format_session_summary(
+    summary: dict[str, Any],
+    local_stats: dict[str, Any],
+    persistent_lifetime: dict[str, Any] | None = None,
+) -> str:
     """Format the proxy summary + local MCP stats into clean readable text."""
     lines: list[str] = []
-    lines.append("Headroom Session Summary")
+    lines.append("Headroom Window-Scoped Session Summary")
     lines.append("=" * 40)
 
     mode = summary.get("mode", "token")
@@ -124,6 +141,7 @@ def _format_session_summary(summary: dict[str, Any], local_stats: dict[str, Any]
             "too_small": "Too small (< 500 tokens)",
             "passthrough": "Passthrough (token counting)",
             "no_compressible_content": "No compressible content (user/assistant only)",
+            "unknown_token_accounting": "Unknown token accounting",
         }
         for key, count in uncomp.items():
             label = reason_labels.get(key, key)
@@ -156,6 +174,20 @@ def _format_session_summary(summary: dict[str, Any], local_stats: dict[str, Any]
         lines.append(f"MCP Tool: {local_compressions} compressions, {local_saved:,} tokens saved")
         lines.append("")
 
+    # Lifetime proxy savings (cross-session)
+    if isinstance(persistent_lifetime, dict):
+        lifetime_tokens = persistent_lifetime.get("tokens_saved", 0) or 0
+        lifetime_usd = persistent_lifetime.get("compression_savings_usd", 0.0) or 0.0
+        lifetime_cache_reads = persistent_lifetime.get("cache_read_tokens", 0) or 0
+        lifetime_cache_usd = persistent_lifetime.get("cache_savings_usd", 0.0) or 0.0
+        lines.append("Lifetime Savings:")
+        lines.append(f"  Tokens saved: {lifetime_tokens:,}")
+        lines.append(f"  Compression savings: ${lifetime_usd:.2f}")
+        if lifetime_cache_reads:
+            lines.append(f"  Cache-read tokens: {lifetime_cache_reads:,}")
+            lines.append(f"  Cache savings: ${lifetime_cache_usd:.2f}")
+        lines.append("")
+
     # Tip
     tip = summary.get("tip")
     if tip:
@@ -177,7 +209,13 @@ SESSION_WINDOW_SECONDS = 7200  # 2 hours — events older than this are pruned
 
 
 def _append_shared_event(event: dict[str, Any]) -> None:
-    """Append an event to the shared stats file (cross-process, file-locked)."""
+    """Append an event to the shared stats file (cross-process, file-locked).
+
+    No-op in stateless mode (``HEADROOM_STATELESS``): the aggregate then covers
+    only this process, which is the documented stateless trade-off.
+    """
+    if not _paths.persistence_allowed("MCP session stats"):
+        return
     try:
         SHARED_STATS_DIR.mkdir(parents=True, exist_ok=True)
         event["pid"] = os.getpid()
@@ -217,8 +255,9 @@ def _read_shared_events(window_seconds: int = SESSION_WINDOW_SECONDS) -> list[di
                     keep_lines.append(line + "\n")
             except json.JSONDecodeError:
                 continue
-        # Prune old entries (only if we dropped some)
-        if len(keep_lines) < len(lines):
+        # Prune old entries (only if we dropped some). Never rewrite the file in
+        # stateless mode — reading is fine, writing is not.
+        if len(keep_lines) < len(lines) and _paths.persistence_allowed("MCP session stats"):
             try:
                 with open(SHARED_STATS_FILE, "w") as f:
                     if _HAS_FCNTL:
@@ -231,6 +270,23 @@ def _read_shared_events(window_seconds: int = SESSION_WINDOW_SECONDS) -> list[di
     except Exception:
         pass
     return events
+
+
+def _build_proxy_unreachable_payload(
+    *,
+    proxy_url: str,
+    error: str,
+    http_status: int | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "url": proxy_url,
+        "status": "unreachable",
+        "error": error,
+        "warning": f"Configured proxy {proxy_url} is unreachable ({error}).",
+    }
+    if http_status is not None:
+        payload["http_status"] = http_status
+    return payload
 
 
 @dataclass
@@ -331,6 +387,7 @@ class HeadroomMCPServer:
         self._http_client: httpx.AsyncClient | None = None  # type: ignore[assignment]
         self._stats = SessionStats()
         self._local_store: Any = None  # Lazy-initialized CompressionStore
+        self._token_estimator: EstimatingTokenCounter | None = None
         self._compressor_initialized = False
         # File read cache: path → (content_hash, ccr_hash, line_count, token_count)
         self._file_cache: dict[str, tuple[str, str, int, int]] = {}
@@ -354,6 +411,23 @@ class HeadroomMCPServer:
 
             self._local_store = get_compression_store()
         return self._local_store
+
+    def _estimate_tokens(self, text: str) -> int:
+        """Price file content in tokens, the way the rest of the pipeline does.
+
+        Whitespace splitting is a word count, not a token count. Measured on
+        real files it under-reports by 1.43x on prose, 1.30x on source, and
+        691x for the 2.2 KB single-line JSON array in the regression test -- a
+        compact document has no spaces, so the whole file is one "word". That
+        figure is stored as ``original_tokens`` (which the savings totals sum
+        over) and echoed back to the agent as ``~N tokens`` in the
+        already-in-context note it uses to decide whether to re-read the file.
+        """
+        if self._token_estimator is None:
+            from headroom.tokenizers.estimator import EstimatingTokenCounter
+
+            self._token_estimator = EstimatingTokenCounter()
+        return max(1, self._token_estimator.count_text(text))
 
     def _compress_content(self, content: str) -> dict[str, Any]:
         """Compress content using Headroom's pipeline.
@@ -390,9 +464,15 @@ class HeadroomMCPServer:
         )
         self._stats.record_compression(input_tokens, output_tokens, strategy)
 
-        savings_pct = (
-            round((1 - result.compression_ratio) * 100, 1) if result.compression_ratio < 1.0 else 0
-        )
+        # Percentage of tokens removed. Derive from the same token counts used
+        # for ``tokens_saved`` so all three fields agree — this mirrors the
+        # convention in ``_Stats.record_compression`` above. The previous
+        # ``(1 - result.compression_ratio)`` inverted the value: since
+        # ``compression_ratio`` is already the *saved* fraction (see
+        # ``CompressResult`` in headroom/compress.py — "0.0 = no savings, 1.0 =
+        # 100% removed"), the old expression reported the *retained* percentage,
+        # e.g. a no-op (0% saved) was reported as 100%.
+        savings_pct = round((1 - output_tokens / input_tokens) * 100, 1) if input_tokens > 0 else 0
 
         return {
             "compressed": compressed_content,
@@ -408,62 +488,70 @@ class HeadroomMCPServer:
     async def _retrieve_content(
         self,
         hash_key: str,
-        query: str | None,
     ) -> dict[str, Any]:
-        """Retrieve content. Checks local store first, then proxy."""
+        """Retrieve content by hash. Checks local store first, then proxy.
+
+        Retrieval is by hash and always returns the full original content.
+        """
         # Check local store first
         store = self._get_local_store()
-        if query:
-            results = store.search(hash_key, query)
-            if results:
-                self._stats.record_retrieval(hash_key)
-                return {
-                    "hash": hash_key,
-                    "source": "local",
-                    "query": query,
-                    "results": results,
-                    "count": len(results),
-                }
-            # The query matched no items above the relevance floor, but the
-            # entry itself may still be present and unexpired. An empty search
-            # is not the same as a missing/expired hash, so fall back to the
-            # full content rather than reporting it as not found.
-            entry = store.retrieve(hash_key)
-            if entry:
-                self._stats.record_retrieval(hash_key)
-                return {
-                    "hash": hash_key,
-                    "source": "local",
-                    "query": query,
-                    "results": [],
-                    "count": 0,
-                    "original_content": entry.original_content,
-                    "note": "Entry exists but no item matched the query above "
-                    "the relevance threshold; returning the full content.",
-                }
-        else:
-            entry = store.retrieve(hash_key)
-            if entry:
-                self._stats.record_retrieval(hash_key)
-                return {
-                    "hash": hash_key,
-                    "source": "local",
-                    "original_content": entry.original_content,
-                    "original_item_count": entry.original_item_count,
-                    "compressed_item_count": entry.compressed_item_count,
-                    "retrieval_count": entry.retrieval_count,
-                }
+        entry_status = store.get_entry_status(hash_key, clean_expired=False)
+        entry = store.retrieve(hash_key)
+        expired_entry_status = None
+        if entry:
+            self._stats.record_retrieval(hash_key)
+            return {
+                "hash": hash_key,
+                "source": "local",
+                "original_content": entry.original_content,
+                "original_item_count": entry.original_item_count,
+                "compressed_item_count": entry.compressed_item_count,
+                "retrieval_count": entry.retrieval_count,
+            }
+        if entry_status.get("status") == "expired":
+            expired_entry_status = entry_status
+        elif entry_status.get("status") == "available":
+            created_at = entry_status.get("created_at")
+            ttl_seconds = entry_status.get("ttl_seconds")
+            if isinstance(created_at, (int, float)) and isinstance(ttl_seconds, (int, float)):
+                age_seconds = time.time() - created_at
+                if age_seconds > ttl_seconds:
+                    expired_entry_status = {
+                        **entry_status,
+                        "status": "expired",
+                        "age_seconds": age_seconds,
+                    }
 
         # Fall back to proxy if available
         if self.check_proxy and HTTPX_AVAILABLE:
             try:
-                result = await self._retrieve_via_proxy(hash_key, query)
+                result = await self._retrieve_via_proxy(hash_key)
                 if "error" not in result:
                     result["source"] = "proxy"
                     self._stats.record_retrieval(hash_key)
                     return result
             except Exception:
                 pass  # Proxy unavailable, that's fine
+
+        if expired_entry_status:
+            ttl_seconds = expired_entry_status.get(
+                "ttl_seconds",
+                expired_entry_status["default_ttl_seconds"],
+            )
+            return {
+                "error": (
+                    f"{format_retrieval_miss_detail(expired_entry_status)}. "
+                    "Do not retry the same hash. Re-run the source command or re-read the source file."
+                ),
+                "hash": hash_key,
+                "status": "expired",
+                "ttl_seconds": ttl_seconds,
+                "age_seconds": expired_entry_status.get("age_seconds"),
+                "hint": (
+                    "Use the source of truth to regenerate fresh content. "
+                    "Re-run the command or re-read the file."
+                ),
+            }
 
         return {
             "error": "Content not found. It may have expired or the hash may be incorrect.",
@@ -478,16 +566,13 @@ class HeadroomMCPServer:
     async def _retrieve_via_proxy(
         self,
         hash_key: str,
-        query: str | None,
     ) -> dict[str, Any]:
-        """Retrieve content via proxy's HTTP endpoint."""
+        """Retrieve full content by hash via proxy's HTTP endpoint."""
         if self._http_client is None:
             self._http_client = httpx.AsyncClient(timeout=15.0)
 
         url = f"{self.proxy_url}/v1/retrieve"
         payload: dict[str, str] = {"hash": hash_key}
-        if query:
-            payload["query"] = query
 
         response = await self._http_client.post(url, json=payload)
 
@@ -497,6 +582,58 @@ class HeadroomMCPServer:
         response.raise_for_status()
         result: dict[str, Any] = response.json()
         return result
+
+    async def _probe_proxy_unreachable(self) -> dict[str, Any] | None:
+        """Return explicit proxy-unreachable state when the configured proxy is down."""
+        if not self.check_proxy or not HTTPX_AVAILABLE:
+            return None
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.get(f"{self.proxy_url}/livez")
+        except Exception as exc:
+            return _build_proxy_unreachable_payload(
+                proxy_url=self.proxy_url,
+                error=f"{type(exc).__name__}: {exc}",
+            )
+        if response.status_code != 200:
+            detail = None
+            try:
+                payload = response.json()
+            except Exception:
+                payload = None
+            if isinstance(payload, dict):
+                detail = payload.get("status")
+            if detail is None:
+                detail = response.text.strip() or None
+            error = f"HTTP {response.status_code}"
+            if detail:
+                error = f"{error} ({detail})"
+            return _build_proxy_unreachable_payload(
+                proxy_url=self.proxy_url,
+                error=error,
+                http_status=response.status_code,
+            )
+        try:
+            payload = response.json()
+        except Exception as exc:
+            return _build_proxy_unreachable_payload(
+                proxy_url=self.proxy_url,
+                error=f"invalid /livez payload: {type(exc).__name__}: {exc}",
+                http_status=response.status_code,
+            )
+        if not isinstance(payload, dict):
+            return _build_proxy_unreachable_payload(
+                proxy_url=self.proxy_url,
+                error="invalid /livez payload",
+                http_status=response.status_code,
+            )
+        if payload.get("status") != "healthy" or payload.get("alive") is not True:
+            return _build_proxy_unreachable_payload(
+                proxy_url=self.proxy_url,
+                error=f"proxy reported {payload.get('status', 'unhealthy')}",
+                http_status=response.status_code,
+            )
+        return None
 
     def _setup_handlers(self) -> None:
         """Register all MCP tool handlers."""
@@ -541,13 +678,6 @@ class HeadroomMCPServer:
                             "hash": {
                                 "type": "string",
                                 "description": "Hash key from compression (e.g., 'abc123' from hash=abc123)",
-                            },
-                            "query": {
-                                "type": "string",
-                                "description": (
-                                    "Optional search query to filter results. "
-                                    "If provided, returns only items matching the query."
-                                ),
                             },
                         },
                         "required": ["hash"],
@@ -662,7 +792,63 @@ class HeadroomMCPServer:
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(None, self._compress_content, content)
 
-        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+        # Record durably so `headroom savings` reflects this compression across
+        # restarts. Best-effort: never let savings bookkeeping break the tool.
+        try:
+            self._record_savings(result)
+        except Exception:
+            logger.debug("durable savings recording failed", exc_info=True)
+
+        proxy_status = await self._probe_proxy_unreachable()
+        if proxy_status:
+            result["proxy"] = proxy_status
+            result["warning"] = proxy_status["warning"]
+
+        return [TextContent(type="text", text=json.dumps(result, indent=2, ensure_ascii=False))]
+
+    def _record_savings(self, result: dict[str, Any]) -> None:
+        """Append a durable savings event for a completed compression."""
+        try:
+            before = int(result.get("original_tokens", 0) or 0)
+            after = int(result.get("compressed_tokens", 0) or 0)
+        except (TypeError, ValueError):
+            return
+        if before <= after:
+            return
+        savings_ledger.record_savings_event(
+            tokens_before=before,
+            tokens_after=after,
+            # The MCP tool doesn't know the agent's upstream model; an optional
+            # hint lets a host attribute it, otherwise it records as "unknown".
+            model=os.environ.get("HEADROOM_MCP_MODEL"),
+            client=self._current_client(),
+            source="mcp",
+        )
+        # Anonymous beacon (opt-out; no-op unless enabled). Without this the MCP
+        # path is invisible to aggregate stats even though it is a first-class
+        # way to use Headroom — and subagents make that worse, since each runs
+        # its own MCP server. Swallows its own errors; the caller's try/except
+        # is a second net, not the first.
+        telemetry_session.record_mcp_compression(
+            original_tokens=before,
+            compressed_tokens=after,
+            model=os.environ.get("HEADROOM_MCP_MODEL"),
+        )
+
+    def _current_client(self) -> str:
+        """Name of the MCP client driving this session (best-effort)."""
+        override = os.environ.get("HEADROOM_MCP_CLIENT")
+        if override:
+            return override
+        try:
+            params = self.server.request_context.session.client_params
+            info = getattr(params, "clientInfo", None) if params else None
+            name = getattr(info, "name", None)
+            if name:
+                return str(name)
+        except Exception:
+            pass
+        return "unknown"
 
     async def _handle_retrieve(self, arguments: dict[str, Any]) -> list[TextContent]:
         """Handle headroom_retrieve tool call."""
@@ -675,21 +861,15 @@ class HeadroomMCPServer:
                 )
             ]
 
-        query = arguments.get("query")
+        logger.info("event=mcp_retrieve_started hash=%s", hash_key)
+        result = await self._retrieve_content(hash_key)
         logger.info(
-            "event=mcp_retrieve_started hash=%s query=%s",
+            "event=mcp_retrieve_completed hash=%s result=%s",
             hash_key,
-            json.dumps(query, ensure_ascii=False, default=str),
-        )
-        result = await self._retrieve_content(hash_key, query)
-        logger.info(
-            "event=mcp_retrieve_completed hash=%s query=%s result=%s",
-            hash_key,
-            json.dumps(query, ensure_ascii=False, default=str),
             json.dumps(result, ensure_ascii=False, default=str),
         )
 
-        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+        return [TextContent(type="text", text=json.dumps(result, indent=2, ensure_ascii=False))]
 
     async def _handle_stats(self) -> list[TextContent]:
         """Handle headroom_stats tool call."""
@@ -735,15 +915,26 @@ class HeadroomMCPServer:
             if proxy_data:
                 summary = proxy_data.get("summary")
                 if summary:
+                    lifetime = None
+                    persistent_savings = proxy_data.get("persistent_savings")
+                    if isinstance(persistent_savings, dict):
+                        lifetime_block = persistent_savings.get("lifetime")
+                        if isinstance(lifetime_block, dict):
+                            lifetime = lifetime_block
                     # Return clean formatted summary instead of raw JSON
-                    formatted = _format_session_summary(summary, stats)
+                    formatted = _format_session_summary(summary, stats, lifetime)
                     return [TextContent(type="text", text=formatted)]
                 # Fallback: add proxy stats to local stats
                 proxy_stats = self._extract_proxy_stats(proxy_data)
                 if proxy_stats:
                     stats["proxy"] = proxy_stats
+            else:
+                proxy_status = await self._probe_proxy_unreachable()
+                if proxy_status:
+                    stats["proxy"] = proxy_status
+                    stats["warning"] = proxy_status["warning"]
 
-        return [TextContent(type="text", text=json.dumps(stats, indent=2))]
+        return [TextContent(type="text", text=json.dumps(stats, indent=2, ensure_ascii=False))]
 
     async def _fetch_full_proxy_stats(self) -> dict[str, Any] | None:
         """Fetch full stats from the proxy (includes summary)."""
@@ -866,16 +1057,16 @@ class HeadroomMCPServer:
 
         # Fresh read: store in CCR and cache the hash
         store = self._get_local_store()
+        token_estimate = self._estimate_tokens(content)
         ccr_hash = store.store(
             original=content,
             compressed=f"[File: {path.name}, {line_count} lines]",
-            original_tokens=len(content.split()),
+            original_tokens=token_estimate,
             compressed_tokens=5,
             tool_name="headroom_read",
             ttl=MCP_SESSION_TTL,
         )
 
-        token_estimate = len(content.split())
         self._file_cache[str_path] = (content_hash, ccr_hash, line_count, token_estimate)
 
         # Return full content with line numbers (like Claude Code's Read tool)
@@ -891,15 +1082,88 @@ class HeadroomMCPServer:
             )
         ]
 
-    async def run_stdio(self) -> None:
-        """Run the server with stdio transport."""
+    async def _await_parent_death(self, interval: float) -> None:
+        """Resolve once the launching parent process is gone.
+
+        We are started with a real parent (the MCP client, over stdio). If our
+        ppid changes we have been reparented — the client died — and stdin EOF
+        may never come (SIGKILL leaves the SDK's blocking stdin reader wedged),
+        so ``server.run`` would hang forever. Detecting the reparent lets the
+        caller shut down instead of orphaning. Watching for *any* change to the
+        captured ppid is more portable than hard-coding ``== 1``: POSIX reparents
+        to init/launchd (pid 1), but a Linux subreaper can adopt us instead.
+        """
+        initial_ppid = os.getppid()
+        while os.getppid() == initial_ppid:
+            await asyncio.sleep(interval)
+        logger.warning(
+            "parent process gone (ppid %s -> %s); shutting down MCP server",
+            initial_ppid,
+            os.getppid(),
+        )
+
+    async def run_stdio(
+        self,
+        parent_death_poll_interval: float = PARENT_DEATH_POLL_INTERVAL,
+    ) -> None:
+        """Run the server with stdio transport.
+
+        Normally the server stops on stdin EOF when the client disconnects. A
+        parent-death watchdog runs alongside it because an abrupt client SIGKILL
+        leaves the SDK's stdin reader wedged and ``server.run`` never returns; the
+        watchdog forces shutdown once we are reparented.
+        """
         async with stdio_server() as (read_stream, write_stream):
             logger.info(f"Headroom MCP Server starting (proxy: {self.proxy_url})")
-            await self.server.run(
-                read_stream,
-                write_stream,
-                self.server.create_initialization_options(),
+            serve_task = asyncio.create_task(
+                self.server.run(
+                    read_stream,
+                    write_stream,
+                    self.server.create_initialization_options(),
+                )
             )
+            watchdog = asyncio.create_task(self._await_parent_death(parent_death_poll_interval))
+            done, _pending = await asyncio.wait(
+                {serve_task, watchdog},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+
+            if watchdog in done:
+                # Parent died. stdin EOF may never arrive — a client SIGKILL
+                # leaves the SDK's stdin-reader thread blocked, so both
+                # ``server.run`` and the ``stdio_server`` context-manager exit
+                # can hang forever. Reap from *inside* the context manager:
+                # os._exit skips the (wedged) async teardown and guarantees this
+                # orphan dies. Reached only once the parent is already gone.
+                watchdog.result()  # surface a watchdog error, if any
+                await self.cleanup()
+                os._exit(0)
+
+            # Normal shutdown: the client closed stdin and ``server.run``
+            # returned. Cancel the watchdog and let the context manager unwind
+            # cleanly — the reader is not wedged in this path.
+            watchdog.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await watchdog
+            serve_task.result()  # re-raise a real server error; no-op on clean EOF
+
+    async def run_streamable_http(
+        self,
+        host: str,
+        port: int,
+        path: str,
+        debug: bool = False,
+    ) -> None:
+        """Run the server with Streamable HTTP transport."""
+        from .mcp_http import serve_streamable_http
+
+        await serve_streamable_http(
+            self,
+            host=host,
+            port=port,
+            path=path,
+            debug=debug,
+        )
 
     async def cleanup(self) -> None:
         """Clean up resources."""

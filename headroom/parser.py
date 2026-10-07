@@ -53,6 +53,52 @@ def compute_hash(text: str) -> str:
     return hashlib.md5(text.encode()).hexdigest()[:16]  # nosec B324
 
 
+def _coerce_tool_call_to_dict(tc: Any) -> dict[str, Any]:
+    """Normalize a single tool_call into the canonical OpenAI dict shape.
+
+    `tc` is usually already an OpenAI-format dict
+    (``{"id": ..., "function": {"name": ..., "arguments": ...}}``), but
+    streaming integrations can hand us the raw provider SDK object instead.
+    The OpenAI Python SDK's streaming path yields ``ChoiceDeltaToolCall``
+    objects (and the non-streaming path ``ChatCompletionMessageToolCall``),
+    which are Pydantic models with attribute access and NO ``.get()`` — so
+    calling ``tc.get("function")`` blows up with
+    ``'ChoiceDeltaToolCall' object has no attribute 'get'`` (issue #1312,
+    seen via the Agno wrapper streaming tool calls).
+
+    Accept both. Dicts pass through untouched; attribute-style objects are
+    read via ``getattr`` and flattened to a dict with the same keys the
+    parser expects (``id`` + nested ``function.name`` / ``function.arguments``).
+    A nested ``function`` may itself be a dict or an SDK object, so it gets
+    the same treatment. Anything unrecognized degrades to an empty dict
+    rather than raising — over-compression of a malformed tool call is far
+    cheaper than crashing the whole agent run.
+    """
+    if isinstance(tc, dict):
+        return tc
+
+    # Attribute-style provider object (e.g. OpenAI ChoiceDeltaToolCall).
+    if tc is None:
+        return {}
+
+    func = getattr(tc, "function", None)
+    if isinstance(func, dict):
+        func_dict = func
+    elif func is not None:
+        func_dict = {
+            "name": getattr(func, "name", None),
+            "arguments": getattr(func, "arguments", ""),
+        }
+    else:
+        func_dict = {}
+
+    return {
+        "id": getattr(tc, "id", None),
+        "type": getattr(tc, "type", "function"),
+        "function": func_dict,
+    }
+
+
 def _canonical_call_key(name: str, arguments: Any) -> str:
     """Canonical identity for a tool invocation: name + arguments with JSON
     key order normalized, so semantically identical calls hash equal even
@@ -117,8 +163,10 @@ def detect_waste_signals(text: str, tokenizer: Tokenizer) -> WasteSignals:
     if not text:
         return signals
 
-    # HTML tags and comments
-    html_matches = HTML_TAG_PATTERN.findall(text) + HTML_COMMENT_PATTERN.findall(text)
+    # HTML tags and comments. Comments are removed before tag matching so a
+    # comment is counted once (and tags inside comments are not counted).
+    comment_matches = HTML_COMMENT_PATTERN.findall(text)
+    html_matches = HTML_TAG_PATTERN.findall(HTML_COMMENT_PATTERN.sub("", text)) + comment_matches
     if html_matches:
         html_text = "".join(html_matches)
         signals.html_noise_tokens = tokenizer.count_text(html_text)
@@ -134,7 +182,9 @@ def detect_waste_signals(text: str, tokenizer: Tokenizer) -> WasteSignals:
     if ws_matches:
         # Count tokens that could be saved by normalizing whitespace to single spaces
         ws_text = "".join(ws_matches)
-        normalized_text = " ".join(ws_matches)
+        # Each matched run (4+ spaces/tabs or 3+ newlines) collapses to a
+        # single space, so the normalized form is one space per run.
+        normalized_text = " " * len(ws_matches)
         signals.whitespace_tokens = max(
             0, tokenizer.count_text(ws_text) - tokenizer.count_text(normalized_text)
         )
@@ -301,7 +351,8 @@ def parse_message_to_blocks(
     # Handle tool calls (assistant messages with tool_calls)
     tool_calls = message.get("tool_calls")
     if tool_calls:
-        for tc in tool_calls:
+        for raw_tc in tool_calls:
+            tc = _coerce_tool_call_to_dict(raw_tc)
             func = tc.get("function", {})
             tc_text = f"{func.get('name', 'unknown')}({func.get('arguments', '')})"
 
@@ -527,7 +578,8 @@ def find_tool_units(messages: list[dict[str, Any]]) -> list[tuple[int, list[int]
         # OpenAI format: tool_calls array
         tool_calls = msg.get("tool_calls")
         if tool_calls:
-            for tc in tool_calls:
+            for raw_tc in tool_calls:
+                tc = _coerce_tool_call_to_dict(raw_tc)
                 tc_id = tc.get("id")
                 if tc_id and tc_id in tool_response_map:
                     response_indices.append(tool_response_map[tc_id])
