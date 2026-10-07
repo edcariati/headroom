@@ -665,3 +665,23 @@ textarea.campo { min-height: 72px; padding: var(--s3) var(--s4); resize: vertica
   .cobranca-det .tbl-mini td:first-child { flex: 1 1 100%; font-size: .86rem; }
 }
 @media (max-width: 520px) { .tbl-mini th { letter-spacing: 0; font-size: .64rem; } .tbl-mini { font-size: .72rem; } }
+
+/* ---------- fluxos ---------- */
+.caminho { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; }
+.caminho-passo { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px; border-radius: var(--r-pill); background: var(--glass); border: 1px solid var(--linha); font-size: .86rem; }
+.caminho-passo i { font-style: normal; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: .72rem; font-weight: 700; background: var(--glass-2); color: var(--text-2); }
+.caminho-passo.dec { border-color: rgba(34, 211, 238, .45); }
+.caminho-passo.fim { border-color: rgba(255, 159, 28, .5); }
+.caminho-passo:not(:last-child)::after { content: '›'; margin-left: 6px; color: var(--text-3); }
+.passo-fluxo.com-pendencia { border-color: rgba(251, 191, 36, .4); }
+.passo-fluxo-topo { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+.passo-fluxo-nome { flex: 1; min-width: 160px; display: grid; }
+.passo-fluxo-nome small { color: var(--text-2); }
+.passo-fluxo-itens { margin-bottom: var(--s3); }
+.passo-fluxo-acoes { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
+
+/* ---------- visão do diretor (Resumo) ---------- */
+.parcelas-prog { min-width: 150px; display: grid; gap: 6px; }
+.parcelas-prog small { color: var(--text-2); }
+.tbl td small { display: block; color: var(--text-2); }
+.tbl-mes th, .tbl-mes td { padding: 9px var(--s3); }

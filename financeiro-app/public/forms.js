@@ -218,12 +218,13 @@ export async function formBaixa(p, aoSalvar) {
     <div class="glass painel" style="padding:var(--s4)"><strong>${esc(p.nome)}</strong><p class="suave">Vencimento ${dataBR(p.vencimento)} · falta ${(p.aberto_cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p></div>
     <div class="linha2"><label class="f">Data *<input class="campo" type="date" name="data" value="${hojeISO()}" required></label>
     <label class="f">Valor (R$) *<input class="campo" name="valor" value="${dinheiroInput(p.aberto_cents)}" inputmode="decimal" required><span class="dica">Pode ser parcial: o restante continua em aberto.</span></label></div>
-    <label class="f">Conta bancária *<select class="campo" name="conta_id" required>${opcoes(c.contas, p.conta_id || ler('ultimaConta') || c.contas[0]?.id, 'Escolha…')}</select></label>`, {
+    <label class="f">Conta bancária *<select class="campo" name="conta_id" required>${opcoes(c.contas, p.conta_id || ler('ultimaConta') || c.contas[0]?.id, 'Escolha…')}</select></label>
+    <label class="f">Comprovante<input class="campo" name="comprovante" autocomplete="off" placeholder="Nome do arquivo ou link na pasta do cliente"><span class="dica">Opcional. Ajuda a conferir depois.</span></label>`, {
     rotulo: 'Confirmar',
     onSubmit: async (d) => {
       const valor = parseDinheiro(d.valor);
       if (!valor) throw new Error('Valor inválido.');
-      await api(`parcelas/${p.id}/baixa`, { method: 'POST', body: { data: d.data, valor_cents: valor, conta_id: d.conta_id } });
+      await api(`parcelas/${p.id}/baixa`, { method: 'POST', body: { data: d.data, valor_cents: valor, conta_id: d.conta_id, comprovante: d.comprovante || undefined } });
       guardar('ultimaConta', d.conta_id);
       toast(rec ? 'Recebimento registrado.' : 'Pagamento registrado.');
       aoSalvar?.();

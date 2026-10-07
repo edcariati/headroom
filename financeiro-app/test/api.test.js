@@ -176,3 +176,24 @@ test('usuários por e-mail: criar com senha provisória, entrar, trocar senha, e
   await tratar({ metodo: 'DELETE', rota: `usuarios/${idSem}`, cookie: `sessao=${criarSessao(SENHA)}`, ip: '3.3.3.3' }, { store: loja2, senha: SENHA, hoje: () => HOJE });
   assert.equal((await comSemente({ email: 'a@b.com', senha: 'senha-semente-1' })).status, 401);
 });
+
+test('fluxos pela API: contato, conferência, entrega e comprovante na baixa', async () => {
+  const store = new StoreMemoria();
+  const conta = (await j(store, 'POST', 'cadastros/contas', { corpo: { nome: 'Inter', saldo_inicial_cents: 100000 } })).corpo;
+  const cli = (await j(store, 'POST', 'cadastros/pessoas', { corpo: { nome: 'Maria' } })).corpo;
+  const cat = (await j(store, 'GET', 'cadastros/categorias')).corpo.find((c) => c.tipo === 'receita');
+  await j(store, 'POST', 'lancamentos', { corpo: { tipo: 'receita', nome: 'P', valor_total_cents: 50000, primeiro_vencimento: '2026-06-01', categoria_id: cat.id, pessoa_id: cli.id, conta_id: conta.id } });
+  const parcela = (await j(store, 'GET', 'parcelas', { query: { tipo: 'receita', de: '2026-01-01', ate: '2026-12-31' } })).corpo.itens[0];
+  assert.equal((await j(store, 'GET', 'a-receber')).corpo.clientes[0].ultimo_contato, null);
+  assert.equal((await j(store, 'POST', 'contatos', { corpo: { pessoa_id: cli.id, resposta: '' } })).status, 400);
+  assert.equal((await j(store, 'POST', 'contatos', { corpo: { pessoa_id: cli.id, canal: 'whatsapp', resposta: 'Paga sexta' } })).status, 201);
+  assert.equal((await j(store, 'GET', 'a-receber')).corpo.clientes[0].ultimo_contato.resposta, 'Paga sexta');
+  assert.equal((await j(store, 'POST', `parcelas/${parcela.id}/baixa`, { corpo: { data: HOJE, conta_id: conta.id, comprovante: 'pix.pdf' } })).status, 200);
+  const conf = await j(store, 'POST', 'conferencias', { corpo: { conta_id: conta.id, saldo_banco_cents: 150000 } });
+  assert.equal(conf.status, 201); assert.equal(conf.corpo.diferenca_cents, 0);
+  assert.equal((await j(store, 'POST', 'entregas', { corpo: { observacao: 'Enviado ao diretor' } })).status, 201);
+  const f = (await j(store, 'GET', 'fluxos')).corpo;
+  assert.equal(f.passos.length, 9);
+  assert.equal(f.passos[5].pendencias, 0); assert.equal(f.passos[7].pendencias, 0); assert.equal(f.passos[8].pendencias, 0);
+  assert.equal(f.passos[7].ultimo, HOJE);
+});

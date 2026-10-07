@@ -60,6 +60,8 @@ export async function semearDemo(store, hoje = '2026-10-05') {
     valor_total_cents: 120000, primeiro_vencimento: '2026-09-18' });
   add('transferencias', F.criarTransferencia(d, { descricao: 'Reserva de caixa', valor_cents: 500000, conta_origem_id: inter.id, conta_destino_id: reserva.id, data: '2026-06-02' }));
 
-  for (const col of ['contas', 'servicos', 'pessoas', 'contratos', 'lancamentos', 'transferencias']) for (const o of d[col]) await gravar(store, col, o);
+  add('contatos', { pessoa_id: clientes[1].id, data: '2026-10-01', canal: 'whatsapp', resposta: 'Disse que paga até sexta e pediu o boleto de novo.', parcela_id: null, criado_em: `${hoje}T09:00:00.000Z` });
+  add('conferencias', { conta_id: inter.id, data: '2026-10-02', saldo_banco_cents: 0, saldo_app_cents: 0, diferenca_cents: 0, observacao: null, criado_em: `${hoje}T09:00:00.000Z` });
+  for (const col of ['contas', 'servicos', 'pessoas', 'contratos', 'lancamentos', 'transferencias', 'contatos', 'conferencias']) for (const o of d[col]) await gravar(store, col, o);
   // plano de contas e marcador são criados por carregarDados quando o marcador não existe
 }

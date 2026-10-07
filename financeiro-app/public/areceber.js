@@ -2,6 +2,7 @@
 import { $, $$, api, brl, dataBR, esc, qs } from './util.js';
 import { animarContadores, chipStatus, estadoVazio, gauge, icon, kpi, revelar, skeletonPagina } from './ui.js';
 import { formBaixa } from './forms.js';
+import { formContato, nomeCanal } from './fluxos.js';
 
 const fmtPct = (v) => `${v.toFixed(1).replace('.', ',')}%`;
 const soDigitos = (v) => String(v || '').replace(/\D/g, '');
@@ -42,7 +43,8 @@ export async function aReceberView(el) {
       <table class="tbl-mini">${c.parcelas.map((p, j) => `<tr><td>${esc(p.nome)}${p.contrato_codigo ? ` <span class="suave">· ${esc(p.contrato_codigo)}</span>` : ''}</td><td>${dataBR(p.vencimento)}</td>
         <td class="num"><b>${brl(p.aberto_cents)}</b></td><td>${p.status === 'vencido' ? `<span class="chip s-vencido">${atrasoTxt(p.dias_atraso)}</span>` : chipStatus(p.status)}</td>
         <td><button type="button" class="btn btn-sm" data-baixa="${i}:${j}">${icon('check')}Receber</button></td></tr>`).join('')}</table>
-      ${c.vencido_cents ? `<div class="cobranca-acoes">${acaoContato(c)}</div>` : ''}</div></article>`;
+      ${c.ultimo_contato ? `<p class="suave" style="margin-top:var(--s3)">Último contato: ${dataBR(c.ultimo_contato.data)} por ${esc(nomeCanal(c.ultimo_contato.canal))}. ${esc(c.ultimo_contato.resposta)}</p>` : ''}
+      ${c.vencido_cents ? `<div class="cobranca-acoes">${acaoContato(c)}${c.pessoa_id ? `<button type="button" class="btn btn-sm" data-contato="${i}">${icon('check')}Registrar contato</button>` : ''}</div>` : ''}</div></article>`;
 
   el.innerHTML = `
     <div class="filtros"><label class="pilula-vidro busca-campo">${icon('search')}<input class="campo" type="search" name="busca" placeholder="Pesquisar cliente, projeto ou parcela" value="${esc(filtro.busca)}" aria-label="Pesquisar"></label>
@@ -79,6 +81,8 @@ export async function aReceberView(el) {
   el.onclick = (e) => {
     const x = e.target.closest('[data-exp]');
     if (x) { const det = $('.cobranca-det', x.closest('.cobranca')); det.hidden = !det.hidden; x.setAttribute('aria-expanded', String(!det.hidden)); return; }
+    const ct = e.target.closest('[data-contato]');
+    if (ct) { const c = lista[Number(ct.dataset.contato)]; return formContato({ pessoa_id: c.pessoa_id, nome: c.nome }, () => aReceberView(el)); }
     const b = e.target.closest('[data-baixa]');
     if (b) { const [i, j] = b.dataset.baixa.split(':').map(Number); formBaixa(lista[i].parcelas[j], () => aReceberView(el)); }
   };
