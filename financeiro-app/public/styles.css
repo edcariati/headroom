@@ -638,3 +638,30 @@ textarea.campo { min-height: 72px; padding: var(--s3) var(--s4); resize: vertica
 @media (min-width: 769px) { dialog:has(.folha-larga) { width: min(760px, calc(100vw - 24px)); } }
 .folha-corpo h3 { font-size: .8rem; text-transform: uppercase; letter-spacing: .09em; color: var(--text-2); }
 @media (max-width: 520px) { .linha-end { grid-template-columns: minmax(0, 1fr) 96px; } }
+
+/* ---------- a receber ---------- */
+.cobranca.em-atraso { border-color: rgba(248, 113, 113, .45); box-shadow: 0 0 0 1px rgba(248, 113, 113, .15), var(--sombra-vidro, none); }
+.cobranca-topo { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+.cobranca-nome { flex: 1; min-width: 160px; display: grid; }
+.cobranca-nome small { color: var(--text-2); }
+.cobranca-valores { display: flex; gap: var(--s2); flex-wrap: wrap; }
+.cobranca-det { margin-top: var(--s3); padding-top: var(--s3); border-top: 1px solid var(--linha); }
+.cobranca-acoes { display: flex; gap: var(--s2); flex-wrap: wrap; margin-top: var(--s3); }
+.cobranca .toggle[aria-expanded="true"] .ic { transform: rotate(90deg); }
+.tbl-mini { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.tbl-mini th { text-align: left; font-size: .7rem; text-transform: uppercase; letter-spacing: .09em; color: var(--text-2); padding: 6px 8px; }
+.tbl-mini td { padding: 8px; border-top: 1px solid var(--linha); vertical-align: middle; }
+.tbl-mini .num, .tbl-mini th.num { text-align: right; }
+.aging { margin-bottom: var(--s3); }
+.aging-topo { display: flex; justify-content: space-between; gap: var(--s3); margin-bottom: 6px; font-size: .9rem; }
+.aviso-caixa { display: flex; gap: var(--s2); align-items: flex-start; margin-top: var(--s3); padding: var(--s3); border-radius: var(--r-md); background: rgba(248, 113, 113, .12); border: 1px solid rgba(248, 113, 113, .4); }
+@media (max-width: 768px) { .tbl-mini td:nth-child(2) { white-space: nowrap; } .tbl-mini { font-size: .84rem; } }
+@media (max-width: 520px) {
+  .tbl-mini th, .tbl-mini td { padding: 6px 3px; }
+  .tbl-mini { font-size: .76rem; }
+  .cobranca-det .tbl-mini, .cobranca-det .tbl-mini tbody { display: block; }
+  .cobranca-det .tbl-mini tr { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 8px 0; border-top: 1px solid var(--linha); }
+  .cobranca-det .tbl-mini td { border: 0; padding: 0; }
+  .cobranca-det .tbl-mini td:first-child { flex: 1 1 100%; font-size: .86rem; }
+}
+@media (max-width: 520px) { .tbl-mini th { letter-spacing: 0; font-size: .64rem; } .tbl-mini { font-size: .72rem; } }

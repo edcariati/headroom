@@ -620,3 +620,48 @@ export function sugestoesCodigo(d, hoje = hojeISO()) {
   const projeto = `${pref}${String(maior(d.contratos.map((c) => c.codigo), new RegExp(`^${pref}(\\d+)$`, 'i')) + 1).padStart(2, '0')}`;
   return { cliente, projeto };
 }
+
+// ---------- a receber: quem ainda deve, o que vence e o impacto no caixa ----------
+
+const diasEntre = (de, ate) => Math.round((Date.parse(ate) - Date.parse(de)) / 864e5);
+const somaDias = (iso, n) => new Date(Date.parse(iso) + n * 864e5).toISOString().slice(0, 10);
+
+export function aReceber(d, f = {}, hoje = hojeISO()) {
+  const abertas = (tipo) => expandir(d, hoje).filter((p) => p.tipo === tipo && p.aberto_cents > 0);
+  const rec = abertas('receita').map((p) => ({ ...p, dias_atraso: p.vencimento < hoje ? diasEntre(p.vencimento, hoje) : 0 }));
+  const faixa = (de, ate) => rec.filter((p) => p.dias_atraso >= de && p.dias_atraso <= ate);
+  const tot = (l) => ({ qtd: l.length, valor_cents: soma(l, (p) => p.aberto_cents) });
+  const em = (dias) => rec.filter((p) => p.vencimento >= hoje && p.vencimento <= somaDias(hoje, dias));
+  const porPessoa = Map.groupBy(rec, (p) => p.pessoa_id || '');
+  const busca = (f.busca || '').toLowerCase();
+  const clientesLista = [...porPessoa].map(([pid, ps]) => {
+    const pe = d.mapa.pessoas.get(pid);
+    const venc = ps.filter((p) => p.status === 'vencido');
+    const prox = ps.filter((p) => p.status !== 'vencido');
+    return { pessoa_id: pid || null, nome: pe?.nome ?? 'Sem cliente informado', codigo: pe?.codigo ?? null, telefone: pe?.telefone ?? null, email: pe?.email ?? null,
+      vencido_cents: soma(venc, (p) => p.aberto_cents), a_vencer_cents: soma(prox, (p) => p.aberto_cents), total_cents: soma(ps, (p) => p.aberto_cents),
+      max_atraso_dias: Math.max(0, ...venc.map((p) => p.dias_atraso)), proximo_vencimento: prox[0]?.vencimento ?? null,
+      parcelas: ps.map((p) => ({ id: p.id, nome: p.nome, vencimento: p.vencimento, aberto_cents: p.aberto_cents, valor_cents: p.valor_cents, status: p.status,
+        dias_atraso: p.dias_atraso, contrato_codigo: p.contrato_codigo, conta_id: p.conta_id, tipo: 'receita' })) };
+  }).filter((c) => !busca || `${c.nome} ${c.codigo || ''} ${c.parcelas.map((p) => `${p.nome} ${p.contrato_codigo || ''}`).join(' ')}`.toLowerCase().includes(busca))
+    .sort((a, b) => b.max_atraso_dias - a.max_atraso_dias || (a.proximo_vencimento || '9').localeCompare(b.proximo_vencimento || '9') || a.nome.localeCompare(b.nome));
+  // próximos vencimentos em ordem de data (a agenda de cobrança)
+  const agenda = rec.filter((p) => p.status !== 'vencido').slice(0, 40).map((p) => ({ id: p.id, nome: p.nome, vencimento: p.vencimento, aberto_cents: p.aberto_cents,
+    pessoa_nome: p.pessoa_nome, status: p.status }));
+  // compensação: caixa hoje + o que deve entrar − o que deve sair, nos próximos 30 dias
+  const desp = abertas('despesa');
+  const pagar = (dias) => desp.filter((p) => p.vencimento <= somaDias(hoje, dias));
+  const saldo = soma(saldoContas(d, null, hoje), (c) => c.saldo_cents);
+  const projecao = [7, 15, 30].map((dias) => {
+    const entra = soma(em(dias), (p) => p.aberto_cents), sai = soma(pagar(dias), (p) => p.aberto_cents);
+    return { dias, entra_cents: entra, sai_cents: sai, saldo_projetado_cents: saldo + entra - sai };
+  });
+  return {
+    hoje,
+    totais: { vencido: tot(rec.filter((p) => p.status === 'vencido')), vence_hoje: tot(rec.filter((p) => p.status === 'vence_hoje')),
+      proximos_7: tot(em(7)), proximos_30: tot(em(30)), em_aberto: tot(rec), clientes_em_atraso: clientesLista.filter((c) => c.vencido_cents > 0).length },
+    aging: [['1 a 30 dias', 1, 30], ['31 a 60 dias', 31, 60], ['61 a 90 dias', 61, 90], ['Mais de 90 dias', 91, 99999]].map(([rotulo, a, b]) => ({ rotulo, ...tot(faixa(a, b)) })),
+    clientes: clientesLista, agenda,
+    caixa: { saldo_cents: saldo, vencido_pagar_cents: soma(desp.filter((p) => p.status === 'vencido'), (p) => p.aberto_cents), projecao },
+  };
+}

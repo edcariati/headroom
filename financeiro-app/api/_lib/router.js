@@ -135,6 +135,7 @@ export async function tratar(req, ctx) {
 
     // ----- dashboard e relatórios -----
     if (metodo === 'GET') {
+      if (a === 'a-receber') return ok(F.aReceber(d, query, H));
       if (a === 'clientes') return ok(F.clientes(d, query, H));
       if (a === 'sugestoes-codigo') return ok(F.sugestoesCodigo(d, H));
       if (a === 'resumo') return ok(F.resumo(d, query, H));

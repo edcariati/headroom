@@ -67,6 +67,24 @@ const blocoEndereco = (pref, v = {}) => `
     <label class="f">Bairro<input class="campo" name="${pref}bairro" value="${esc(v.bairro ?? '')}" autocomplete="off"></label></div>
   <div class="linha-end"><label class="f">Cidade<input class="campo" name="${pref}cidade" value="${esc(v.cidade ?? '')}" autocomplete="off"></label>
     <label class="f">Estado<select class="campo" name="${pref}estado"><option value="">—</option>${ESTADOS.map((e) => `<option${v.estado === e ? ' selected' : ''}>${e}</option>`).join('')}</select></label></div>`;
+// Ao digitar um CEP completo, preenche rua, bairro, cidade e estado (consulta pública ViaCEP). Só completa o que estiver vazio.
+function ligarCep(f) {
+  f.addEventListener('input', async (e) => {
+    if (!e.target.name?.endsWith('cep')) return;
+    const pref = e.target.name.slice(0, -3), dig = soDigitos(e.target.value);
+    if (dig.length !== 8 || e.target.dataset.cep === dig) return;
+    e.target.dataset.cep = dig;
+    try {
+      const r = await fetch(`https://viacep.com.br/ws/${dig}/json/`, { signal: AbortSignal.timeout(6000) });
+      const j = await r.json();
+      if (j.erro) return toast('CEP não encontrado. Preencha o endereço manualmente.', { tipo: 'info' });
+      for (const [k, v] of [['endereco', j.logradouro], ['bairro', j.bairro], ['cidade', j.localidade], ['estado', j.uf]]) {
+        const campo = f.elements[pref + k];
+        if (campo && v && !campo.value) campo.value = v;
+      }
+    } catch { /* sem internet ou serviço fora: o endereço continua manual */ }
+  });
+}
 const lerEndereco = (d, pref) => Object.fromEntries(CAMPOS_END.map((k) => [k, (d[pref + k] || '').trim() || null]));
 
 // Dados pessoais: física/jurídica, documento, contato e NFS-e.
@@ -144,7 +162,7 @@ export async function formPessoa({ reg = null, aoSalvar } = {}) {
     },
   });
   const f = $('form', m.dlg);
-  ligarNatureza(f);
+  ligarNatureza(f); ligarCep(f);
 }
 
 const camposProjeto = (c, p, sugestao) => `
@@ -188,7 +206,7 @@ export async function formContrato({ reg = null, pessoa_id = null, aoSalvar } = 
       aoSalvar?.();
     },
   });
-  ligarObra($('form', m.dlg));
+  ligarObra($('form', m.dlg)); ligarCep($('form', m.dlg));
   const ed = editorServicos($('[data-servicos]', m.dlg), c.servicos, reg?.servicos || [], () => { $('#bloco-valor-manual', m.dlg).hidden = ed.valores().length > 0; });
   $('#bloco-valor-manual', m.dlg).hidden = ed.valores().length > 0;
 }
@@ -302,7 +320,7 @@ export async function formCliente(aoSalvar) {
   $('#passo-seguir', f).onclick = () => { if (validar[passo]()) ir(passo + 1); };
   $('#passo-voltar', f).onclick = () => { if (passo > 1) ir(passo - 1); else m.fechar(); };
   f.addEventListener('submit', (e) => { if (passo < 4) { e.preventDefault(); e.stopImmediatePropagation(); if (validar[passo]()) ir(passo + 1); } }, true);
-  ligarNatureza(f); ligarObra(f);
+  ligarNatureza(f); ligarObra(f); ligarCep(f);
   f.gerar.onchange = atualizarResumo;
   f.parcelas.oninput = f.primeiro_vencimento.onchange = atualizarResumo;
   ir(1);

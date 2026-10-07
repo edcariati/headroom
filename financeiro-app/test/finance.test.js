@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   criarDados, criarLancamento, baixarParcela, estornarParcela, editarParcela, dividirCentavos, resumo, fluxoCaixa, dre, listarParcelas,
   criarTransferencia, saldoContas, extratoConta, ErroValidacao, resultadosGerais, resultadosPorProjeto, outrosRelatorios,
-  validarCadastro, emUso, pagamentosCliente, clientes, sugestoesCodigo,
+  validarCadastro, emUso, pagamentosCliente, clientes, sugestoesCodigo, aReceber,
 } from '../api/_lib/finance.js';
 
 const HOJE = '2026-06-15';
@@ -243,4 +243,26 @@ test('cliente: pessoa física/jurídica, documento por natureza, endereço do cl
   const c = validarCadastro(d, 'contratos', { codigo: 'CA260109', nome: 'Obra', obra: { endereco: ' Rua A ', cidade: 'Tatuí', estado: 'sp', numero: '' } });
   assert.deepEqual([c.obra.endereco, c.obra.estado, c.obra.numero], ['Rua A', 'SP', null]);
   assert.equal(validarCadastro(d, 'contratos', { codigo: 'CA260110', nome: 'Sem obra', obra: { endereco: '' } }).obra, null);
+});
+
+test('a receber: atrasos por cliente, faixas de atraso, agenda e projeção de caixa', () => {
+  const d = base(); // hoje = 2026-06-15; Inter começa com 1.000,00
+  rec(d, { nome: 'Atrasada', pessoa_id: 'p1', contrato_id: 't1', valor_total_cents: 30000, primeiro_vencimento: '2026-05-16' }); // 30 dias
+  rec(d, { nome: 'Muito atrasada', pessoa_id: 'p1', valor_total_cents: 20000, primeiro_vencimento: '2026-02-01' }); // 134 dias
+  rec(d, { nome: 'Semana que vem', pessoa_id: 'p1', valor_total_cents: 10000, primeiro_vencimento: '2026-06-20' });
+  rec(d, { nome: 'Paga', pessoa_id: 'p1', valor_total_cents: 99900, primeiro_vencimento: '2026-06-01', primeira_paga: true });
+  rec(d, { nome: 'Sem cliente', valor_total_cents: 5000, primeiro_vencimento: '2026-06-15' });
+  desp(d, { nome: 'Aluguel', valor_total_cents: 40000, primeiro_vencimento: '2026-06-25' });
+  const r = aReceber(d, {}, HOJE);
+  assert.deepEqual([r.totais.vencido.qtd, r.totais.vencido.valor_cents], [2, 50000]);
+  assert.deepEqual([r.totais.vence_hoje.qtd, r.totais.proximos_7.valor_cents, r.totais.clientes_em_atraso], [1, 15000, 1]);
+  assert.equal(r.aging[0].valor_cents, 30000); assert.equal(r.aging[3].valor_cents, 20000);
+  assert.equal(r.clientes[0].nome, 'Cliente A'); assert.equal(r.clientes[0].max_atraso_dias, 134);
+  assert.equal(r.clientes[0].parcelas.length, 3); assert.equal(r.clientes[1].nome, 'Sem cliente informado');
+  assert.equal(r.agenda[0].nome, 'Sem cliente');
+  const caixa = 100000 + 99900; // saldo inicial + recebido
+  assert.equal(r.caixa.saldo_cents, caixa);
+  assert.equal(r.caixa.projecao[0].saldo_projetado_cents, caixa + 15000); // 7 dias: entra 150,00
+  assert.equal(r.caixa.projecao[2].saldo_projetado_cents, caixa + 15000 - 40000);
+  assert.equal(aReceber(d, { busca: 'zzz' }, HOJE).clientes.length, 0);
 });
