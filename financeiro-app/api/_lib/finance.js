@@ -65,7 +65,7 @@ function expandir(d, hoje) {
         vencimento: p.vencimento, competencia: p.competencia, pagamentos,
         valor_pago_cents: soma(pagamentos, (x) => x.valor_cents), data_pagamento: ult?.data ?? null,
         conta_id: ult?.conta_id ?? l.conta_id ?? null, tipo: l.tipo, lancamento_nome: l.nome, nota_fiscal: l.nota_fiscal,
-        etiquetas: l.etiquetas, recorrente: !!l.recorrente, criado_em: l.criado_em || '',
+        etiquetas: l.etiquetas, observacao: l.observacao ?? null, nf_solicitada: !!l.nf_solicitada, recorrente: !!l.recorrente, criado_em: l.criado_em || '',
         pessoa_id: l.pessoa_id, categoria_id: l.categoria_id, centro_custo_id: l.centro_custo_id, contrato_id: l.contrato_id,
         pessoa_nome: pe?.nome ?? null, categoria_nome: caminhoCategoria(d, cat), grupo_dre: cat?.grupo_dre ?? null,
         centro_custo_nome: cc?.nome ?? null, contrato_codigo: ct?.codigo ?? null, contrato_nome: ct?.nome ?? null,

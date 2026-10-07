@@ -218,3 +218,41 @@ export function confirmar(msg, rotulo = 'Excluir') {
 
 export const opcoes = (lista, sel, vazio = '—', rot = (x) => x.nome) =>
   `<option value="">${esc(vazio)}</option>${lista.map((x) => `<option value="${x.id}"${String(sel) === String(x.id) ? ' selected' : ''}>${esc(rot(x))}</option>`).join('')}`;
+
+// Valor por extenso para o recibo: 123456 (centavos) -> "mil duzentos e trinta e quatro reais e cinquenta e seis centavos".
+const UN = ['zero', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove', 'dez', 'onze', 'doze', 'treze', 'quatorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove'];
+const DZ = ['', '', 'vinte', 'trinta', 'quarenta', 'cinquenta', 'sessenta', 'setenta', 'oitenta', 'noventa'];
+const CT = ['', 'cento', 'duzentos', 'trezentos', 'quatrocentos', 'quinhentos', 'seiscentos', 'setecentos', 'oitocentos', 'novecentos'];
+function ate999(n) {
+  if (n === 100) return 'cem';
+  const c = Math.floor(n / 100), r = n % 100, partes = [];
+  if (c) partes.push(CT[c]);
+  if (r) partes.push(r < 20 ? UN[r] : `${DZ[Math.floor(r / 10)]}${r % 10 ? ` e ${UN[r % 10]}` : ''}`);
+  return partes.join(' e ');
+}
+function inteiroExtenso(n) {
+  if (n === 0) return 'zero';
+  const mi = Math.floor(n / 1e6), mil = Math.floor((n % 1e6) / 1e3), resto = n % 1e3, partes = [];
+  if (mi) partes.push(`${ate999(mi)} ${mi === 1 ? 'milhão' : 'milhões'}`);
+  if (mil) partes.push(mil === 1 ? 'mil' : `${ate999(mil)} mil`);
+  if (resto) partes.push(ate999(resto));
+  // "e" antes do último grupo quando ele é menor que 100 ou múltiplo de 100
+  return partes.length > 1 && (resto && (resto < 100 || resto % 100 === 0) || (!resto && mil && (mil < 100 || mil % 100 === 0))) ? `${partes.slice(0, -1).join(' ')} e ${partes.at(-1)}` : partes.join(' ');
+}
+export function porExtenso(cents) {
+  const reais = Math.floor(cents / 100), cent = cents % 100, partes = [];
+  if (reais) partes.push(`${inteiroExtenso(reais)} ${reais === 1 ? 'real' : (reais % 1e6 === 0 && reais >= 1e6 ? 'de reais' : 'reais')}`);
+  if (cent) partes.push(`${inteiroExtenso(cent)} ${cent === 1 ? 'centavo' : 'centavos'}`);
+  return partes.length ? partes.join(' e ') : 'zero real';
+}
+// Lê o arquivo escolhido como base64 (sem o prefixo "data:") e confere o limite de 3 MB.
+export function lerArquivoBase64(arquivo) {
+  return new Promise((resolve, reject) => {
+    if (arquivo.size > 3 * 1024 * 1024) return reject(new Error('O arquivo passa de 3 MB. Reduza o tamanho e tente de novo.'));
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1] || '');
+    r.onerror = () => reject(new Error('Não foi possível ler o arquivo.'));
+    r.readAsDataURL(arquivo);
+  });
+}
+export const urlArquivo = (id) => urlApi(`anexos/${id}/arquivo`);

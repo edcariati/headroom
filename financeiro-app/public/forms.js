@@ -79,6 +79,7 @@ export async function formLancamento(tipo, aoSalvar, prefill = {}) {
         <label class="f">Nota fiscal<input class="campo" name="nota_fiscal" autocomplete="off"></label>
       </div>
       <label class="f">Etiquetas<input class="campo" name="etiquetas" placeholder="separe por vírgula" autocomplete="off"></label>
+      ${ehReceita ? interruptor('nf_solicitada', 'O cliente pediu nota fiscal <span class="suave">(entra na fila de emissão)</span>') : ''}
       ${interruptor('primeira_paga', ehReceita ? 'A primeira parcela já foi recebida' : 'A primeira parcela já foi paga')}
       <label class="f" id="bloco-pagamento" hidden>Data do ${ehReceita ? 'recebimento' : 'pagamento'}<input class="campo" type="date" name="data_pagamento" value="${hoje}"></label>
       <div class="glass painel" id="resumo-lanc" style="padding:var(--s4)"></div>
@@ -99,7 +100,7 @@ export async function formLancamento(tipo, aoSalvar, prefill = {}) {
         competencia: d.competencia || d.primeiro_vencimento, parcelas: Number(d.parcelas || 1), recorrente: d.recorrente,
         repeticoes: Number(d.repeticoes || 12), pessoa_id: n(d.pessoa_id), categoria_id: n(d.categoria_id), centro_custo_id: n(d.centro_custo_id),
         contrato_id: n(d.contrato_id), conta_id: n(d.conta_id), nota_fiscal: d.nota_fiscal || null, etiquetas: d.etiquetas || null,
-        primeira_paga: d.primeira_paga, data_pagamento: d.data_pagamento,
+        primeira_paga: d.primeira_paga, data_pagamento: d.data_pagamento, nf_solicitada: ehReceita ? !!d.nf_solicitada : undefined,
       } });
       if (d.conta_id) guardar('ultimaConta', d.conta_id);
       if (d.categoria_id) guardar(`ultimaCategoria_${tipo}`, d.categoria_id);
@@ -198,7 +199,7 @@ export async function formLancamento(tipo, aoSalvar, prefill = {}) {
       if (!f.nome.value && !f.valor.value) return;
       const dados = { passo };
       CAMPOS_RASCUNHO.forEach((k) => { dados[k] = f.elements[k].value; });
-      dados.recorrente = f.recorrente.checked; dados.primeira_paga = f.primeira_paga.checked;
+      dados.recorrente = f.recorrente.checked; dados.primeira_paga = f.primeira_paga.checked; if (f.nf_solicitada) dados.nf_solicitada = f.nf_solicitada.checked;
       guardar(chaveRascunho, JSON.stringify(dados));
     }, 350);
   }
@@ -209,7 +210,7 @@ export async function formLancamento(tipo, aoSalvar, prefill = {}) {
     try {
       const r = JSON.parse(bruto);
       CAMPOS_RASCUNHO.forEach((k) => { if (r[k] !== undefined && f.elements[k]) f.elements[k].value = r[k]; });
-      f.recorrente.checked = !!r.recorrente; f.primeira_paga.checked = !!r.primeira_paga;
+      f.recorrente.checked = !!r.recorrente; f.primeira_paga.checked = !!r.primeira_paga; if (f.nf_solicitada) f.nf_solicitada.checked = !!r.nf_solicitada;
       f.recorrente.onchange(); f.primeira_paga.onchange();
       $('#aviso-rascunho', f).hidden = false;
       if (r.competencia && r.competencia !== r.primeiro_vencimento) f.competencia.dataset.manual = '1';
@@ -225,22 +226,65 @@ export async function formLancamento(tipo, aoSalvar, prefill = {}) {
 export async function formBaixa(p, aoSalvar) {
   const c = await cadastros();
   const rec = p.tipo === 'receita';
+  const { enviarAnexo, emitirRecibo } = await import('./documentos.js');
   modal(rec ? 'Registrar recebimento' : 'Registrar pagamento', `
     <div class="glass painel" style="padding:var(--s4)"><strong>${esc(p.nome)}</strong><p class="suave">Vencimento ${dataBR(p.vencimento)} · falta ${(p.aberto_cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p></div>
     <div class="linha2"><label class="f">Data *<input class="campo" type="date" name="data" value="${hojeISO()}" required></label>
     <label class="f">Valor (R$) *<input class="campo" name="valor" value="${dinheiroInput(p.aberto_cents)}" inputmode="decimal" required><span class="dica">Pode ser parcial: o restante continua em aberto.</span></label></div>
-    <label class="f">Conta bancária *<select class="campo" name="conta_id" required>${opcoes(c.contas, p.conta_id || ler('ultimaConta') || c.contas[0]?.id, 'Escolha…')}</select></label>
-    <label class="f">Comprovante<input class="campo" name="comprovante" autocomplete="off" placeholder="Nome do arquivo ou link na pasta do cliente"><span class="dica">Opcional. Ajuda a conferir depois.</span></label>`, {
+    <div class="linha2"><label class="f">Conta bancária *<select class="campo" name="conta_id" required>${opcoes(c.contas, p.conta_id || ler('ultimaConta') || c.contas[0]?.id, 'Escolha…')}</select></label>
+    ${rec ? `<label class="f">Forma de pagamento<select class="campo" name="forma">${['Pix', 'Boleto', 'Transferência', 'Dinheiro', 'Cartão'].map((x) => `<option${(ler('ultimaForma') || 'Pix') === x ? ' selected' : ''}>${x}</option>`).join('')}</select></label>` : '<div></div>'}</div>
+    <label class="f">Comprovante (anexar arquivo)<input class="campo" type="file" name="arquivo" accept=".pdf,.png,.jpg,.jpeg,.webp,.xml"><span class="dica">PDF, imagem ou XML de até 3 MB. Fica guardado dentro do aplicativo e entra na busca.</span></label>
+    ${rec ? interruptor('emitir_recibo', 'Emitir recibo para o cliente', ' checked') : ''}`, {
     rotulo: 'Confirmar', chave: `baixa:${p.id}`,
     onSubmit: async (d) => {
       const valor = parseDinheiro(d.valor);
       if (!valor) throw new Error('Valor inválido.');
-      await api(`parcelas/${p.id}/baixa`, { method: 'POST', body: { data: d.data, valor_cents: valor, conta_id: d.conta_id, comprovante: d.comprovante || undefined } });
+      const arquivo = d.arquivo?.name ? d.arquivo : null;
+      await api(`parcelas/${p.id}/baixa`, { method: 'POST', body: { data: d.data, valor_cents: valor, conta_id: d.conta_id, comprovante: arquivo?.name || undefined } });
       guardar('ultimaConta', d.conta_id);
+      if (d.forma) guardar('ultimaForma', d.forma);
       toast(rec ? 'Recebimento registrado.' : 'Pagamento registrado.');
+      let recibo = null;
+      try {
+        if (arquivo) await enviarAnexo(arquivo, { vinculo: { tipo: 'parcela', id: p.id }, categoria: 'comprovante' });
+        if (rec && d.emitir_recibo) recibo = await emitirRecibo(p.id, { forma: d.forma, abrir: false });
+      } catch (err) { toast(`Recebimento registrado, mas ${err.message}`, 'erro'); }
+      aoSalvar?.();
+      if (recibo) setTimeout(async () => (await import('./documentos.js')).abrirRecibo(recibo), 80);
+    },
+  });
+}
+
+// Edita o lançamento inteiro (todos os campos pertinentes). O vencimento e o valor de cada parcela são ajustados à parte.
+export async function formEditarLancamento(item, aoSalvar) {
+  const c = await cadastros();
+  const rec = item.tipo === 'receita';
+  const pessoas = c.pessoas.filter((p) => p.tipo === 'ambos' || p.tipo === (rec ? 'cliente' : 'fornecedor') || p.id === item.pessoa_id);
+  const m = modal(`Editar ${rec ? 'receita' : 'despesa'}`, `
+    <label class="f">Nome *<input class="campo" name="nome" required autocomplete="off" value="${esc(item.lancamento_nome)}"></label>
+    <div class="linha2"><label class="f">${rec ? 'Cliente' : 'Fornecedor'}<select class="campo" name="pessoa_id">${opcoes(pessoas, item.pessoa_id, '—')}</select></label>
+      <label class="f">Categoria<select class="campo" name="categoria_id">${opcoesCategorias(c.categorias.filter((x) => x.tipo === item.tipo), item.categoria_id, 'Sem categoria')}</select></label></div>
+    <div class="linha2"><label class="f">Centro de custo<select class="campo" name="centro_custo_id">${opcoes(c.centros, item.centro_custo_id, '—')}</select></label>
+      <label class="f">Projeto / contrato<select class="campo" name="contrato_id">${opcoes(c.contratos, item.contrato_id, 'Nenhum (é do escritório)', (x) => `${x.codigo} - ${x.nome}`)}</select></label></div>
+    <div class="linha2"><label class="f">Conta bancária<select class="campo" name="conta_id">${opcoes(c.contas, item.conta_id, '—')}</select></label>
+      <label class="f">Data de competência<input class="campo" type="date" name="competencia" value="${esc(item.competencia || '')}"></label></div>
+    <div class="linha2"><label class="f">Nota fiscal<input class="campo" name="nota_fiscal" autocomplete="off" value="${esc(item.nota_fiscal || '')}"></label>
+      <label class="f">Etiquetas<input class="campo" name="etiquetas" autocomplete="off" placeholder="separe por vírgula" value="${esc(item.etiquetas || '')}"></label></div>
+    <label class="f">Observação<textarea class="campo" name="observacao" rows="2">${esc(item.observacao || '')}</textarea></label>
+    ${rec ? interruptor('nf_solicitada', 'O cliente pediu nota fiscal', item.nf_solicitada ? ' checked' : '') : ''}
+    ${item.recorrente ? '<p class="suave">Lançamento mensal: a competência acompanha cada vencimento.</p>' : ''}
+    ${item.valor_pago_cents === 0 ? `<button type="button" class="btn btn-sm" id="ajustar-parcela">${icon('calendario')}Ajustar vencimento e valor desta parcela</button>` : '<p class="suave">Esta parcela já tem pagamento. Para mudar o vencimento ou o valor, estorne o pagamento antes.</p>'}`, {
+    rotulo: 'Salvar alterações', chave: `lancamento:${item.lancamento_id}`,
+    onSubmit: async (d) => {
+      const n = (v) => v || null;
+      await api(`lancamentos/${item.lancamento_id}`, { method: 'PUT', body: { nome: d.nome, pessoa_id: n(d.pessoa_id), categoria_id: n(d.categoria_id), centro_custo_id: n(d.centro_custo_id), contrato_id: n(d.contrato_id),
+        conta_id: n(d.conta_id), competencia: d.competencia || undefined, nota_fiscal: d.nota_fiscal || '', etiquetas: d.etiquetas || '', observacao: d.observacao || '', nf_solicitada: rec ? !!d.nf_solicitada : undefined } });
+      toast('Lançamento atualizado.');
       aoSalvar?.();
     },
   });
+  const ajustar = $('#ajustar-parcela', m.dlg);
+  if (ajustar) ajustar.onclick = () => { m.fechar(); formEditarParcela(item, aoSalvar); };
 }
 
 export function formEditarParcela(p, aoSalvar) {
@@ -280,7 +324,7 @@ export async function formTransferencia(aoSalvar) {
 
 // Configuração dos cadastros: [campo, rótulo, tipo, opções]
 export const CADASTROS = {
-  contas: { titulo: 'Contas bancárias', singular: 'conta', campos: [['nome', 'Nome', 'text'], ['banco', 'Banco', 'text'], ['saldo_inicial_cents', 'Saldo inicial', 'money']],
+  contas: { titulo: 'Contas bancárias', singular: 'conta', campos: [['nome', 'Nome', 'text'], ['banco', 'Banco', 'text'], ['saldo_inicial_cents', 'Saldo inicial', 'money'], ['ativa', 'Situação', 'select', { ativa: 'Ativa', inativa: 'Inativa' }]],
     colunas: [['nome', 'Nome'], ['banco', 'Banco'], ['saldo_inicial_cents', 'Saldo inicial', 'money']] },
   categorias: { titulo: 'Categorias', singular: 'categoria', campos: [['nome', 'Nome', 'text'], ['pai_id', 'Subcategoria de', 'categoria_pai'], ['tipo', 'Tipo', 'select', { receita: 'Receita', despesa: 'Despesa' }],
     ['grupo_dre', 'Grupo da DRE', 'select', GRUPOS]], colunas: [['nome', 'Nome'], ['tipo', 'Tipo'], ['grupo_dre', 'Grupo da DRE', 'grupo']] },
@@ -302,13 +346,13 @@ export async function formCadastro(tipo, reg, aoSalvar) {
   const cfg = CADASTROS[tipo];
   const c = await cadastros();
   const campo = ([k, rot, t, ops]) => {
-    const v = reg?.[k] ?? '';
+    const v = k === 'ativa' ? (reg && (reg.ativa === 0 || reg.ativa === false) ? 'inativa' : 'ativa') : (reg?.[k] ?? '');
     const obrig = k === 'nome' || k === 'codigo';
     let ctl;
     if (t === 'select') ctl = `<select class="campo" name="${k}">${Object.entries(ops).map(([val, r]) => `<option value="${val}"${v === val ? ' selected' : ''}>${esc(r)}</option>`).join('')}</select>`;
     else if (t === 'pessoa') ctl = `<select class="campo" name="${k}">${opcoes(c.pessoas.filter((p) => p.tipo !== 'fornecedor'), v, '—')}</select>`;
     else if (t === 'categoria') ctl = `<select class="campo" name="${k}">${opcoesCategorias(c.categorias.filter((x) => x.tipo === 'receita'), v, '—')}</select>`;
-    else if (t === 'categoria_pai') ctl = `<select class="campo" name="${k}"><option value="">Nenhuma (é uma categoria principal)</option>${c.categorias.filter((x) => !x.pai_id && x.id !== reg?.id && !c.categorias.some((f) => f.pai_id === reg?.id)).map((x) => `<option value="${x.id}"${String(v) === String(x.id) ? ' selected' : ''}>${esc(x.nome)} (${x.tipo})</option>`).join('')}</select>`;
+    else if (t === 'categoria_pai') ctl = `<select class="campo" name="${k}"><option value="">Nenhuma (é uma categoria principal)</option>${c.categorias.filter((x) => !x.pai_id && x.id !== reg?.id && !(reg && c.categorias.some((f) => f.pai_id === reg.id))).map((x) => `<option value="${x.id}"${String(v) === String(x.id) ? ' selected' : ''}>${esc(x.nome)} (${x.tipo})</option>`).join('')}</select>`;
     else if (t === 'textarea') ctl = `<textarea class="campo" name="${k}" rows="2">${esc(v)}</textarea>`;
     else if (t === 'money') ctl = `<input class="campo" name="${k}" inputmode="decimal" value="${v === '' ? '' : dinheiroInput(v)}" placeholder="0,00">`;
     else ctl = `<input class="campo" type="${t === 'date' ? 'date' : 'text'}" name="${k}" value="${esc(v)}"${obrig ? ' required' : ''} autocomplete="off">`;
@@ -320,6 +364,7 @@ export async function formCadastro(tipo, reg, aoSalvar) {
       const body = {};
       for (const [k, , t] of cfg.campos) {
         if (t === 'money') { const v = parseDinheiro(d[k]); body[k] = v ?? 0; } else if (t === 'pessoa' || t === 'categoria' || t === 'categoria_pai') body[k] = d[k] || null;
+        else if (k === 'ativa') body[k] = d[k] === 'inativa' ? 0 : 1;
         else body[k] = d[k];
       }
       await api(`cadastros/${tipo}${reg ? '/' + reg.id : ''}`, { method: reg ? 'PUT' : 'POST', body });
