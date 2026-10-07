@@ -614,3 +614,13 @@ body.gaveta-aberta .cta, body.gaveta-aberta .bottomnav { display: none !importan
   .pilula-vidro:not(:has(input[type=date])) { flex-wrap: nowrap; }
   .pilula-vidro:not(:has(input[type=date])) select.campo { grid-column: auto; border-top: 0; margin: 0; flex: 1; width: auto; }
 }
+
+/* ---------- clientes: serviços contratados ---------- */
+textarea.campo { min-height: 72px; padding: var(--s3) var(--s4); resize: vertical; line-height: 1.45; }
+.servicos-lista { display: grid; gap: var(--s2); margin-bottom: var(--s2); }
+.servico-linha { display: grid; grid-template-columns: minmax(0, 1fr) 130px 44px; gap: var(--s2); align-items: center; }
+.servicos-total { display: flex; justify-content: space-between; align-items: center; padding: var(--s2) var(--s1); }
+.tbl tr.clicavel { cursor: pointer; }
+.tbl tr.clicavel:focus-visible { outline: 2px solid var(--amber); outline-offset: -2px; }
+@media (max-width: 520px) { .servico-linha { grid-template-columns: minmax(0, 1fr) 104px 44px; } }
+.tbl td[data-label="Código"] { white-space: nowrap; }

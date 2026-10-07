@@ -48,3 +48,10 @@ Para testar o login localmente: `ADMIN_SENHA=qualquer-coisa npm run demo`.
 - Boleto/Pix integrado, notas fiscais, importação de XML.
 - Leitura de comprovantes por IA e conciliação bancária por Open Finance.
 - Importação de planilha do Vobi.
+
+## Clientes, códigos e serviços contratados
+
+- **Clientes** (menu Financeiro): cadastro com código (`CLI-0001`, automático e editável), CPF/CNPJ, contato, cidade, endereço e observações.
+- **Projetos**: código no padrão `CA` + ano + mês + número (ex.: `CA261001`), nome, área em m² (opcional) e os **serviços contratados** com valor; o valor do projeto é a soma dos serviços.
+- **Serviços** (Cadastros → Serviços): catálogo de serviços do escritório, cada um ligado a uma categoria de receita.
+- "Novo cliente" faz tudo em 3 etapas (dados → projeto e serviços → cobrança opcional, que já gera as parcelas a receber).

@@ -68,6 +68,10 @@ export async function tratar(req, ctx) {
       }
       if (metodo === 'POST' && !c) {
         const reg = { ...F.validarCadastro(d, b, body), id: F.novoId() };
+        if (b === 'pessoas') {
+          reg.criado_em = agora();
+          if (!reg.codigo && reg.tipo !== 'fornecedor') reg.codigo = F.sugestoesCodigo(d, H).cliente;
+        }
         await gravar(store, b, reg);
         return ok(reg, 201);
       }
@@ -131,6 +135,8 @@ export async function tratar(req, ctx) {
 
     // ----- dashboard e relatórios -----
     if (metodo === 'GET') {
+      if (a === 'clientes') return ok(F.clientes(d, query, H));
+      if (a === 'sugestoes-codigo') return ok(F.sugestoesCodigo(d, H));
       if (a === 'resumo') return ok(F.resumo(d, query, H));
       if (a === 'pagamentos-cliente') return ok(F.pagamentosCliente(d, query, H));
       if (a === 'relatorios' && b === 'fluxo-caixa') return ok(F.fluxoCaixa(d, ano(query), H));

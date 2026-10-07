@@ -9,9 +9,9 @@ export const GRUPOS = {
 let cache = null;
 export async function cadastros(forcar = false) {
   if (!cache || forcar) {
-    const [contas, categorias, centros, pessoas, contratos] = await Promise.all(
-      ['contas', 'categorias', 'centros', 'pessoas', 'contratos'].map((c) => api(`cadastros/${c}`)));
-    cache = { contas: contas.filter((c) => c.ativa), todasContas: contas, categorias, centros, pessoas, contratos };
+    const [contas, categorias, centros, pessoas, contratos, servicos] = await Promise.all(
+      ['contas', 'categorias', 'centros', 'pessoas', 'contratos', 'servicos'].map((c) => api(`cadastros/${c}`)));
+    cache = { contas: contas.filter((c) => c.ativa), todasContas: contas, categorias, centros, pessoas, contratos, servicos };
   }
   return cache;
 }
@@ -23,7 +23,7 @@ const tirar = (k) => { try { localStorage.removeItem(k); } catch { /* sem storag
 const interruptor = (nome, texto, extra = '') => `<label class="switch"><input type="checkbox" name="${nome}"${extra}><span class="trilho" aria-hidden="true"></span><span>${texto}</span></label>`;
 
 // ---------- novo lançamento (receita ou despesa), em 3 etapas ----------
-export async function formLancamento(tipo, aoSalvar) {
+export async function formLancamento(tipo, aoSalvar, prefill = {}) {
   const c = await cadastros();
   const ehReceita = tipo === 'receita';
   const pessoas = c.pessoas.filter((p) => p.tipo === 'ambos' || p.tipo === (ehReceita ? 'cliente' : 'fornecedor'));
@@ -204,7 +204,9 @@ export async function formLancamento(tipo, aoSalvar) {
       if (r.competencia && r.competencia !== r.primeiro_vencimento) f.competencia.dataset.manual = '1';
     } catch { tirar(chaveRascunho); }
   }
-  $('#descartar-rascunho', f).onclick = () => { tirar(chaveRascunho); m.fechar(); formLancamento(tipo, aoSalvar); };
+  if (prefill.pessoa_id) f.pessoa_id.value = prefill.pessoa_id;
+  if (prefill.contrato_id) f.contrato_id.value = prefill.contrato_id;
+  $('#descartar-rascunho', f).onclick = () => { tirar(chaveRascunho); m.fechar(); formLancamento(tipo, aoSalvar, prefill); };
   ir(1);
   setTimeout(() => f.nome.focus({ preventScroll: true }), 60);
 }
@@ -270,15 +272,19 @@ export const CADASTROS = {
   categorias: { titulo: 'Categorias', singular: 'categoria', campos: [['nome', 'Nome', 'text'], ['tipo', 'Tipo', 'select', { receita: 'Receita', despesa: 'Despesa' }],
     ['grupo_dre', 'Grupo da DRE', 'select', GRUPOS]], colunas: [['nome', 'Nome'], ['tipo', 'Tipo'], ['grupo_dre', 'Grupo da DRE', 'grupo']] },
   centros: { titulo: 'Centros de custo', singular: 'centro de custo', campos: [['nome', 'Nome', 'text']], colunas: [['nome', 'Nome']] },
-  pessoas: { titulo: 'Clientes e fornecedores', singular: 'pessoa', campos: [['nome', 'Nome', 'text'],
-    ['tipo', 'Tipo', 'select', { cliente: 'Cliente', fornecedor: 'Fornecedor', ambos: 'Cliente e fornecedor' }], ['documento', 'CPF/CNPJ', 'text'], ['email', 'E-mail', 'text'], ['telefone', 'Telefone', 'text']],
-    colunas: [['nome', 'Nome'], ['tipo', 'Tipo'], ['documento', 'CPF/CNPJ'], ['email', 'E-mail'], ['telefone', 'Telefone']] },
+  pessoas: { titulo: 'Clientes e fornecedores', singular: 'pessoa', campos: [['codigo', 'Código (automático se vazio)', 'text'], ['nome', 'Nome', 'text'],
+    ['tipo', 'Tipo', 'select', { cliente: 'Cliente', fornecedor: 'Fornecedor', ambos: 'Cliente e fornecedor' }], ['documento', 'CPF/CNPJ', 'text'], ['email', 'E-mail', 'text'], ['telefone', 'Telefone', 'text'],
+      ['cidade', 'Cidade', 'text'], ['endereco', 'Endereço', 'text'], ['observacoes', 'Observações', 'textarea']],
+    colunas: [['codigo', 'Código'], ['nome', 'Nome'], ['tipo', 'Tipo'], ['documento', 'CPF/CNPJ'], ['email', 'E-mail'], ['telefone', 'Telefone']] },
+  servicos: { titulo: 'Serviços', singular: 'serviço', campos: [['nome', 'Nome', 'text'], ['descricao', 'Descrição', 'text'], ['valor_padrao_cents', 'Valor padrão', 'money'], ['categoria_id', 'Categoria da receita', 'categoria']],
+    colunas: [['nome', 'Nome'], ['descricao', 'Descrição'], ['valor_padrao_cents', 'Valor padrão', 'money']] },
   contratos: { titulo: 'Projetos / contratos', singular: 'contrato', campos: [['codigo', 'Código', 'text'], ['nome', 'Nome', 'text'], ['pessoa_id', 'Cliente', 'pessoa'],
     ['valor_total_cents', 'Valor do contrato', 'money'], ['competencia', 'Data de competência', 'date'], ['status', 'Status', 'select', { ativo: 'Ativo', concluido: 'Concluído', cancelado: 'Cancelado' }]],
     colunas: [['codigo', 'Código'], ['nome', 'Nome'], ['pessoa_nome', 'Cliente'], ['valor_total_cents', 'Valor', 'money'], ['status', 'Status']] },
 };
 
 export async function formCadastro(tipo, reg, aoSalvar) {
+  if (tipo === 'contratos') { const { formContrato } = await import('./clientes.js'); return formContrato({ reg, aoSalvar }); }
   const cfg = CADASTROS[tipo];
   const c = await cadastros();
   const campo = ([k, rot, t, ops]) => {
@@ -287,6 +293,8 @@ export async function formCadastro(tipo, reg, aoSalvar) {
     let ctl;
     if (t === 'select') ctl = `<select class="campo" name="${k}">${Object.entries(ops).map(([val, r]) => `<option value="${val}"${v === val ? ' selected' : ''}>${esc(r)}</option>`).join('')}</select>`;
     else if (t === 'pessoa') ctl = `<select class="campo" name="${k}">${opcoes(c.pessoas.filter((p) => p.tipo !== 'fornecedor'), v, '—')}</select>`;
+    else if (t === 'categoria') ctl = `<select class="campo" name="${k}">${opcoes(c.categorias.filter((x) => x.tipo === 'receita'), v, '—')}</select>`;
+    else if (t === 'textarea') ctl = `<textarea class="campo" name="${k}" rows="2">${esc(v)}</textarea>`;
     else if (t === 'money') ctl = `<input class="campo" name="${k}" inputmode="decimal" value="${v === '' ? '' : dinheiroInput(v)}" placeholder="0,00">`;
     else ctl = `<input class="campo" type="${t === 'date' ? 'date' : 'text'}" name="${k}" value="${esc(v)}"${obrig ? ' required' : ''} autocomplete="off">`;
     return `<label class="f">${esc(rot)}${obrig ? ' *' : ''}${ctl}</label>`;
@@ -295,7 +303,7 @@ export async function formCadastro(tipo, reg, aoSalvar) {
     onSubmit: async (d) => {
       const body = {};
       for (const [k, , t] of cfg.campos) {
-        if (t === 'money') { const v = parseDinheiro(d[k]); body[k] = v ?? 0; } else if (t === 'pessoa') body[k] = d[k] || null;
+        if (t === 'money') { const v = parseDinheiro(d[k]); body[k] = v ?? 0; } else if (t === 'pessoa' || t === 'categoria') body[k] = d[k] || null;
         else body[k] = d[k];
       }
       await api(`cadastros/${tipo}${reg ? '/' + reg.id : ''}`, { method: reg ? 'PUT' : 'POST', body });

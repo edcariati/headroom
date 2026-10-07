@@ -3,11 +3,13 @@ import { estadoErro, icon } from './ui.js';
 import { formLancamento, formTransferencia, formCadastro } from './forms.js';
 import { modal } from './util.js';
 import * as V from './views.js';
+import { clientesView, formCliente } from './clientes.js';
 
 // ---------- telas ----------
 const novoMenu = () => abrirNovo();
 const ROTAS = {
   resumo: { titulo: 'Resumo', grupo: 'Financeiro', icone: 'home', sub: 'Caixa, contas e próximos vencimentos num só olhar.', fn: (el) => V.resumo(el), cta: { rotulo: 'Novo lançamento', icone: 'plus', acao: novoMenu } },
+  clientes: { titulo: 'Clientes', grupo: 'Financeiro', icone: 'usuarios', sub: 'Quem são os clientes, seus códigos, projetos e serviços contratados.', fn: (el) => clientesView(el), cta: { rotulo: 'Novo cliente', icone: 'plus', acao: () => formCliente(renderAgora) } },
   pagamentos: { titulo: 'Pagamentos do cliente', grupo: 'Financeiro', icone: 'contrato', sub: 'Contratos, parcelas e quanto ainda falta receber.', fn: (el) => V.pagamentos(el), cta: { rotulo: 'Nova receita de contrato', icone: 'plus', acao: () => formLancamento('receita', renderAgora) } },
   receitas: { titulo: 'Receitas', grupo: 'Financeiro', icone: 'receitas', sub: 'Tudo o que entra: vencimentos, recebimentos e atrasos.', fn: (el, q) => V.lista(el, 'receita', q), cta: { rotulo: 'Nova receita', icone: 'plus', acao: () => formLancamento('receita', renderAgora) } },
   despesas: { titulo: 'Despesas', grupo: 'Financeiro', icone: 'despesas', sub: 'Tudo o que sai: contas a pagar, pagas e atrasadas.', fn: (el, q) => V.lista(el, 'despesa', q), cta: { rotulo: 'Nova despesa', icone: 'plus', acao: () => formLancamento('despesa', renderAgora) } },
@@ -91,6 +93,7 @@ $('#tema').onclick = alternarTema;
 // ---------- novo lançamento (folha de escolha) ----------
 function abrirNovo() {
   const m = modal('Novo lançamento', `<div class="atalhos" style="grid-template-columns:1fr">
+    <button class="atalho" type="button" data-novo="cliente">${icon('usuarios')}<span><strong>Novo cliente</strong><small>Código, dados, projeto e serviços contratados</small></span></button>
     <button class="atalho" type="button" data-novo="receita">${icon('receitas')}<span><strong>Nova receita</strong><small>Entrada de dinheiro: projeto, consultoria, gestão de obra…</small></span></button>
     <button class="atalho" type="button" data-novo="despesa">${icon('despesas')}<span><strong>Nova despesa</strong><small>Saída de dinheiro: terceiros, aluguel, impostos…</small></span></button>
     <button class="atalho" type="button" data-novo="transferencia">${icon('transfer')}<span><strong>Nova transferência</strong><small>Entre as suas contas, sem afetar o resultado</small></span></button></div>`,
@@ -99,7 +102,7 @@ function abrirNovo() {
     const b = e.target.closest('[data-novo]');
     if (!b) return;
     m.fechar();
-    (b.dataset.novo === 'transferencia' ? formTransferencia(renderAgora) : formLancamento(b.dataset.novo, renderAgora)).catch((err) => toast(err.message, 'erro'));
+    (b.dataset.novo === 'cliente' ? formCliente(renderAgora) : b.dataset.novo === 'transferencia' ? formTransferencia(renderAgora) : formLancamento(b.dataset.novo, renderAgora)).catch((err) => toast(err.message, 'erro'));
   });
 }
 
@@ -178,6 +181,7 @@ function abrirPaleta() {
   dlg.showModal();
   const entrada = $('#paleta-in', dlg), lista = $('#paleta-lista', dlg);
   const acoes = [
+    { grupo: 'Ações', icone: 'usuarios', rot: 'Novo cliente', exec: () => formCliente(renderAgora) },
     { grupo: 'Ações', icone: 'receitas', rot: 'Nova receita', exec: () => formLancamento('receita', renderAgora) },
     { grupo: 'Ações', icone: 'despesas', rot: 'Nova despesa', exec: () => formLancamento('despesa', renderAgora) },
     { grupo: 'Ações', icone: 'transfer', rot: 'Nova transferência', exec: () => formTransferencia(renderAgora) },

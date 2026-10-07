@@ -410,7 +410,7 @@ export async function cadastrosView(el, query = {}) {
     return `<td data-label="${rot}">${esc(v ?? '')}</td>`;
   };
   el.innerHTML = `${tabs(Object.entries(CADASTROS).map(([k, c]) => [k, c.titulo]), aba)}
-    <div class="grade"><section class="glass painel reveal" style="display:flex;align-items:center;gap:var(--s4)"><span class="orb">${icon(aba === 'contas' ? 'banco' : aba === 'pessoas' ? 'usuarios' : aba === 'contratos' ? 'contrato' : 'camadas')}<b></b></span>
+    <div class="grade"><section class="glass painel reveal" style="display:flex;align-items:center;gap:var(--s4)"><span class="orb">${icon(aba === 'contas' ? 'banco' : aba === 'pessoas' ? 'usuarios' : aba === 'contratos' ? 'contrato' : aba === 'servicos' ? 'tendencia' : 'camadas')}<b></b></span>
       <div><h3>${esc(cfg.titulo)}</h3><div class="kpi-val" data-count="${dados.length}" data-fmt="int">${dados.length}</div></div></section></div>
     ${dados.length ? `<section class="glass reveal" style="margin-top:var(--s4)"><div class="tabela-wrap"><table class="tbl"><thead><tr>${cfg.colunas.map((c) => `<th${c[2] === 'money' ? ' class="num"' : ''}>${c[1]}</th>`).join('')}<th></th></tr></thead><tbody>
     ${dados.map((r) => `<tr data-reg="${r.id}">${cfg.colunas.map((c) => fmt(r, c)).join('')}<td class="acoes" data-label=""><div class="acoes-linha"><button class="btn btn-sm" data-edit="${r.id}" aria-label="Editar">${icon('editar')}Editar</button><button class="btn btn-sm btn-danger" data-del="${r.id}" aria-label="Excluir">${icon('lixo')}</button></div></td></tr>`).join('')}</tbody></table></div></section>`

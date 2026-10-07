@@ -108,3 +108,24 @@ test('StoreBlob usa Blob privado, sem sufixo aleatório, com sobrescrita e sem c
   assert.equal(put.access, 'private'); assert.equal(put.addRandomSuffix, false); assert.equal(put.allowOverwrite, true);
   assert.deepEqual(chamadas.find((c) => c[0] === 'get')[2], { access: 'private', useCache: false });
 });
+
+test('cadastro de cliente: código automático, serviços padrão e lista de clientes', async () => {
+  const store = new StoreMemoria();
+  const servicos = (await j(store, 'GET', 'cadastros/servicos')).corpo;
+  assert.ok(servicos.length >= 5);
+  assert.equal((await j(store, 'GET', 'cadastros/servicos')).corpo.length, servicos.length); // semeado uma vez
+  const cli = (await j(store, 'POST', 'cadastros/pessoas', { corpo: { nome: 'Maria', tipo: 'cliente', cidade: 'Goiânia' } })).corpo;
+  assert.equal(cli.codigo, 'CLI-0001');
+  const forn = (await j(store, 'POST', 'cadastros/pessoas', { corpo: { nome: 'Eng', tipo: 'fornecedor' } })).corpo;
+  assert.equal(forn.codigo, null);
+  assert.equal((await j(store, 'GET', 'sugestoes-codigo')).corpo.cliente, 'CLI-0002');
+  const proj = await j(store, 'POST', 'cadastros/contratos', { corpo: { codigo: 'CA260601', nome: 'Casa', pessoa_id: cli.id, area_m2: 150,
+    servicos: [{ servico_id: servicos[0].id, nome: servicos[0].nome, valor_cents: 500000 }] } });
+  assert.equal(proj.status, 201);
+  assert.equal(proj.corpo.valor_total_cents, 500000);
+  assert.equal((await j(store, 'POST', 'cadastros/contratos', { corpo: { codigo: 'ca260601', nome: 'Outro' } })).status, 409);
+  const lista = (await j(store, 'GET', 'clientes')).corpo;
+  assert.equal(lista.itens.length, 1);
+  assert.deepEqual(lista.itens[0].servicos, [servicos[0].nome]);
+  assert.equal((await j(store, 'DELETE', `cadastros/servicos/${servicos[0].id}`)).status, 409);
+});

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   criarDados, criarLancamento, baixarParcela, estornarParcela, editarParcela, dividirCentavos, resumo, fluxoCaixa, dre, listarParcelas,
   criarTransferencia, saldoContas, extratoConta, ErroValidacao, resultadosGerais, resultadosPorProjeto, outrosRelatorios,
-  validarCadastro, emUso, pagamentosCliente,
+  validarCadastro, emUso, pagamentosCliente, clientes, sugestoesCodigo,
 } from '../api/_lib/finance.js';
 
 const HOJE = '2026-06-15';
@@ -192,4 +192,40 @@ test('cadastros: categoria com grupo incoerente é recusada; item em uso não po
   rec(d, { valor_total_cents: 100, primeiro_vencimento: '2026-01-01', pessoa_id: 'p1', contrato_id: 't1' });
   assert.ok(emUso(d, 'categorias', 'k1') && emUso(d, 'pessoas', 'p1') && emUso(d, 'contas', 'c1') && emUso(d, 'contratos', 't1'));
   assert.ok(!emUso(d, 'categorias', 'k5'));
+});
+
+test('cliente: código único, documento válido, serviços somam o valor do projeto', () => {
+  const d = base();
+  d.pessoas[0].codigo = 'CLI-0001';
+  assert.throws(() => validarCadastro(d, 'pessoas', { nome: 'X', codigo: 'cli-0001' }), /código/);
+  assert.throws(() => validarCadastro(d, 'pessoas', { nome: 'X', documento: '123' }), /CPF/);
+  assert.equal(validarCadastro(d, 'pessoas', { nome: 'X', documento: '123.456.789-09', codigo: 'cli-0002' }).codigo, 'CLI-0002');
+  assert.throws(() => validarCadastro(d, 'contratos', { codigo: 'ca260101', nome: 'Dup' }), /código/);
+  d.servicos.push({ id: 's1', nome: 'Projeto arquitetônico', categoria_id: 'k1' }); d.mapa.servicos.set('s1', d.servicos[0]);
+  const c = validarCadastro(d, 'contratos', { codigo: 'CA260102', nome: 'Casa B', pessoa_id: 'p1', area_m2: '120.5', valor_total_cents: 1,
+    servicos: [{ servico_id: 's1', nome: 'Projeto arquitetônico', valor_cents: 800000 }, { nome: 'Consultoria', valor_cents: 200000 }] });
+  assert.equal(c.valor_total_cents, 1000000);
+  assert.equal(c.area_m2, 120.5);
+  assert.throws(() => validarCadastro(d, 'contratos', { codigo: 'CA260103', nome: 'x', servicos: [{ servico_id: 'nao', nome: 'y', valor_cents: 1 }] }), /Serviço não encontrado/);
+  d.contratos.push({ ...c, id: 't2' }); d.mapa.contratos.set('t2', d.contratos.at(-1));
+  assert.ok(emUso(d, 'servicos', 's1'));
+});
+
+test('clientes: serviços contratados, situação financeira e códigos sugeridos', () => {
+  const d = base();
+  d.pessoas[0].codigo = 'CLI-0007';
+  Object.assign(d.contratos[0], { valor_total_cents: 150000, servicos: [{ nome: 'Projeto arquitetônico', valor_cents: 150000 }], area_m2: 90 });
+  rec(d, { nome: 'P1', contrato_id: 't1', pessoa_id: 'p1', valor_total_cents: 100000, primeiro_vencimento: '2026-05-01', primeira_paga: true });
+  rec(d, { nome: 'P2', contrato_id: 't1', pessoa_id: 'p1', valor_total_cents: 50000, parcelas: 1, primeiro_vencimento: '2026-05-10' });
+  const r = clientes(d, {}, HOJE);
+  assert.equal(r.itens.length, 1); // fornecedor fica de fora
+  const c = r.itens[0];
+  assert.deepEqual([c.contratado_cents, c.pago_cents, c.vencido_cents, c.aberto_cents], [150000, 100000, 50000, 0]);
+  assert.deepEqual(c.servicos, ['Projeto arquitetônico']);
+  assert.equal(c.projetos[0].area_m2, 90);
+  assert.equal(clientes(d, { busca: 'arquitet' }, HOJE).itens.length, 1);
+  assert.equal(clientes(d, { busca: 'zzz' }, HOJE).itens.length, 0);
+  assert.deepEqual(sugestoesCodigo(d, HOJE), { cliente: 'CLI-0008', projeto: 'CA260601' });
+  d.contratos[0].codigo = 'CA260601';
+  assert.equal(sugestoesCodigo(d, HOJE).projeto, 'CA260602');
 });

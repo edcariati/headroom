@@ -34,7 +34,7 @@ export function statusParcela(p, hoje) {
 
 // ---------- dados em memória ----------
 
-const COLECOES = ['contas', 'categorias', 'centros', 'pessoas', 'contratos', 'lancamentos', 'transferencias'];
+const COLECOES = ['contas', 'categorias', 'centros', 'pessoas', 'servicos', 'contratos', 'lancamentos', 'transferencias'];
 export function criarDados(colecoes = {}) {
   const d = Object.fromEntries(COLECOES.map((c) => [c, colecoes[c] ? [...colecoes[c]] : []]));
   d.mapa = Object.fromEntries(COLECOES.map((c) => [c, new Map(d[c].map((x) => [x.id, x]))]));
@@ -489,8 +489,11 @@ export function outrosRelatorios(d, f = {}, hoje = hojeISO()) {
 const ENUMS = { tipo_pessoa: ['cliente', 'fornecedor', 'ambos'], status_contrato: ['ativo', 'concluido', 'cancelado'] };
 const CAMPOS = {
   contas: ['nome', 'banco', 'saldo_inicial_cents', 'ativa'], categorias: ['nome', 'tipo', 'grupo_dre'], centros: ['nome'],
-  pessoas: ['nome', 'tipo', 'documento', 'email', 'telefone'], contratos: ['codigo', 'nome', 'pessoa_id', 'valor_total_cents', 'competencia', 'status'],
+  pessoas: ['codigo', 'nome', 'tipo', 'documento', 'email', 'telefone', 'cidade', 'endereco', 'observacoes'],
+  servicos: ['nome', 'descricao', 'valor_padrao_cents', 'categoria_id', 'ativo'],
+  contratos: ['codigo', 'nome', 'pessoa_id', 'valor_total_cents', 'competencia', 'status', 'area_m2', 'servicos'],
 };
+const mesmoCodigo = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
 export const TIPOS_CADASTRO = Object.keys(CAMPOS);
 
 export function validarCadastro(d, tipo, b, existente = null) {
@@ -510,7 +513,24 @@ export function validarCadastro(d, tipo, b, existente = null) {
     exigir(Number.isInteger(r.saldo_inicial_cents), 'Saldo inicial inválido.');
     r.ativa = r.ativa === false || r.ativa === 0 ? 0 : 1;
   }
-  if (tipo === 'pessoas') { r.tipo = r.tipo || 'cliente'; exigir(ENUMS.tipo_pessoa.includes(r.tipo), 'Tipo de pessoa inválido.'); }
+  if (tipo === 'pessoas') {
+    r.tipo = r.tipo || 'cliente';
+    exigir(ENUMS.tipo_pessoa.includes(r.tipo), 'Tipo de pessoa inválido.');
+    if (r.documento) {
+      const dig = String(r.documento).replace(/\D/g, '');
+      exigir(dig.length === 11 || dig.length === 14, 'CPF deve ter 11 dígitos e CNPJ 14.');
+    }
+    if (r.codigo) {
+      r.codigo = texto(r.codigo).toUpperCase();
+      exigir(!d.pessoas.some((x) => x.id !== existente?.id && x.codigo && mesmoCodigo(x.codigo, r.codigo)), 'Já existe um cliente com este código.', 409);
+    }
+  }
+  if (tipo === 'servicos') {
+    r.valor_padrao_cents = r.valor_padrao_cents ?? 0;
+    exigir(Number.isInteger(r.valor_padrao_cents) && r.valor_padrao_cents >= 0, 'Valor padrão inválido.');
+    if (r.categoria_id) achar(d, 'categorias', r.categoria_id, 'Categoria não encontrada.');
+    r.ativo = r.ativo === false || r.ativo === 0 ? 0 : 1;
+  }
   if (tipo === 'contratos') {
     exigir(texto(r.codigo), 'Informe o código do projeto.');
     r.codigo = texto(r.codigo);
@@ -518,21 +538,73 @@ export function validarCadastro(d, tipo, b, existente = null) {
     exigir(ENUMS.status_contrato.includes(r.status), 'Status inválido.');
     r.valor_total_cents = r.valor_total_cents ?? 0;
     exigir(Number.isInteger(r.valor_total_cents) && r.valor_total_cents >= 0, 'Valor do contrato inválido.');
+    exigir(!d.contratos.some((x) => x.id !== existente?.id && mesmoCodigo(x.codigo, r.codigo)), 'Já existe um projeto com este código.', 409);
     if (r.pessoa_id) achar(d, 'pessoas', r.pessoa_id, 'Cliente não encontrado.');
     if (r.competencia) exigir(ehISO(r.competencia), 'Data de competência inválida.');
+    if (r.area_m2 !== null && r.area_m2 !== undefined) {
+      r.area_m2 = Number(r.area_m2);
+      exigir(Number.isFinite(r.area_m2) && r.area_m2 >= 0, 'Área inválida.');
+    }
+    r.servicos = (Array.isArray(r.servicos) ? r.servicos : []).map((s) => {
+      exigir(texto(s?.nome), 'Informe o nome do serviço.');
+      exigir(Number.isInteger(s.valor_cents) && s.valor_cents >= 0, 'Valor do serviço inválido.');
+      if (s.servico_id) achar(d, 'servicos', s.servico_id, 'Serviço não encontrado.');
+      return { servico_id: s.servico_id || null, nome: texto(s.nome), valor_cents: s.valor_cents };
+    });
+    if (r.servicos.length) r.valor_total_cents = soma(r.servicos, (s) => s.valor_cents);
   }
   return r;
 }
 
 export function emUso(d, tipo, id) {
   const usa = (campo) => d.lancamentos.some((l) => l[campo] === id);
-  if (tipo === 'categorias') return usa('categoria_id');
+  if (tipo === 'categorias') return usa('categoria_id') || d.servicos.some((s) => s.categoria_id === id);
   if (tipo === 'centros') return usa('centro_custo_id');
   if (tipo === 'pessoas') return usa('pessoa_id') || d.contratos.some((c) => c.pessoa_id === id);
   if (tipo === 'contratos') return usa('contrato_id');
+  if (tipo === 'servicos') return d.contratos.some((c) => (c.servicos || []).some((s) => s.servico_id === id));
   if (tipo === 'contas') {
     return usa('conta_id') || d.transferencias.some((t) => t.conta_origem_id === id || t.conta_destino_id === id)
       || d.lancamentos.some((l) => l.parcelas.some((p) => (p.pagamentos || []).some((x) => x.conta_id === id)));
   }
   return false;
+}
+
+// ---------- clientes ----------
+
+const ehCliente = (p) => p.tipo === 'cliente' || p.tipo === 'ambos';
+
+// Um registro por cliente: contato, projetos com os serviços contratados e a situação financeira.
+export function clientes(d, f = {}, hoje = hojeISO()) {
+  const receitas = Map.groupBy(expandir(d, hoje).filter((p) => p.tipo === 'receita' && p.pessoa_id), (p) => p.pessoa_id);
+  const busca = (f.busca || '').toLowerCase();
+  const itens = d.pessoas.filter(ehCliente).map((pe) => {
+    const projetos = d.contratos.filter((c) => c.pessoa_id === pe.id).sort((a, b) => b.codigo.localeCompare(a.codigo)).map((c) => ({
+      id: c.id, codigo: c.codigo, nome: c.nome, status: c.status, competencia: c.competencia, area_m2: c.area_m2 ?? null,
+      valor_total_cents: c.valor_total_cents, servicos: c.servicos || [],
+    }));
+    const ps = receitas.get(pe.id) || [];
+    const ativos = projetos.filter((p) => p.status !== 'cancelado');
+    return {
+      id: pe.id, codigo: pe.codigo ?? null, nome: pe.nome, tipo: pe.tipo, documento: pe.documento, email: pe.email, telefone: pe.telefone,
+      cidade: pe.cidade, endereco: pe.endereco, observacoes: pe.observacoes, criado_em: pe.criado_em ?? null, projetos,
+      servicos: [...new Set(ativos.flatMap((p) => p.servicos.map((s) => s.nome)))],
+      contratado_cents: soma(ativos, (p) => p.valor_total_cents),
+      lancado_cents: soma(ps, (p) => p.valor_cents), pago_cents: soma(ps, (p) => p.valor_pago_cents),
+      aberto_cents: soma(ps.filter((p) => p.status !== 'vencido'), (p) => p.aberto_cents),
+      vencido_cents: soma(ps.filter((p) => p.status === 'vencido'), (p) => p.aberto_cents),
+    };
+  }).filter((c) => !busca || `${c.codigo || ''} ${c.nome} ${c.documento || ''} ${c.email || ''} ${c.projetos.map((p) => `${p.codigo} ${p.nome}`).join(' ')} ${c.servicos.join(' ')}`.toLowerCase().includes(busca))
+    .sort((a, b) => a.nome.localeCompare(b.nome));
+  return { itens, total: { qtd: itens.length, contratado_cents: soma(itens, (c) => c.contratado_cents), pago_cents: soma(itens, (c) => c.pago_cents),
+    aberto_cents: soma(itens, (c) => c.aberto_cents), vencido_cents: soma(itens, (c) => c.vencido_cents), lancado_cents: soma(itens, (c) => c.lancado_cents) } };
+}
+
+// Próximos códigos livres: cliente CLI-0001, projeto CA + AAMM + sequência (ex.: CA261001).
+export function sugestoesCodigo(d, hoje = hojeISO()) {
+  const maior = (lista, re) => lista.reduce((m, c) => { const x = re.exec(c || ''); return x ? Math.max(m, Number(x[1])) : m; }, 0);
+  const cliente = `CLI-${String(maior(d.pessoas.map((p) => p.codigo), /^CLI-(\d+)$/i) + 1).padStart(4, '0')}`;
+  const pref = `CA${hoje.slice(2, 4)}${hoje.slice(5, 7)}`;
+  const projeto = `${pref}${String(maior(d.contratos.map((c) => c.codigo), new RegExp(`^${pref}(\\d+)$`, 'i')) + 1).padStart(2, '0')}`;
+  return { cliente, projeto };
 }
