@@ -24,11 +24,8 @@ Usage:
         tool_name="search_api",
     )
 
-    # Retrieve later
+    # Retrieve later (by hash; always returns the full original content)
     entry = store.retrieve(hash_key)
-
-    # Or search within
-    results = store.search(hash_key, "user query")
 """
 
 from __future__ import annotations
@@ -41,11 +38,10 @@ import os
 import re
 import threading
 import time
+from collections import deque
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
-
-from ..relevance.bm25 import BM25Scorer
 
 if TYPE_CHECKING:
     from ..memory.tracker import ComponentStats
@@ -57,6 +53,15 @@ DEFAULT_CCR_TTL_SECONDS = 1800  # session-scale; override via HEADROOM_CCR_TTL_S
 CCR_TTL_SECONDS_ENV = "HEADROOM_CCR_TTL_SECONDS"
 
 _RETRIEVAL_LOG_PREVIEW_CHARS = 4096
+# Previews carry verbatim tool-result content (post-redaction) — source code,
+# credentials the redactor does not recognize, customer data. That is not
+# something the always-on runtime log should hold, so previews are OFF unless
+# an operator turns them on with 1/true/yes/on; the log then records byte
+# counts only. (The log file is created owner-only either way — see
+# ``headroom/proxy/helpers.py:_OwnerOnlyRotatingFileHandler`` — because other
+# switches put request content in the same file. That is a second line of
+# defence, not a reason to log the payload.)
+PAYLOAD_PREVIEW_ENV = "HEADROOM_LOG_PAYLOAD_PREVIEW"
 _SECRET_KEY_VALUE_RE = re.compile(
     r"(?i)\b([A-Z0-9_-]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH)[A-Z0-9_-]*)"
     r"(\s*[:=]\s*)([\"']?)([^\"'\s,}]+)"
@@ -113,7 +118,22 @@ def _redact_retrieval_log_payload(payload: str) -> str:
     return _API_KEY_VALUE_RE.sub("sk-[REDACTED]", redacted)
 
 
+def _payload_preview_enabled() -> bool:
+    """True only when an operator has explicitly opted in. Default: off."""
+    raw = os.environ.get(PAYLOAD_PREVIEW_ENV)
+    if raw is None:
+        return False
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
 def _payload_for_retrieval_log(payload: str) -> dict[str, Any]:
+    if not _payload_preview_enabled():
+        return {
+            "payload_chars": len(payload),
+            "payload_preview_chars": 0,
+            "payload_truncated": len(payload) > 0,
+            "payload_preview": "",
+        }
     redacted = _redact_retrieval_log_payload(payload)
     preview = redacted[:_RETRIEVAL_LOG_PREVIEW_CHARS]
     truncated = len(redacted) > len(preview)
@@ -190,7 +210,7 @@ class RetrievalEvent:
     total_items: int
     tool_name: str | None
     timestamp: float
-    retrieval_type: str  # "full" or "search"
+    retrieval_type: str  # always "full" (retrieval is by hash)
     tool_signature_hash: str | None = None  # For TOIN correlation
 
 
@@ -206,7 +226,7 @@ class CompressionStore:
     - Thread-safe for concurrent access
     - TTL-based expiration (default 300 seconds, env-configurable)
     - LRU-style eviction when capacity is reached
-    - Built-in BM25 search for filtering
+    - Hash-keyed retrieval that always returns the full original content
     """
 
     def __init__(
@@ -237,21 +257,27 @@ class CompressionStore:
         self._default_ttl = default_ttl
         self._enable_feedback = enable_feedback
 
-        # Feedback tracking
-        self._retrieval_events: list[RetrievalEvent] = []
+        # Feedback tracking. maxlen caps the display history, replacing an
+        # append-then-reslice that re-copied 1000 pointers on every retrieval.
         self._max_events = 1000  # Keep last 1000 events
+        self._retrieval_events: deque[RetrievalEvent] = deque(maxlen=self._max_events)
+        # Deliberately NOT bounded: this is a drain-by-swap queue, and every
+        # event in it still owes a feedback notification.
         self._pending_feedback_events: list[RetrievalEvent] = []
 
         # MEDIUM FIX #16: Use a min-heap for O(log n) eviction instead of O(n)
         # Heap entries are (created_at, hash_key) tuples
         self._eviction_heap: list[tuple[float, str]] = []
+        # Expiration ordering is separate so live eviction stays oldest-first.
+        self._expiration_heap: list[tuple[float, float, str]] = []
         # CRITICAL FIX: Track stale entries count to know when heap cleanup is needed
         self._stale_heap_entries = 0
+        self._stale_expiration_heap_entries = 0
         # Threshold for triggering heap rebuild (when 50% are stale)
         self._heap_rebuild_threshold = 0.5
-
-        # BM25 scorer for search
-        self._scorer = BM25Scorer()
+        external_revision = getattr(self._backend, "external_revision", None)
+        self._backend_revision_reader = external_revision if callable(external_revision) else None
+        self._backend_revision = self._read_backend_revision()
 
     @property
     def default_ttl_seconds(self) -> int:
@@ -332,6 +358,36 @@ class CompressionStore:
             # deterministically under whichever function is in use.
             hash_key = hashlib.sha256(original.encode()).hexdigest()[:24]
 
+        # Refuse to persist a bare CCR marker as an entry's "original"
+        # (#2694). A marker is a *pointer* to content, never content: an
+        # entry like `hash=abc123 -> "<<ccr:abc123,base64,2.0KB>>"` answers a
+        # retrieve with the very placeholder the caller is trying to resolve,
+        # and (worse) can overwrite a good entry with a useless one. Any
+        # producer that gets here has lost the source bytes upstream, so fail
+        # loudly rather than silently converting "retrievable" into "gone".
+        # Narrow by design: only a *bare* marker is rejected. Legitimate
+        # originals may legally CONTAIN markers (nested offloads, a tool that
+        # echoed one), and refusing those would drop recoverable data.
+        #
+        # The rejected value is never echoed into the log. It is provably a
+        # bare marker here, but `original` is the store's credential-bearing
+        # payload in the general case (this issue was reported against an
+        # OAuth token), and an error path is exactly where that sort of leak
+        # survives review. `hash_key` already identifies the entry.
+        stripped = original.strip()
+        if stripped.startswith("<<ccr:") and stripped.endswith(">>") and "\n" not in stripped:
+            logger.error(
+                "CCR store: refusing to persist a bare retrieval marker as "
+                "original_content (hash=%s tool=%s strategy=%s len=%d) — the "
+                "producer lost the source bytes; retrieval for this hash will "
+                "miss instead of returning a placeholder",
+                hash_key,
+                tool_name,
+                compression_strategy,
+                len(stripped),
+            )
+            return hash_key
+
         entry = CompressionEntry(
             hash=hash_key,
             original_content=original,
@@ -348,6 +404,7 @@ class CompressionStore:
             tool_signature_hash=tool_signature_hash,
             compression_strategy=compression_strategy,
         )
+        expires_at = self._expiration_time(entry)
 
         # Process pending feedback BEFORE acquiring lock for eviction.
         # This ensures feedback from entries about to be evicted is captured.
@@ -355,16 +412,22 @@ class CompressionStore:
             self.process_pending_feedback()
 
         with self._lock:
-            self._evict_if_needed()
-
-            # CRITICAL FIX: Hash collision detection
-            # If hash already exists with DIFFERENT content, log a warning.
-            # This indicates either a hash collision or duplicate store calls.
+            # Decide whether this is a NEW key before evicting. Evicting to make
+            # room only applies to a genuinely new entry; a re-store of an
+            # existing key overwrites in place (no room needed). Evicting first
+            # for a duplicate would needlessly destroy a live, unrelated entry
+            # and drop the store below capacity, making that entry's <<ccr:...>>
+            # marker (still sitting in the conversation) unredeemable — a 404.
+            # The CCR mirror bridge re-stores the same explicit_hash on every
+            # turn a marker is re-encountered, so duplicate stores are common.
             existing = self._backend.get(hash_key)
-            if existing is not None:
+            if existing is None:
+                self._evict_if_needed()
+            else:
+                # Hash already present. Different content means a true (extremely
+                # rare with SHA256[:24]) collision; same content is a duplicate
+                # re-store. Either way we overwrite in place.
                 if existing.original_content != original:
-                    # True hash collision - different content, same hash
-                    # This is extremely rare with SHA256[:24] but should be logged
                     logger.warning(
                         "Hash collision detected: hash=%s tool=%s (existing_len=%d, new_len=%d)",
                         hash_key,
@@ -373,17 +436,22 @@ class CompressionStore:
                         len(original),
                     )
                 else:
-                    # Same content being stored again - this is fine, just update
                     logger.debug(
                         "Duplicate store for hash=%s, updating entry",
                         hash_key,
                     )
-                # Mark old heap entry as stale since we're replacing
-                self._stale_heap_entries += 1
+                # Mark old heap entry as stale since we're replacing it.
+                self._mark_heap_entries_stale()
 
             self._backend.set(hash_key, entry)
             # MEDIUM FIX #16: Add to eviction heap for O(log n) eviction
             heapq.heappush(self._eviction_heap, (entry.created_at, hash_key))
+            heapq.heappush(
+                self._expiration_heap,
+                (expires_at, entry.created_at, hash_key),
+            )
+            if existing is not None:
+                self._rebuild_heap_if_needed()
 
         return hash_key
 
@@ -410,7 +478,7 @@ class CompressionStore:
             if entry.is_expired():
                 self._backend.delete(hash_key)
                 # CRITICAL FIX: Track stale heap entry
-                self._stale_heap_entries += 1
+                self._mark_heap_entries_stale()
                 return None
 
             # Track access for feedback
@@ -473,7 +541,7 @@ class CompressionStore:
 
             if entry.is_expired():
                 self._backend.delete(hash_key)
-                self._stale_heap_entries += 1
+                self._mark_heap_entries_stale()
                 return None
 
             return {
@@ -483,77 +551,10 @@ class CompressionStore:
                 "compressed_item_count": entry.compressed_item_count,
                 "query_context": entry.query_context,
                 "compressed_content": entry.compressed_content,
+                "original_content_preview": entry.original_content[:2000],
                 "created_at": entry.created_at,
                 "ttl": entry.ttl,
             }
-
-    def search(
-        self,
-        hash_key: str,
-        query: str,
-        max_results: int = 20,
-        score_threshold: float = 0.3,
-    ) -> list[dict[str, Any]]:
-        """Search within cached content using BM25.
-
-        Args:
-            hash_key: Hash key of cached content.
-            query: Search query.
-            max_results: Maximum number of results to return.
-            score_threshold: Minimum BM25 score to include.
-
-        Returns:
-            List of matching items from original content.
-        """
-        # Get entry without logging (we'll log the search separately)
-        entry = self._get_entry_for_search(hash_key, query)
-        if entry is None:
-            return []
-
-        items = self._search_items_from_original(entry.original_content)
-
-        if not items:
-            return []
-
-        # Score each item using BM25
-        item_strs = [json.dumps(item, default=str) for item in items]
-        scores = self._scorer.score_batch(item_strs, query)
-
-        # Filter and sort by score
-        scored_items = [
-            (items[i], scores[i].score)
-            for i in range(len(items))
-            if scores[i].score >= score_threshold
-        ]
-        scored_items.sort(key=lambda x: x[1], reverse=True)
-
-        results = [item for item, _ in scored_items[:max_results]]
-
-        # Log retrieval event
-        if self._enable_feedback:
-            with self._lock:
-                self._log_retrieval(
-                    hash_key=hash_key,
-                    query=query,
-                    items_retrieved=len(results),
-                    total_items=len(items),
-                    tool_name=entry.tool_name,
-                    retrieval_type="search",
-                    tool_signature_hash=entry.tool_signature_hash,
-                )
-            # Process feedback immediately to ensure TOIN learns in real-time
-            self.process_pending_feedback()
-        self._log_retrieval_payload(
-            hash_key=hash_key,
-            query=query,
-            retrieval_type="search",
-            payload=json.dumps(results, ensure_ascii=False),
-            items_retrieved=len(results),
-            total_items=len(items),
-            entry=entry,
-        )
-
-        return results
 
     def _log_retrieval_payload(
         self,
@@ -588,189 +589,6 @@ class CompressionStore:
             json.dumps(event, ensure_ascii=False, separators=(",", ":")),
         )
 
-    def _search_items_from_original(self, original_content: str) -> list[Any]:
-        """Normalize cached originals into searchable items.
-
-        CCR producers store different shapes:
-        - SmartCrusher/search-style paths usually store JSON arrays.
-        - Kompress stores the original plain text.
-        - Some callers store JSON objects or scalar JSON values.
-
-        Search should work for all of them. Preserve the legacy JSON-array
-        result shape, but fall back to structured text chunks for everything
-        else so `headroom_retrieve(hash, query=...)` can find plain-text
-        originals.
-        """
-
-        try:
-            parsed = json.loads(original_content)
-        except json.JSONDecodeError:
-            return self._plain_text_search_items(original_content)
-
-        if isinstance(parsed, list):
-            return parsed
-        if isinstance(parsed, dict):
-            return self._json_object_search_items(parsed)
-        if isinstance(parsed, str):
-            return self._plain_text_search_items(parsed)
-        if parsed is None:
-            return []
-        return [{"type": "json_scalar", "value": parsed}]
-
-    def _json_object_search_items(self, value: dict[str, Any]) -> list[dict[str, Any]]:
-        """Return searchable leaf records for a JSON object."""
-
-        items: list[dict[str, Any]] = []
-
-        def walk(node: Any, path: str) -> None:
-            if isinstance(node, dict):
-                for key, child in node.items():
-                    child_path = f"{path}.{key}" if path else str(key)
-                    walk(child, child_path)
-                return
-            if isinstance(node, list):
-                for idx, child in enumerate(node):
-                    walk(child, f"{path}[{idx}]")
-                return
-            if node is None:
-                return
-            items.append({"type": "json_leaf", "path": path, "value": node})
-
-        walk(value, "")
-        if items:
-            return items
-        return [{"type": "json_object", "value": value}]
-
-    def _plain_text_search_items(self, text: str) -> list[dict[str, Any]]:
-        """Chunk arbitrary text into searchable records.
-
-        Line-aware chunks work well for logs/source. Word-window chunks handle
-        Kompress originals, which are often long single-line text blobs.
-        """
-
-        if not text or not text.strip():
-            return []
-
-        normalized = text.replace("\r\n", "\n").replace("\r", "\n")
-        lines = normalized.split("\n")
-        if len(lines) > 1:
-            return self._line_text_search_items(lines)
-
-        words = normalized.split()
-        if not words:
-            return []
-        max_words = 350
-        overlap_words = 50
-        if len(words) <= max_words:
-            return [
-                {
-                    "type": "text",
-                    "text": normalized,
-                    "chunk_index": 0,
-                    "word_start": 1,
-                    "word_end": len(words),
-                }
-            ]
-
-        items: list[dict[str, Any]] = []
-        start = 0
-        chunk_index = 0
-        step = max_words - overlap_words
-        while start < len(words):
-            end = min(len(words), start + max_words)
-            items.append(
-                {
-                    "type": "text",
-                    "text": " ".join(words[start:end]),
-                    "chunk_index": chunk_index,
-                    "word_start": start + 1,
-                    "word_end": end,
-                }
-            )
-            if end == len(words):
-                break
-            start += step
-            chunk_index += 1
-        return items
-
-    @staticmethod
-    def _line_text_search_items(lines: list[str]) -> list[dict[str, Any]]:
-        max_chars = 2000
-        items: list[dict[str, Any]] = []
-        current: list[str] = []
-        line_start = 1
-        char_count = 0
-
-        for idx, line in enumerate(lines, start=1):
-            line_len = len(line) + 1
-            if current and char_count + line_len > max_chars:
-                items.append(
-                    {
-                        "type": "text",
-                        "text": "\n".join(current),
-                        "chunk_index": len(items),
-                        "line_start": line_start,
-                        "line_end": idx - 1,
-                    }
-                )
-                current = []
-                line_start = idx
-                char_count = 0
-            current.append(line)
-            char_count += line_len
-
-        if current:
-            items.append(
-                {
-                    "type": "text",
-                    "text": "\n".join(current),
-                    "chunk_index": len(items),
-                    "line_start": line_start,
-                    "line_end": len(lines),
-                }
-            )
-        return items
-
-    def _get_entry_for_search(
-        self,
-        hash_key: str,
-        query: str | None = None,
-    ) -> CompressionEntry | None:
-        """Get entry without logging retrieval (used by search to avoid double-logging).
-
-        CRITICAL FIX #4: Returns a copy of the entry to prevent race conditions.
-        The caller may use the entry after we release the lock, and another thread
-        could modify or evict the original entry.
-
-        Args:
-            hash_key: Hash key returned by store().
-            query: Optional query for access tracking.
-
-        Returns:
-            CompressionEntry copy if found and not expired, None otherwise.
-        """
-        with self._lock:
-            entry = self._backend.get(hash_key)
-
-            if entry is None:
-                return None
-
-            if entry.is_expired():
-                self._backend.delete(hash_key)
-                # CRITICAL FIX: Track stale heap entry
-                self._stale_heap_entries += 1
-                return None
-
-            # Track access but don't log retrieval event (search will log separately)
-            entry.record_access(query)
-            # Update the backend with the modified entry
-            self._backend.set(hash_key, entry)
-
-            # CRITICAL FIX #4: Return a copy to prevent race conditions
-            # The entry contains mutable fields (search_queries list) that could be
-            # modified by other threads after we release the lock
-            return replace(entry, search_queries=list(entry.search_queries))
-
     def exists(self, hash_key: str, clean_expired: bool = False) -> bool:
         """Check if a hash key exists and is not expired.
 
@@ -792,7 +610,7 @@ class CompressionStore:
                 if clean_expired:
                     self._backend.delete(hash_key)
                     # CRITICAL FIX: Track stale heap entry
-                    self._stale_heap_entries += 1
+                    self._mark_heap_entries_stale()
                 return False
             return True
 
@@ -828,7 +646,7 @@ class CompressionStore:
 
             if expired and clean_expired:
                 self._backend.delete(hash_key)
-                self._stale_heap_entries += 1
+                self._mark_heap_entries_stale()
 
             return status
 
@@ -880,6 +698,7 @@ class CompressionStore:
 
             # Add eviction heap memory
             bytes_used += sys.getsizeof(self._eviction_heap)
+            bytes_used += sys.getsizeof(self._expiration_heap)
 
             return ComponentStats(
                 name="compression_store",
@@ -923,24 +742,66 @@ class CompressionStore:
             self._retrieval_events.clear()
             self._pending_feedback_events.clear()
             self._eviction_heap.clear()  # MEDIUM FIX #16: Clear heap too
+            self._expiration_heap.clear()
             self._stale_heap_entries = 0  # CRITICAL FIX: Reset stale counter
+            self._stale_expiration_heap_entries = 0
 
     def _evict_if_needed(self) -> None:
-        """Evict old entries if at capacity. Must be called with lock held.
+        """Evict expired, then oldest live entries until below capacity.
 
         MEDIUM FIX #16: Use heap for O(log n) eviction instead of O(n) scan.
         CRITICAL FIX: Track and clean stale heap entries to prevent memory leak.
         """
-        # First, remove expired entries
-        self._clean_expired()
+        # Avoid the old full backend items() scan per new-key store().
+        # The expiration heap keeps cleanup proportional to expired roots.
 
-        # CRITICAL FIX: Rebuild heap if too many stale entries
-        # This prevents unbounded heap growth when entries are deleted/replaced
-        heap_size = len(self._eviction_heap)
-        if heap_size > 0:
-            stale_ratio = self._stale_heap_entries / heap_size
-            if stale_ratio >= self._heap_rebuild_threshold:
+        backend_count = self._backend.count()
+        indexed_count = max(0, len(self._eviction_heap) - self._stale_heap_entries)
+        at_capacity = backend_count >= self._max_entries
+        if at_capacity:
+            backend_revision = self._read_backend_revision()
+            backend_changed = self._backend_revision_reader is not None and (
+                backend_revision is None or backend_revision != self._backend_revision
+            )
+            if indexed_count != backend_count or backend_changed:
                 self._rebuild_heap()
+            else:
+                self._rebuild_heap_if_needed()
+            if backend_revision is not None:
+                self._backend_revision = backend_revision
+        else:
+            self._rebuild_heap_if_needed()
+
+        # Remove expired entries first without reporting successful compression.
+        while self._expiration_heap:
+            expires_at, created_at, hash_key = self._expiration_heap[0]
+            if expires_at >= time.time():
+                break
+
+            entry = self._backend.get(hash_key)
+            if entry is None and at_capacity:
+                entry = self._backend.get(hash_key)
+                if entry is None:
+                    return
+            heapq.heappop(self._expiration_heap)
+            if (
+                entry is not None
+                and entry.created_at == created_at
+                and self._expiration_time(entry) == expires_at
+            ):
+                self._backend.delete(hash_key)
+                self._stale_heap_entries += 1
+            elif self._stale_expiration_heap_entries > 0:
+                self._stale_expiration_heap_entries -= 1
+            else:
+                # Backend-side TTL purges leave the matching eviction tuple stale.
+                self._stale_heap_entries += 1
+
+            if not at_capacity or self._backend.count() < self._max_entries:
+                return
+
+        if not at_capacity:
+            return
 
         # If still at capacity, remove oldest entries using heap
         while self._backend.count() >= self._max_entries and self._eviction_heap:
@@ -951,30 +812,70 @@ class CompressionStore:
             # (entry might have been deleted or replaced)
             entry = self._backend.get(hash_key)
             if entry is not None and entry.created_at == created_at:
-                # HIGH FIX: Track eviction as "successful compression" if never retrieved
-                # This prevents state divergence between store and feedback loop
-                if self._enable_feedback and entry.retrieval_count == 0:
-                    # Entry was never retrieved = compression was successful
-                    # Notify feedback system so it knows this strategy worked
+                if not entry.is_expired() and self._enable_feedback and entry.retrieval_count == 0:
                     self._record_eviction_success(entry)
                 self._backend.delete(hash_key)
+                self._stale_expiration_heap_entries += 1
             else:
                 # CRITICAL FIX: This was a stale entry, decrement counter
                 # (we already popped it, so the stale entry is now gone)
                 if self._stale_heap_entries > 0:
                     self._stale_heap_entries -= 1
 
+    def _mark_heap_entries_stale(self) -> None:
+        """Record lazy tuples invalidated by deleting or replacing an entry."""
+        self._stale_heap_entries += 1
+        self._stale_expiration_heap_entries += 1
+
+    @staticmethod
+    def _expiration_time(entry: CompressionEntry) -> float:
+        """Return the entry expiration time, saturating numeric overflow."""
+        try:
+            return entry.created_at + float(entry.ttl)
+        except OverflowError:
+            return float("inf") if entry.ttl > 0 else float("-inf")
+
+    def _read_backend_revision(self) -> object | None:
+        """Read optional backend revision metadata without breaking stores."""
+        if self._backend_revision_reader is None:
+            return None
+        try:
+            revision: object | None = self._backend_revision_reader()
+            return revision
+        except Exception:
+            logger.debug("CCR backend revision lookup failed", exc_info=True)
+            return None
+
+    def _rebuild_heap_if_needed(self) -> None:
+        """Rebuild both indexes when either stale ratio reaches the threshold."""
+        heap_size = len(self._eviction_heap)
+        expiration_heap_size = len(self._expiration_heap)
+        stale_ratio = self._stale_heap_entries / heap_size if heap_size else 0
+        stale_expiration_ratio = (
+            self._stale_expiration_heap_entries / expiration_heap_size
+            if expiration_heap_size
+            else 0
+        )
+        if (
+            stale_ratio >= self._heap_rebuild_threshold
+            or stale_expiration_ratio >= self._heap_rebuild_threshold
+        ):
+            self._rebuild_heap()
+
     def _clean_expired(self) -> None:
         """Remove expired entries. Must be called with lock held.
 
         CRITICAL FIX: Track stale heap entries when deleting to prevent memory leak.
         """
+        purge_expired = getattr(self._backend, "purge_expired", None)
+        if callable(purge_expired):
+            self._stale_heap_entries += purge_expired()
+            return
+
         expired_keys = [key for key, entry in self._backend.items() if entry.is_expired()]
         for key in expired_keys:
             self._backend.delete(key)
-            # CRITICAL FIX: Increment stale counter - the heap still has an entry
-            # for this key that will be stale when we try to evict
-            self._stale_heap_entries += 1
+            self._mark_heap_entries_stale()
 
     def _rebuild_heap(self) -> None:
         """Rebuild heap from current store entries. Must be called with lock held.
@@ -982,15 +883,20 @@ class CompressionStore:
         CRITICAL FIX: This removes stale heap entries that accumulate when entries
         are deleted or replaced. Without this, the heap grows unboundedly.
         """
-        # Build new heap from current store entries only
-        self._eviction_heap = [
-            (entry.created_at, hash_key) for hash_key, entry in self._backend.items()
+        # Reuse one snapshot so rebuilding never doubles backend enumeration.
+        entries = self._backend.items()
+        self._eviction_heap = [(entry.created_at, hash_key) for hash_key, entry in entries]
+        self._expiration_heap = [
+            (self._expiration_time(entry), entry.created_at, hash_key)
+            for hash_key, entry in entries
         ]
         heapq.heapify(self._eviction_heap)
+        heapq.heapify(self._expiration_heap)
         # Reset stale counter - heap is now clean
         self._stale_heap_entries = 0
+        self._stale_expiration_heap_entries = 0
         logger.debug(
-            "Rebuilt eviction heap: %d entries",
+            "Rebuilt eviction heaps: %d entries",
             len(self._eviction_heap),
         )
 
@@ -1057,11 +963,8 @@ class CompressionStore:
             tool_signature_hash=tool_signature_hash,
         )
 
+        # maxlen keeps this bounded; no trim needed here.
         self._retrieval_events.append(event)
-
-        # Keep only recent events
-        if len(self._retrieval_events) > self._max_events:
-            self._retrieval_events = self._retrieval_events[-self._max_events :]
 
         # Queue event for feedback processing (will be processed after lock release)
         # This is safe because process_pending_feedback() uses the lock to atomically
@@ -1205,17 +1108,30 @@ def clear_request_compression_store() -> None:
 def _create_default_ccr_backend() -> CompressionStoreBackend | None:
     """Create a CCR backend from env (e.g. HEADROOM_CCR_BACKEND=redis).
 
-    Default (env unset or "sqlite"): SQLiteBackend at
-    ~/.headroom/ccr_store.db — restart-safe and shared across worker
-    processes, which the session-scale 30-minute TTL assumes.
+    Default (env unset or "sqlite"): SQLiteBackend at workspace_dir()/ccr_store.db
+    — restart-safe and shared across worker processes, which the
+    session-scale 30-minute TTL assumes.
     "memory" opts back into the in-process dict. Other values load
     adapters via setuptools entry point 'headroom.ccr_backend'.
     Returns None to use InMemoryBackend.
+
+    Stateless mode (``--stateless`` / ``HEADROOM_STATELESS``) never opens the
+    SQLite file: the entries it would hold are the verbatim tool outputs that
+    stateless deployments run stateless to keep off disk. The default and an
+    explicit ``sqlite`` both fall back to the in-process store (retrieval then
+    does not survive a restart or cross workers, which is the documented
+    stateless trade-off). A named entry-point backend is still honoured — the
+    operator chose it explicitly, and it is how a stateless multi-worker
+    deployment gets a non-file (e.g. redis) store.
     """
+    from ..paths import persistence_allowed
+
     backend_type = (os.environ.get("HEADROOM_CCR_BACKEND") or "").strip().lower()
     if backend_type == "memory":
         return None
     if not backend_type or backend_type == "sqlite":
+        if not persistence_allowed("CCR retrieval store (ccr_store.db)"):
+            return None
         try:
             from .backends.sqlite import SQLiteBackend
 
@@ -1292,6 +1208,22 @@ def get_compression_store(
                     backend=backend,
                 )
     return _compression_store
+
+
+def detach_compression_store() -> None:
+    """Drop the global compression store without clearing it.
+
+    The next :func:`get_compression_store` builds a fresh store from the
+    current settings. Unlike :func:`reset_compression_store`, the old store's
+    entries are left as they are: nothing is deleted from its backend, so a
+    SQLite file is neither written nor emptied. Used when the proxy switches to
+    stateless mode at runtime. The old backend is not closed, because code
+    that already holds the old store may still be using it.
+    """
+    global _compression_store
+
+    with _store_lock:
+        _compression_store = None
 
 
 def reset_compression_store() -> None:

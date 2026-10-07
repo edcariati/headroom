@@ -9,7 +9,8 @@
     # Cloud mode (managed CCR, TOIN, analytics via Headroom Cloud):
     litellm.callbacks = [HeadroomCallback(api_key="hdr_xxx")]
 
-Works with LiteLLM's completion(), acompletion(), and proxy modes.
+Works with LiteLLM's completion(), acompletion(), the Anthropic Messages
+proxy routes (/v1/messages), and proxy modes.
 Cloud mode requires httpx: pip install httpx
 """
 
@@ -19,15 +20,29 @@ import json
 import logging
 from typing import Any
 
+from headroom.offline import guard_egress
+
 logger = logging.getLogger(__name__)
 
 _DEFAULT_CLOUD_URL = "https://api.headroomlabs.ai"
 
 
-class HeadroomCallback:
+try:
+    from litellm.integrations.custom_logger import CustomLogger as _CustomLogger
+except ImportError:  # litellm not installed — fall back to plain object
+    _CustomLogger = object  # type: ignore[assignment,misc]
+
+
+class HeadroomCallback(_CustomLogger):
     """LiteLLM callback that compresses messages before each API call.
 
-    Implements LiteLLM's CustomLogger interface (async_pre_call_hook).
+    Implements the LiteLLM callback hooks looked up by name:
+    ``async_pre_call_hook``, ``async_post_call_success_hook``,
+    ``async_success_handler`` and ``async_failure_handler``.
+
+    Inherits from litellm.integrations.custom_logger.CustomLogger so that
+    any hook LiteLLM adds in future versions (e.g. async_post_call_success_hook
+    added in 1.89.x) has a no-op default and won't raise AttributeError (#1114).
 
     Two modes:
     - Local (default): Compresses in-process using headroom.compress().
@@ -56,6 +71,7 @@ class HeadroomCallback:
         api_key: str | None = None,
         api_url: str | None = None,
     ) -> None:
+        super().__init__()
         self._min_tokens = min_tokens
         self._model_limit = model_limit
         self._hooks = hooks
@@ -81,14 +97,44 @@ class HeadroomCallback:
         """Whether cloud compression is enabled."""
         return self._api_key is not None
 
+    async def aclose(self) -> None:
+        """Close the shared cloud HTTP client, if it was initialized.
+
+        Applications using LiteLLM should await this method during their async
+        shutdown lifecycle. It is safe to call when cloud mode was not used or
+        after the client has already been closed.
+        """
+        client = self._client
+        self._client = None
+        if client is not None:
+            await client.aclose()
+
     async def async_pre_call_hook(
         self,
-        user_api_key: str,
-        data: dict[str, Any],
-        call_type: str,
-    ) -> dict[str, Any]:
+        user_api_key_dict: Any = None,
+        cache: Any = None,
+        data: dict[Any, Any] | None = None,
+        call_type: str = "",
+        *_args: Any,
+        **_kwargs: Any,
+    ) -> dict[Any, Any] | None:
         """Called by LiteLLM before each API call. Compresses messages."""
-        if call_type not in ("completion", "acompletion"):
+        if isinstance(cache, dict) and isinstance(data, str):
+            data, call_type = cache, data
+
+        if data is None:
+            return None
+
+        # LiteLLM's proxy maps the Anthropic Messages API routes to their own
+        # call types (CallTypes.anthropic_messages for /v1/messages and
+        # /anthropic/v1/messages, plus the async twin), and the payload still
+        # carries "messages" in Anthropic format, which compress() handles.
+        if call_type not in (
+            "completion",
+            "acompletion",
+            "anthropic_messages",
+            "aanthropic_messages",
+        ):
             return data
 
         messages = data.get("messages", [])
@@ -140,7 +186,18 @@ class HeadroomCallback:
         }
 
     async def _cloud_compress(self, messages: list[dict], model: str) -> dict[str, Any] | None:
-        """Compress via Headroom Cloud API (managed CCR, TOIN, analytics)."""
+        """Compress via Headroom Cloud API (managed CCR, TOIN, analytics).
+
+        This is the one path in this file that puts the caller's prompt
+        content on the wire to a Headroom-operated host, so it is exactly what
+        HEADROOM_OFFLINE exists to stop. "Opt-in by configuration" was the old
+        reason for leaving it open, and it is not good enough: an operator who
+        sets an air-gap switch is overriding earlier configuration on purpose.
+        The refusal is loud rather than a silent fall-through to local
+        compression, because silently compressing locally would hide the fact
+        that the deployment is no longer doing what it was configured to do.
+        """
+        guard_egress("Headroom Cloud compression", self._api_url)
         if self._client is None:
             try:
                 import httpx
@@ -173,6 +230,15 @@ class HeadroomCallback:
 
         result: dict[str, Any] = resp.json()
         return result
+
+    async def async_post_call_success_hook(
+        self,
+        data: dict[str, Any],
+        user_api_key_dict: Any,
+        response: Any,
+    ) -> Any:
+        """Called by the LiteLLM proxy after a successful call. Returns response unchanged."""
+        return response
 
     async def async_success_handler(
         self, kwargs: dict, response: Any, start_time: Any, end_time: Any

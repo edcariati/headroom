@@ -5,12 +5,15 @@ description: Install Headroom as a durable local runtime — background service,
 
 Headroom can be installed as a durable local runtime instead of only being started ad hoc with `headroom proxy` or `headroom wrap ...`.
 
-Use the Python-native `headroom install` CLI when you want supported tools to keep talking to an always-on proxy at `http://127.0.0.1:8787` and have `wrap` reuse or recover that deployment instead of starting a second ephemeral proxy.
+Use `headroom deploy` when you want the one-line path: Headroom chooses the best local runtime it can run on the current host, configures detected tools, starts the proxy at `http://127.0.0.1:8787`, and stores the deployment profile for later lifecycle commands.
+
+Use the lower-level Python-native `headroom install` CLI when you need to force a specific service, task, Docker, scope, or provider target. Both surfaces create profiles that `wrap` can reuse or recover instead of starting a second ephemeral proxy.
 
 ## Runtime matrix
 
 | Mode | What stays running | Primary entrypoint |
 |---|---|---|
+| Turnkey Deploy | Docker, scheduled watchdog, or detached runtime selected for this host | `headroom deploy` |
 | Persistent Service | Native background service | `headroom install apply --preset persistent-service` |
 | Persistent Task | Scheduled watchdog + on-demand runner | `headroom install apply --preset persistent-task` |
 | Persistent Docker | Restartable Docker container | `headroom install apply --preset persistent-docker` |
@@ -20,6 +23,15 @@ Use the Python-native `headroom install` CLI when you want supported tools to ke
 | Wrapped (Docker) | Containerized proxy + host tool session | Docker-native wrapper |
 
 ## Quick examples
+
+### Turnkey local deployment
+
+```bash
+headroom deploy
+headroom install status
+```
+
+`deploy` prefers the most capable restartable path it can prove is available. On NVIDIA workstations with Docker GPU support, such as an RTX 4090 host with the NVIDIA container runtime installed, it uses Docker GPU passthrough. Otherwise it prefers plain Docker, then the native scheduled watchdog for the host when available (`launchd`, Task Scheduler, or cron). If no supported supervisor is present, it still starts a managed detached Python runtime instead of failing on missing platform services.
 
 ### Persistent service on the local machine
 
@@ -47,6 +59,23 @@ headroom install apply --preset persistent-docker --scope user --providers auto
 This uses Docker's restart policy instead of an OS supervisor.
 
 If you are using the Docker-native host wrapper instead of a Python install, you can use `headroom install apply|status|start|stop|restart|remove` for the `persistent-docker` preset directly from the installed wrapper. Service/task installs and provider/user/system mutation flows still belong to the Python-native CLI.
+
+### Rootless Podman file ownership
+
+For the Python-native `persistent-docker` preset, if `docker` is a Podman wrapper
+script rather than a symlink, set `HEADROOM_CONTAINER_RUNTIME=podman` in the
+installer/runtime environment so it selects the Podman path.
+
+On Linux the Podman command combines `--userns=keep-id` with an
+explicit `--user` using the invoking user's UID and GID. Both are needed on
+Podman versions that honor the image's `USER root` even with `keep-id`: the
+namespace preserves the host mapping, and the process user keeps newly created
+files owned by the host user. The configured image is not changed.
+
+Restart the deployment with the updated installer to use these flags. This
+prevents new ownership mismatches; it does not repair files created by an older
+container. Inspect and restore ownership of affected files separately before
+restarting if the host user can no longer read them.
 
 ## Command surface
 
@@ -91,6 +120,7 @@ Provider scope is intentionally conservative. The current direct adapters are:
 - Claude Code → `~/.claude/settings.json` `env`
 - Codex → managed block in `~/.codex/config.toml`
 - OpenClaw → existing `wrap openclaw` / `unwrap openclaw` flow
+- OpenCode → managed block in `~/.config/opencode/opencode.json`
 
 For Copilot, Aider, Cursor, and broader env-driven setups, prefer `--scope user` or `--scope system`.
 
@@ -131,6 +161,20 @@ Persistent deployments publish the same `readyz` and `health` endpoints as ad ho
 The Python-native `headroom wrap ...` flow checks for a matching persistent deployment on the requested port before it starts a new ephemeral proxy. If an installed deployment exists but is stopped or unhealthy, it attempts to recover it first.
 
 The Docker-native host wrapper does **not** yet reuse or recover persistent profiles automatically; it still starts a fresh proxy container unless you opt into `--no-proxy`.
+
+## Claude Code VSCode extension caveat
+
+Persistent Claude deployments default to `ENABLE_TOOL_SEARCH=true` because the
+standalone Claude CLI benefits from deferred tool schemas.
+
+Anthropic's VSCode extension currently does not render those deferred-tool content
+blocks correctly through Headroom and can show `unsupported content type` in the
+webview. If your persistent install targets Claude Code inside VSCode, edit
+`~/.headroom/deploy/<profile>/manifest.json`, set
+`tool_envs.claude.ENABLE_TOOL_SEARCH` to `"false"`, then restart the deployment.
+
+Keep `ENABLE_TOOL_SEARCH=true` for the standalone `claude` CLI unless you hit the
+same renderer limitation there.
 
 ## Docker-native relationship
 

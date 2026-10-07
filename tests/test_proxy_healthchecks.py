@@ -8,7 +8,7 @@ pytest.importorskip("httpx")
 
 from fastapi.testclient import TestClient
 
-from headroom.proxy.server import ProxyConfig, create_app
+from headroom.proxy.server import ProxyConfig, __version__, create_app
 
 
 @pytest.fixture
@@ -37,6 +37,7 @@ def test_livez_reports_process_health(client):
     assert data["service"] == "headroom-proxy"
     assert data["status"] == "healthy"
     assert data["alive"] is True
+    assert data["version"] == __version__
     assert data["uptime_seconds"] >= 0
 
 
@@ -73,6 +74,7 @@ def test_health_preserves_backwards_compatible_config_payload(client):
     data = response.json()
     assert data["status"] == "healthy"
     assert data["ready"] is True
+    assert data["version"] == __version__
     config = data["config"]
     assert config["backend"] == "anthropic"
     assert config["optimize"] is False
@@ -86,6 +88,8 @@ def test_health_preserves_backwards_compatible_config_payload(client):
     assert config["max_items_after_crush"] == 50
     assert config["smart_crusher_with_compaction"] is None
     assert isinstance(config["pid"], int)
+    # `headroom wrap` reads this on proxy reuse to warn on a mode mismatch.
+    assert config["mode"] in ("token", "cache")
 
 
 def test_health_reports_agent_savings_config():

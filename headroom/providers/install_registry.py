@@ -29,11 +29,20 @@ from headroom.providers.cortex_code.install import (
     build_install_env as _build_cortex_code_install_env,
 )
 from headroom.providers.cursor.install import build_install_env as _build_cursor_install_env
+from headroom.providers.grok.install import build_install_env as _build_grok_install_env
+from headroom.providers.grok_build.install import build_install_env as _build_grok_build_install_env
 from headroom.providers.openclaw.install import (
     apply_provider_scope as _apply_openclaw_provider_scope,
 )
 from headroom.providers.openclaw.install import (
     revert_provider_scope as _revert_openclaw_provider_scope,
+)
+from headroom.providers.opencode.install import (
+    apply_provider_scope as _apply_opencode_provider_scope,
+)
+from headroom.providers.opencode.install import build_install_env as _build_opencode_install_env
+from headroom.providers.opencode.install import (
+    revert_provider_scope as _revert_opencode_provider_scope,
 )
 
 _InstallEnvBuilder = Callable[..., dict[str, str]]
@@ -47,12 +56,16 @@ _ENV_BUILDERS: dict[str, _InstallEnvBuilder] = {
     "aider": _build_aider_install_env,
     "cortex-code": _build_cortex_code_install_env,
     "cursor": _build_cursor_install_env,
+    "grok_build": _build_grok_build_install_env,
+    "grok": _build_grok_install_env,
+    "opencode": _build_opencode_install_env,
 }
 
 _PROVIDER_SCOPE_HANDLERS: dict[str, tuple[_ProviderScopeApplier, _ProviderScopeReverter]] = {
     "claude": (_apply_claude_provider_scope, _revert_claude_provider_scope),
     "codex": (_apply_codex_provider_scope, _revert_codex_provider_scope),
     "openclaw": (_apply_openclaw_provider_scope, _revert_openclaw_provider_scope),
+    "opencode": (_apply_opencode_provider_scope, _revert_opencode_provider_scope),
 }
 
 
@@ -72,13 +85,33 @@ def build_install_target_envs(
 def apply_provider_scope_mutations(manifest: DeploymentManifest) -> list[ManagedMutation]:
     """Apply provider-scope mutations owned by provider slices."""
     mutations: list[ManagedMutation] = []
-    for target in manifest.targets:
-        handlers = _PROVIDER_SCOPE_HANDLERS.get(target)
-        if handlers is None:
-            continue
-        mutation = handlers[0](manifest)
-        if mutation is not None:
-            mutations.append(mutation)
+    tracked = getattr(manifest, "mutations", None)
+    try:
+        for target in manifest.targets:
+            handlers = _PROVIDER_SCOPE_HANDLERS.get(target)
+            if handlers is None:
+                continue
+            mutation = handlers[0](manifest)
+            if mutation is not None:
+                mutations.append(mutation)
+                if tracked is not None and tracked is not mutations:
+                    tracked.append(mutation)
+    except Exception as exc:
+        rollback_errors: list[Exception] = []
+        for mutation in reversed(mutations):
+            try:
+                revert_provider_scope_mutation(manifest, mutation)
+            except Exception as rollback_exc:
+                rollback_errors.append(rollback_exc)
+            else:
+                if tracked is not None and mutation in tracked:
+                    tracked.remove(mutation)
+        if rollback_errors:
+            details = "; ".join(str(error) for error in rollback_errors)
+            raise RuntimeError(
+                f"provider mutation failed: {exc}; rollback failed: {details}"
+            ) from exc
+        raise
     return mutations
 
 

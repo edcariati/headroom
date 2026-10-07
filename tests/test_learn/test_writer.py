@@ -1,5 +1,6 @@
 """Tests for recommendation writer — marker-based file updates."""
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,9 @@ from headroom.learn.writer import (
     _MARKER_END,
     _MARKER_START,
     ClaudeCodeWriter,
+    CodexWriter,
+    GeminiWriter,
+    GrokWriter,
     _merge_into_file,
     _parse_prior_recommendations,
     _read_text_tolerant,
@@ -47,10 +51,12 @@ class TestClaudeCodeWriter:
         assert result.dry_run is True
         assert len(result.files_written) == 1
         # File should NOT exist (dry run)
-        claude_md = proj.project_path / "CLAUDE.md"
-        assert not claude_md.exists()
+        claude_local = proj.project_path / "CLAUDE.local.md"
+        assert not claude_local.exists()
+        # Default target is the personal CLAUDE.local.md, never the shared CLAUDE.md
+        assert result.files_written[0].name == "CLAUDE.local.md"
 
-    def test_apply_writes_claude_md(self, tmp_path):
+    def test_apply_writes_claude_local_md(self, tmp_path):
         proj = _project(tmp_path)
         writer = ClaudeCodeWriter()
         recs = [_rec(RecommendationTarget.CONTEXT_FILE, "Environment", "- Use `uv run python`")]
@@ -58,12 +64,15 @@ class TestClaudeCodeWriter:
         result = writer.write(recs, proj, dry_run=False)
 
         assert result.dry_run is False
-        claude_md = proj.project_path / "CLAUDE.md"
-        assert claude_md.exists()
-        content = claude_md.read_text()
+        # Learnings go to the personal, gitignored CLAUDE.local.md by default...
+        claude_local = proj.project_path / "CLAUDE.local.md"
+        assert claude_local.exists()
+        content = claude_local.read_text()
         assert "uv run python" in content
         assert _MARKER_START in content
         assert _MARKER_END in content
+        # ...and never touch the team-shared CLAUDE.md.
+        assert not (proj.project_path / "CLAUDE.md").exists()
 
     def test_apply_writes_memory_md(self, tmp_path):
         proj = _project(tmp_path)
@@ -76,24 +85,26 @@ class TestClaudeCodeWriter:
         assert memory_md.exists()
         assert "Don't retry globs" in memory_md.read_text()
 
-    def test_preserves_existing_claude_md_content(self, tmp_path):
+    def test_hand_written_claude_md_left_untouched(self, tmp_path):
         proj = _project(tmp_path)
         claude_md = proj.project_path / "CLAUDE.md"
-        claude_md.write_text("# My Project\n\nExisting instructions here.\n")
+        original = "# My Project\n\nExisting instructions here.\n"
+        claude_md.write_text(original)
 
         writer = ClaudeCodeWriter()
         recs = [_rec(RecommendationTarget.CONTEXT_FILE, "Environment", "- Use uv")]
         writer.write(recs, proj, dry_run=False)
 
-        content = claude_md.read_text()
-        assert "My Project" in content
-        assert "Existing instructions here" in content
-        assert "Use uv" in content
+        # A hand-written CLAUDE.md with no headroom block is left exactly as-is.
+        assert claude_md.read_text() == original
+        # Learnings land in the personal CLAUDE.local.md instead.
+        local_content = (proj.project_path / "CLAUDE.local.md").read_text()
+        assert "Use uv" in local_content
 
     def test_carries_forward_prior_sections_not_resurfaced(self, tmp_path):
         """Re-running learn must not drop prior sections that the new run didn't re-surface."""
         proj = _project(tmp_path)
-        claude_md = proj.project_path / "CLAUDE.md"
+        claude_md = proj.project_path / "CLAUDE.local.md"
         prior_block = (
             f"# My Project\n\n{_MARKER_START}\n"
             "## Headroom Learned Patterns\n"
@@ -129,7 +140,7 @@ class TestClaudeCodeWriter:
     def test_new_run_overrides_same_named_prior_section(self, tmp_path):
         """When a section appears in both prior and new, the new run wins."""
         proj = _project(tmp_path)
-        claude_md = proj.project_path / "CLAUDE.md"
+        claude_md = proj.project_path / "CLAUDE.local.md"
         prior_block = (
             f"{_MARKER_START}\n"
             "## Headroom Learned Patterns\n"
@@ -149,6 +160,117 @@ class TestClaudeCodeWriter:
         assert "old stale environment note" not in content
         # Only one Environment section in the final block
         assert content.count("### Environment") == 1
+
+    def test_opt_in_same_section_merge_preserves_prior_pattern_items(self, tmp_path):
+        context_file = tmp_path / "AGENTS.md"
+        context_file.write_text(
+            "<!-- headroom:learn:start -->\n"
+            "## Headroom Learned Patterns\n\n"
+            "### Learned: preference\n"
+            "- Keep the established queue <!-- headroom:pattern-id:queue -->\n"
+            "- Keep local reviews\n\n"
+            "<!-- headroom:learn:end -->\n"
+        )
+        recommendation = _rec(
+            RecommendationTarget.CONTEXT_FILE,
+            "Learned: preference",
+            "- Use the updated queue <!-- headroom:pattern-id:queue -->\n"
+            "- Keep local reviews <!-- headroom:pattern-id:reviews -->",
+        )
+        recommendation.preserve_prior_items = True
+
+        final = _merge_into_file(context_file, [recommendation])
+
+        assert "Use the updated queue" in final
+        assert "Keep the established queue" not in final
+        assert final.count("Keep local reviews") == 1
+
+    def test_active_ids_keep_unbatched_items_and_drop_expired_ones(self, tmp_path):
+        """The removal invariant: preservation is bounded by the active id set.
+
+        ``ripgrep`` is active but was left out of this batch (ranking/top-N),
+        so it must survive. ``vendored`` is no longer active, so it must be
+        deleted rather than pinned into the file forever.
+        """
+        context_file = tmp_path / "AGENTS.md"
+        context_file.write_text(
+            "<!-- headroom:learn:start -->\n"
+            "## Headroom Learned Patterns\n\n"
+            "### Learned: preference\n"
+            "- Keep local reviews <!-- headroom:pattern-id:reviews -->\n"
+            "- Prefer ripgrep over grep <!-- headroom:pattern-id:ripgrep -->\n"
+            "- Build against the vendored SDK <!-- headroom:pattern-id:vendored -->\n\n"
+            "<!-- headroom:learn:end -->\n"
+        )
+        recommendation = _rec(
+            RecommendationTarget.CONTEXT_FILE,
+            "Learned: preference",
+            "- Keep local reviews <!-- headroom:pattern-id:reviews -->",
+        )
+        recommendation.preserve_prior_items = True
+        recommendation.active_item_ids = frozenset({"reviews", "ripgrep"})
+
+        final = _merge_into_file(context_file, [recommendation])
+
+        assert final.count("Keep local reviews") == 1
+        assert "Prefer ripgrep over grep" in final
+        assert "Build against the vendored SDK" not in final
+        assert "headroom:pattern-id:vendored" not in final
+
+    def test_active_ids_drop_untagged_legacy_items(self, tmp_path):
+        """Untagged prior items pre-date id tagging and are not a lifecycle signal.
+
+        The still-active one comes back with an id from the current run and
+        collapses into a single bullet; the one the learner dropped goes away.
+        """
+        context_file = tmp_path / "AGENTS.md"
+        context_file.write_text(
+            "<!-- headroom:learn:start -->\n"
+            "## Headroom Learned Patterns\n\n"
+            "### Learned: preference\n"
+            "- Keep local reviews\n"
+            "- Build against the vendored SDK\n\n"
+            "<!-- headroom:learn:end -->\n"
+        )
+        recommendation = _rec(
+            RecommendationTarget.CONTEXT_FILE,
+            "Learned: preference",
+            "- Keep local reviews <!-- headroom:pattern-id:reviews -->",
+        )
+        recommendation.preserve_prior_items = True
+        recommendation.active_item_ids = frozenset({"reviews"})
+
+        final = _merge_into_file(context_file, [recommendation])
+
+        assert final.count("Keep local reviews") == 1
+        assert "headroom:pattern-id:reviews" in final
+        assert "Build against the vendored SDK" not in final
+
+    def test_without_active_ids_prior_items_are_unioned(self, tmp_path):
+        """No lifecycle signal — every producer that predates it keeps the union."""
+        context_file = tmp_path / "AGENTS.md"
+        context_file.write_text(
+            "<!-- headroom:learn:start -->\n"
+            "## Headroom Learned Patterns\n\n"
+            "### Learned: preference\n"
+            "- Keep local reviews <!-- headroom:pattern-id:reviews -->\n"
+            "- Build against the vendored SDK <!-- headroom:pattern-id:vendored -->\n"
+            "- Untagged leftover\n\n"
+            "<!-- headroom:learn:end -->\n"
+        )
+        recommendation = _rec(
+            RecommendationTarget.CONTEXT_FILE,
+            "Learned: preference",
+            "- Keep local reviews <!-- headroom:pattern-id:reviews -->",
+        )
+        recommendation.preserve_prior_items = True
+        assert recommendation.active_item_ids is None
+
+        final = _merge_into_file(context_file, [recommendation])
+
+        assert final.count("Keep local reviews") == 1
+        assert "Build against the vendored SDK" in final
+        assert "Untagged leftover" in final
 
     def test_replacing_existing_block_handles_literal_backslash_escapes(self, tmp_path):
         """LLM text with backslash escapes must not be interpreted as a regex replacement."""
@@ -203,7 +325,7 @@ class TestClaudeCodeWriter:
     def test_section_without_tokens_annotation_round_trips(self, tmp_path):
         """Prior sections emitted without a tokens annotation must still carry forward cleanly."""
         proj = _project(tmp_path)
-        claude_md = proj.project_path / "CLAUDE.md"
+        claude_md = proj.project_path / "CLAUDE.local.md"
         claude_md.write_text(
             f"{_MARKER_START}\n"
             "## Headroom Learned Patterns\n"
@@ -238,6 +360,199 @@ class TestClaudeCodeWriter:
         assert "Existing Memory" in content
         assert "Some facts" in content
         assert "New pattern" in content
+
+
+def _legacy_block(section: str, body: str) -> str:
+    return (
+        f"# My Project\n\nExisting instructions.\n\n{_MARKER_START}\n"
+        "## Headroom Learned Patterns\n"
+        "*Auto-generated by `headroom learn` on 2026-01-01 — do not edit manually*\n\n"
+        f"### {section}\n{body}\n\n"
+        f"{_MARKER_END}\n"
+    )
+
+
+class TestContextTargetOverride:
+    """--target / set_context_target controls where CONTEXT_FILE recs are written."""
+
+    def test_target_override_relative_path(self, tmp_path):
+        proj = _project(tmp_path)
+        writer = ClaudeCodeWriter()
+        writer.set_context_target("CLAUDE.md")
+        recs = [_rec(RecommendationTarget.CONTEXT_FILE, "Environment", "- Use uv")]
+        writer.write(recs, proj, dry_run=False)
+
+        # Explicit target opts back into the team-shared CLAUDE.md.
+        assert (proj.project_path / "CLAUDE.md").exists()
+        assert "Use uv" in (proj.project_path / "CLAUDE.md").read_text()
+        assert not (proj.project_path / "CLAUDE.local.md").exists()
+
+    def test_target_override_via_constructor(self, tmp_path):
+        proj = _project(tmp_path)
+        writer = ClaudeCodeWriter(context_target="docs/LEARNINGS.md")
+        recs = [_rec(RecommendationTarget.CONTEXT_FILE, "Environment", "- Use uv")]
+        writer.write(recs, proj, dry_run=False)
+
+        target = proj.project_path / "docs" / "LEARNINGS.md"
+        assert target.exists()
+        assert "Use uv" in target.read_text()
+
+    def test_target_absolute_path(self, tmp_path):
+        proj = _project(tmp_path)
+        abs_target = tmp_path / "elsewhere" / "NOTES.md"
+        writer = ClaudeCodeWriter(context_target=str(abs_target))
+        recs = [_rec(RecommendationTarget.CONTEXT_FILE, "Environment", "- Use uv")]
+        writer.write(recs, proj, dry_run=False)
+
+        assert abs_target.exists()
+        assert "Use uv" in abs_target.read_text()
+
+
+class TestLegacyClaudeMdMigration:
+    """A stale headroom block in the shared CLAUDE.md migrates to CLAUDE.local.md."""
+
+    def test_migrates_block_and_strips_legacy(self, tmp_path):
+        proj = _project(tmp_path)
+        claude_md = proj.project_path / "CLAUDE.md"
+        claude_md.write_text(_legacy_block("Build Commands", "- cargo check from src-tauri/"))
+
+        writer = ClaudeCodeWriter()
+        recs = [_rec(RecommendationTarget.CONTEXT_FILE, "Environment", "- Use uv")]
+        result = writer.write(recs, proj, dry_run=False)
+
+        # Hand-written content stays in CLAUDE.md; the headroom block is gone.
+        legacy = claude_md.read_text()
+        assert "Existing instructions." in legacy
+        assert _MARKER_START not in legacy
+        assert "Build Commands" not in legacy
+
+        # CLAUDE.local.md now owns the migrated section AND the new one.
+        local = (proj.project_path / "CLAUDE.local.md").read_text()
+        assert "### Build Commands" in local
+        assert "cargo check from src-tauri/" in local
+        assert "### Environment" in local
+        assert "Use uv" in local
+        assert local.count(_MARKER_START) == 1
+
+        # The migration is surfaced to the user.
+        assert any("CLAUDE.md" in w for w in result.warnings)
+
+    def test_block_only_claude_md_is_removed(self, tmp_path):
+        proj = _project(tmp_path)
+        claude_md = proj.project_path / "CLAUDE.md"
+        # CLAUDE.md holds nothing but the Headroom block (no hand-written content).
+        claude_md.write_text(
+            f"{_MARKER_START}\n## Headroom Learned Patterns\n\n"
+            "### Build Commands\n- cargo check\n\n"
+            f"{_MARKER_END}\n"
+        )
+
+        writer = ClaudeCodeWriter()
+        recs = [_rec(RecommendationTarget.CONTEXT_FILE, "Environment", "- Use uv")]
+        result = writer.write(recs, proj, dry_run=False)
+
+        # The empty husk is deleted rather than left behind as an empty file.
+        assert not claude_md.exists()
+        local = (proj.project_path / "CLAUDE.local.md").read_text()
+        assert "### Build Commands" in local
+        assert "### Environment" in local
+        assert any("Removed" in w for w in result.warnings)
+
+    def test_dry_run_block_only_claude_md_not_removed(self, tmp_path):
+        proj = _project(tmp_path)
+        claude_md = proj.project_path / "CLAUDE.md"
+        original = (
+            f"{_MARKER_START}\n## Headroom Learned Patterns\n\n"
+            "### Build Commands\n- cargo check\n\n"
+            f"{_MARKER_END}\n"
+        )
+        claude_md.write_text(original)
+
+        writer = ClaudeCodeWriter()
+        recs = [_rec(RecommendationTarget.CONTEXT_FILE, "Environment", "- Use uv")]
+        result = writer.write(recs, proj, dry_run=True)
+
+        # Dry run leaves the file on disk but still previews the removal.
+        assert claude_md.read_text() == original
+        assert any("Removed" in w for w in result.warnings)
+
+    def test_dry_run_migration_writes_nothing(self, tmp_path):
+        proj = _project(tmp_path)
+        claude_md = proj.project_path / "CLAUDE.md"
+        original = _legacy_block("Build Commands", "- cargo check")
+        claude_md.write_text(original)
+
+        writer = ClaudeCodeWriter()
+        recs = [_rec(RecommendationTarget.CONTEXT_FILE, "Environment", "- Use uv")]
+        result = writer.write(recs, proj, dry_run=True)
+
+        # Nothing written on disk, but the warning still fires for the preview.
+        assert claude_md.read_text() == original
+        assert not (proj.project_path / "CLAUDE.local.md").exists()
+        assert any("CLAUDE.md" in w for w in result.warnings)
+
+    def test_no_migration_when_local_already_owns_block(self, tmp_path):
+        proj = _project(tmp_path)
+        claude_md = proj.project_path / "CLAUDE.md"
+        legacy = _legacy_block("Build Commands", "- cargo check")
+        claude_md.write_text(legacy)
+        local_md = proj.project_path / "CLAUDE.local.md"
+        local_md.write_text(
+            f"{_MARKER_START}\n## Headroom Learned Patterns\n\n"
+            "### Environment\n- prior local note\n\n"
+            f"{_MARKER_END}\n"
+        )
+
+        writer = ClaudeCodeWriter()
+        recs = [_rec(RecommendationTarget.CONTEXT_FILE, "Environment", "- fresh note")]
+        result = writer.write(recs, proj, dry_run=False)
+
+        # CLAUDE.md is left untouched (local is already the source of truth).
+        assert claude_md.read_text() == legacy
+        assert not result.warnings
+        local = local_md.read_text()
+        assert "fresh note" in local
+        assert "prior local note" not in local
+
+    def test_target_override_skips_migration(self, tmp_path):
+        proj = _project(tmp_path)
+        claude_md = proj.project_path / "CLAUDE.md"
+        legacy = _legacy_block("Build Commands", "- cargo check")
+        claude_md.write_text(legacy)
+
+        writer = ClaudeCodeWriter()
+        writer.set_context_target("CLAUDE.md")
+        recs = [_rec(RecommendationTarget.CONTEXT_FILE, "Environment", "- Use uv")]
+        result = writer.write(recs, proj, dry_run=False)
+
+        # Explicit CLAUDE.md target merges in place, no migration warning.
+        assert not result.warnings
+        content = claude_md.read_text()
+        assert "### Environment" in content
+        assert "### Build Commands" in content
+
+
+class TestHomeDirectoryContext:
+    """The home directory keeps writing to ~/.claude/CLAUDE.md (personal global memory)."""
+
+    def test_home_dir_writes_global_claude_md(self, tmp_path, monkeypatch):
+        fake_home = tmp_path / "home"
+        fake_home.mkdir()
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+
+        proj = ProjectInfo(
+            name="home",
+            project_path=fake_home,
+            data_path=tmp_path / "data",
+        )
+        writer = ClaudeCodeWriter()
+        recs = [_rec(RecommendationTarget.CONTEXT_FILE, "Environment", "- Use uv")]
+        writer.write(recs, proj, dry_run=False)
+
+        global_md = fake_home / ".claude" / "CLAUDE.md"
+        assert global_md.exists()
+        assert "Use uv" in global_md.read_text()
+        assert not (fake_home / "CLAUDE.local.md").exists()
 
 
 class TestParsePriorRecommendations:
@@ -349,3 +664,203 @@ class TestEncodingResilience:
 
         assert "Use uv" in merged
         assert "Notes — existing" in merged
+
+    def test_read_text_tolerant_normalizes_crlf_and_cr(self, tmp_path):
+        path = tmp_path / "AGENTS.md"
+        path.write_bytes(b"line1\r\nline2\rline3\n")
+        text = _read_text_tolerant(path)
+        assert text == "line1\nline2\nline3\n"
+
+    def test_apply_does_not_accumulate_carriage_returns_on_crlf_file(self, tmp_path):
+        proj = _project(tmp_path)
+        writer = ClaudeCodeWriter()
+        memory_md = proj.data_path / "memory" / "MEMORY.md"
+        # Simulate existing Windows CRLF file
+        memory_md.write_bytes(b"# Memory Index\r\n\r\n- bullet 1\r\n")
+
+        recs = [_rec(RecommendationTarget.MEMORY_FILE, "Errors", "- rule 1")]
+        writer.write(recs, proj, dry_run=False)
+        writer.write(recs, proj, dry_run=False)
+
+        raw = memory_md.read_bytes()
+        assert b"\r\r" not in raw
+        assert raw.count(b"\r") == raw.count(b"\r\n")
+
+
+def _git(proj: ProjectInfo, *args: str, check: bool = True) -> subprocess.CompletedProcess:
+    """Run git against the test repo, under the isolated config below."""
+    return subprocess.run(["git", *args], cwd=proj.project_path, check=check, capture_output=True)
+
+
+def _git_project(tmp_path: Path) -> ProjectInfo:
+    """A project whose directory is a real git repo."""
+    proj = _project(tmp_path)
+    _git(proj, "init", "-q")
+    return proj
+
+
+def _exclude(proj: ProjectInfo) -> Path:
+    return proj.project_path / ".git" / "info" / "exclude"
+
+
+def _exclude_entries(proj: ProjectInfo) -> list[str]:
+    """The repo-local exclude rules this PR is responsible for, one per line."""
+    path = _exclude(proj)
+    if not path.exists():
+        return []
+    return [line.strip() for line in path.read_text().splitlines() if line.strip()]
+
+
+def _is_ignored(proj: ProjectInfo, name: str) -> bool:
+    return _git(proj, "check-ignore", "-q", "--", name, check=False).returncode == 0
+
+
+class TestClaudeLocalMdStaysOutOfGit:
+    """CLAUDE.local.md is only personal if git actually ignores it (#1070)."""
+
+    @pytest.fixture(autouse=True)
+    def _isolated_git_config(self, monkeypatch, tmp_path):
+        """Decide these tests on the repository alone, on every machine.
+
+        ``git check-ignore`` consults ``core.excludesFile`` from the developer's
+        global and system config, and the writer shells out to it too (it skips
+        adding a rule when one already covers the file). So a contributor whose
+        global ignore lists CLAUDE.md or CLAUDE.local.md saw this suite fail
+        while the writer was behaving correctly. Patching the environment rather
+        than a helper covers the writer's own subprocess as well as ours.
+        """
+        absent = tmp_path / "absent-gitconfig"
+        monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(absent))
+        monkeypatch.setenv("GIT_CONFIG_SYSTEM", str(absent))
+        monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+
+    def test_apply_adds_exclude_entry(self, tmp_path):
+        proj = _git_project(tmp_path)
+        recs = [_rec(RecommendationTarget.CONTEXT_FILE, "Environment", "- Use uv")]
+
+        result = ClaudeCodeWriter().write(recs, proj, dry_run=False)
+
+        assert "CLAUDE.local.md" in _exclude(proj).read_text()
+        # The point is the effect, not the file contents.
+        assert _is_ignored(proj, "CLAUDE.local.md")
+        assert result.warnings == []
+
+    def test_second_run_does_not_duplicate_the_entry(self, tmp_path):
+        proj = _git_project(tmp_path)
+        recs = [_rec(RecommendationTarget.CONTEXT_FILE, "Environment", "- Use uv")]
+        writer = ClaudeCodeWriter()
+
+        writer.write(recs, proj, dry_run=False)
+        writer.write(recs, proj, dry_run=False)
+
+        assert _exclude(proj).read_text().count("CLAUDE.local.md") == 1
+
+    def test_existing_gitignore_rule_is_left_alone(self, tmp_path):
+        proj = _git_project(tmp_path)
+        (proj.project_path / ".gitignore").write_text("CLAUDE.local.md\n")
+        recs = [_rec(RecommendationTarget.CONTEXT_FILE, "Environment", "- Use uv")]
+
+        ClaudeCodeWriter().write(recs, proj, dry_run=False)
+
+        assert not _exclude(proj).exists() or "CLAUDE.local.md" not in _exclude(proj).read_text()
+
+    def test_tracked_file_warns_instead_of_excluding(self, tmp_path):
+        proj = _git_project(tmp_path)
+        local = proj.project_path / "CLAUDE.local.md"
+        local.write_text("# prior\n")
+        _git(proj, "add", "CLAUDE.local.md")
+        recs = [_rec(RecommendationTarget.CONTEXT_FILE, "Environment", "- Use uv")]
+
+        result = ClaudeCodeWriter().write(recs, proj, dry_run=False)
+
+        # An ignore rule does nothing for a tracked file, so say so rather than
+        # staging a deletion in the user's repo on their behalf.
+        assert len(result.warnings) == 1
+        assert "git rm --cached CLAUDE.local.md" in result.warnings[0]
+        assert not _exclude(proj).exists() or "CLAUDE.local.md" not in _exclude(proj).read_text()
+
+    def test_dry_run_does_not_touch_exclude(self, tmp_path):
+        proj = _git_project(tmp_path)
+        recs = [_rec(RecommendationTarget.CONTEXT_FILE, "Environment", "- Use uv")]
+
+        ClaudeCodeWriter().write(recs, proj, dry_run=True)
+
+        assert not _exclude(proj).exists() or "CLAUDE.local.md" not in _exclude(proj).read_text()
+
+    def test_explicit_shared_target_is_never_excluded(self, tmp_path):
+        proj = _git_project(tmp_path)
+        recs = [_rec(RecommendationTarget.CONTEXT_FILE, "Environment", "- Use uv")]
+
+        ClaudeCodeWriter(context_target="CLAUDE.md").write(recs, proj, dry_run=False)
+
+        # --target CLAUDE.md is a deliberate opt-in to the team-shared file, so
+        # the writer must not add a rule for it. Assert the side effect this PR
+        # actually owns - the repo's own exclude file - as well as the effect.
+        assert "CLAUDE.md" not in _exclude_entries(proj)
+        assert not _is_ignored(proj, "CLAUDE.md")
+
+    def test_outside_a_git_repo_is_a_no_op(self, tmp_path):
+        proj = _project(tmp_path)  # no git init
+        recs = [_rec(RecommendationTarget.CONTEXT_FILE, "Environment", "- Use uv")]
+
+        result = ClaudeCodeWriter().write(recs, proj, dry_run=False)
+
+        assert (proj.project_path / "CLAUDE.local.md").exists()
+        assert result.warnings == []
+
+
+@pytest.mark.windows_newline
+class TestNewlineContract:
+    """Regression guard for #3594 / #3698 — every learn-writer write pins LF.
+
+    This asserts the *call*, not the artifact, on purpose. ``Path.write_text``
+    with ``newline=None`` translates ``\n`` through ``TextIOWrapper``, whose
+    translation target is chosen at C-compile time (``#ifdef MS_WINDOWS``), not
+    read from ``os.linesep`` at runtime. So on POSIX no fixture can make the
+    unpinned call emit CRLF, and every artifact-level assertion here passes
+    with the fix reverted. Spying on the kwarg fails the moment a pin is
+    dropped, on any platform — which is the property #3698 asked for.
+    """
+
+    def test_every_learn_writer_write_pins_lf(self, tmp_path, monkeypatch):
+        proj = _project(tmp_path)
+        context_rec = _rec(RecommendationTarget.CONTEXT_FILE, "Environment", "- Use uv")
+        memory_rec = _rec(RecommendationTarget.MEMORY_FILE, "Errors", "- rule 1")
+
+        # Seed a legacy CLAUDE.md that carries a headroom block *and*
+        # hand-written prose, so ClaudeCodeWriter's migration branch (which
+        # rewrites the cleaned CLAUDE.md) is exercised alongside the rest.
+        (proj.project_path / "CLAUDE.md").write_text(
+            _legacy_block("Build Commands", "- cargo check"), encoding="utf-8"
+        )
+
+        calls: list[tuple[Path, str | None]] = []
+        original = Path.write_text
+
+        def spy(self, data, encoding=None, errors=None, newline=None):
+            calls.append((self, newline))
+            return original(self, data, encoding=encoding, errors=errors, newline=newline)
+
+        monkeypatch.setattr(Path, "write_text", spy)
+
+        ClaudeCodeWriter().write([context_rec, memory_rec], proj, dry_run=False)
+        CodexWriter().write([context_rec, memory_rec], proj, dry_run=False)
+        GeminiWriter().write([context_rec], proj, dry_run=False)
+        GrokWriter().write([context_rec], proj, dry_run=False)
+
+        assert calls, "no writes captured — this test no longer drives the writers"
+        unpinned = sorted(str(path) for path, newline in calls if newline != "\n")
+        assert not unpinned, f"learn writers wrote without newline='\\n': {unpinned}"
+
+        # All seven write sites in headroom/learn/writer.py are reached above;
+        # if a writer grows a new target, this set fails loudly rather than
+        # letting an unguarded write site slip in.
+        assert {path.name for path, _ in calls} == {
+            "CLAUDE.local.md",  # ClaudeCodeWriter context target
+            "CLAUDE.md",  # legacy-migration rewrite
+            "MEMORY.md",  # ClaudeCodeWriter memory target
+            "AGENTS.md",  # CodexWriter context target
+            "instructions.md",  # CodexWriter memory target
+            "GEMINI.md",  # GeminiWriter
+            "GROK.md",  # GrokWriter
+        }

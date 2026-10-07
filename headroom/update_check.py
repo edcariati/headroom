@@ -38,7 +38,6 @@ _CACHE_FILE = "update_check.json"
 _CHECK_TTL_SECONDS = 86_400
 
 _OFF_VALUES = frozenset(("off", "false", "0", "no", "disable", "disabled"))
-_TRUE_VALUES = frozenset(("on", "true", "1", "yes", "enable", "enabled"))
 
 
 def _env_off(name: str, default: str = "on") -> bool:
@@ -46,21 +45,23 @@ def _env_off(name: str, default: str = "on") -> bool:
     return os.environ.get(name, default).strip().lower() in _OFF_VALUES
 
 
-def _env_on(name: str) -> bool:
-    """Return True when env var ``name`` is set to a truthy/on value."""
-    return os.environ.get(name, "").strip().lower() in _TRUE_VALUES
-
-
 def is_update_check_enabled() -> bool:
     """Whether the update check / banner should run at all.
 
-    Disabled by ``HEADROOM_UPDATE_CHECK=off``, stateless mode
+    Disabled by ``HEADROOM_UPDATE_CHECK=off``, offline mode
+    (``HEADROOM_OFFLINE``), stateless mode
     (``HEADROOM_STATELESS=true``/``1``/``yes``/``on``, matching the proxy's own
     parsing), or any CI environment (``CI`` set).
     """
+    from headroom.offline import is_offline
+
+    if is_offline():
+        return False
     if _env_off("HEADROOM_UPDATE_CHECK"):
         return False
-    if _env_on("HEADROOM_STATELESS"):
+    from headroom.paths import process_is_stateless
+
+    if process_is_stateless():
         return False
     if os.environ.get("CI", "").strip():
         return False
@@ -128,8 +129,10 @@ def read_cache() -> dict[str, Any] | None:
 def write_cache(latest_version: str, *, now: float | None = None) -> None:
     """Persist the latest-known version + check timestamp. Never raises."""
     try:
-        from headroom.paths import ensure_workspace_dir
+        from headroom.paths import ensure_workspace_dir, persistence_allowed
 
+        if not persistence_allowed("update-check cache"):
+            return
         ensure_workspace_dir()
         payload = {
             "last_check": now if now is not None else time.time(),
