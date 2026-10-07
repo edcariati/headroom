@@ -284,6 +284,7 @@ export const CADASTROS = {
 };
 
 export async function formCadastro(tipo, reg, aoSalvar) {
+  if (tipo === 'pessoas') { const { formPessoa } = await import('./clientes.js'); return formPessoa({ reg, aoSalvar }); }
   if (tipo === 'contratos') { const { formContrato } = await import('./clientes.js'); return formContrato({ reg, aoSalvar }); }
   const cfg = CADASTROS[tipo];
   const c = await cadastros();

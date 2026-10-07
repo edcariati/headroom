@@ -624,3 +624,17 @@ textarea.campo { min-height: 72px; padding: var(--s3) var(--s4); resize: vertica
 .tbl tr.clicavel:focus-visible { outline: 2px solid var(--amber); outline-offset: -2px; }
 @media (max-width: 520px) { .servico-linha { grid-template-columns: minmax(0, 1fr) 104px 44px; } }
 .tbl td[data-label="Código"] { white-space: nowrap; }
+.segmento { display: inline-flex; padding: 3px; border-radius: var(--r-md); background: var(--glass); border: 1px solid var(--linha); }
+.segmento label, .radios label { cursor: pointer; }
+.segmento input, .radios input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.segmento span { display: block; padding: 10px 18px; border-radius: calc(var(--r-md) - 3px); font-weight: 600; font-size: .9rem; color: var(--text-2); }
+.segmento input:checked + span { background: linear-gradient(135deg, var(--amber), #FF7A1A); color: #1A0F00; }
+.segmento input:focus-visible + span, .radios input:focus-visible + span::before { outline: 2px solid var(--amber); outline-offset: 2px; }
+.radios { display: flex; gap: var(--s5); min-height: 44px; align-items: center; }
+.radios label span { display: inline-flex; align-items: center; gap: 8px; color: var(--text); }
+.radios label span::before { content: ''; width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--linha); background: var(--input-bg); }
+.radios input:checked + span::before { border-color: var(--amber); background: radial-gradient(circle, var(--amber) 0 45%, transparent 50%); }
+.linha-end { display: grid; grid-template-columns: minmax(0, 1fr) 130px; gap: var(--s3); align-items: start; }
+@media (min-width: 769px) { dialog:has(.folha-larga) { width: min(760px, calc(100vw - 24px)); } }
+.folha-corpo h3 { font-size: .8rem; text-transform: uppercase; letter-spacing: .09em; color: var(--text-2); }
+@media (max-width: 520px) { .linha-end { grid-template-columns: minmax(0, 1fr) 96px; } }

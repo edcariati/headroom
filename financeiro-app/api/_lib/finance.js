@@ -489,10 +489,12 @@ export function outrosRelatorios(d, f = {}, hoje = hojeISO()) {
 const ENUMS = { tipo_pessoa: ['cliente', 'fornecedor', 'ambos'], status_contrato: ['ativo', 'concluido', 'cancelado'] };
 const CAMPOS = {
   contas: ['nome', 'banco', 'saldo_inicial_cents', 'ativa'], categorias: ['nome', 'tipo', 'grupo_dre'], centros: ['nome'],
-  pessoas: ['codigo', 'nome', 'tipo', 'documento', 'email', 'telefone', 'cidade', 'endereco', 'observacoes'],
+  pessoas: ['codigo', 'nome', 'tipo', 'natureza', 'data_nascimento', 'documento', 'rg', 'email', 'telefone', 'consumidor_final_nfse',
+    'cep', 'endereco', 'numero', 'complemento', 'bairro', 'cidade', 'estado', 'observacoes'],
   servicos: ['nome', 'descricao', 'valor_padrao_cents', 'categoria_id', 'ativo'],
-  contratos: ['codigo', 'nome', 'pessoa_id', 'valor_total_cents', 'competencia', 'status', 'area_m2', 'servicos'],
+  contratos: ['codigo', 'nome', 'pessoa_id', 'valor_total_cents', 'competencia', 'status', 'area_m2', 'servicos', 'obra'],
 };
+const CAMPOS_ENDERECO = ['cep', 'endereco', 'numero', 'complemento', 'bairro', 'cidade', 'estado'];
 const mesmoCodigo = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
 export const TIPOS_CADASTRO = Object.keys(CAMPOS);
 
@@ -516,10 +518,15 @@ export function validarCadastro(d, tipo, b, existente = null) {
   if (tipo === 'pessoas') {
     r.tipo = r.tipo || 'cliente';
     exigir(ENUMS.tipo_pessoa.includes(r.tipo), 'Tipo de pessoa inválido.');
+    r.natureza = r.natureza || (String(r.documento || '').replace(/\D/g, '').length === 14 ? 'juridica' : 'fisica');
+    exigir(['fisica', 'juridica'].includes(r.natureza), 'Tipo de pessoa (física ou jurídica) inválido.');
     if (r.documento) {
       const dig = String(r.documento).replace(/\D/g, '');
-      exigir(dig.length === 11 || dig.length === 14, 'CPF deve ter 11 dígitos e CNPJ 14.');
+      exigir(dig.length === (r.natureza === 'fisica' ? 11 : 14), r.natureza === 'fisica' ? 'CPF deve ter 11 dígitos.' : 'CNPJ deve ter 14 dígitos.');
     }
+    if (r.data_nascimento) exigir(ehISO(r.data_nascimento), 'Data de nascimento inválida.');
+    if (r.consumidor_final_nfse !== null && r.consumidor_final_nfse !== undefined) r.consumidor_final_nfse = r.consumidor_final_nfse === true || r.consumidor_final_nfse === 'sim';
+    if (r.estado) { r.estado = texto(r.estado).toUpperCase(); exigir(/^[A-Z]{2}$/.test(r.estado), 'Estado inválido (use a sigla, ex.: SP).'); }
     if (r.codigo) {
       r.codigo = texto(r.codigo).toUpperCase();
       exigir(!d.pessoas.some((x) => x.id !== existente?.id && x.codigo && mesmoCodigo(x.codigo, r.codigo)), 'Já existe um cliente com este código.', 409);
@@ -541,6 +548,10 @@ export function validarCadastro(d, tipo, b, existente = null) {
     exigir(!d.contratos.some((x) => x.id !== existente?.id && mesmoCodigo(x.codigo, r.codigo)), 'Já existe um projeto com este código.', 409);
     if (r.pessoa_id) achar(d, 'pessoas', r.pessoa_id, 'Cliente não encontrado.');
     if (r.competencia) exigir(ehISO(r.competencia), 'Data de competência inválida.');
+    const ob = r.obra && typeof r.obra === 'object' ? r.obra : {};
+    const obra = Object.fromEntries(CAMPOS_ENDERECO.map((k) => [k, texto(ob[k]) || null]));
+    if (obra.estado) obra.estado = obra.estado.toUpperCase();
+    r.obra = Object.values(obra).some(Boolean) ? obra : null;
     if (r.area_m2 !== null && r.area_m2 !== undefined) {
       r.area_m2 = Number(r.area_m2);
       exigir(Number.isFinite(r.area_m2) && r.area_m2 >= 0, 'Área inválida.');
@@ -581,13 +592,14 @@ export function clientes(d, f = {}, hoje = hojeISO()) {
   const itens = d.pessoas.filter(ehCliente).map((pe) => {
     const projetos = d.contratos.filter((c) => c.pessoa_id === pe.id).sort((a, b) => b.codigo.localeCompare(a.codigo)).map((c) => ({
       id: c.id, codigo: c.codigo, nome: c.nome, status: c.status, competencia: c.competencia, area_m2: c.area_m2 ?? null,
-      valor_total_cents: c.valor_total_cents, servicos: c.servicos || [],
+      valor_total_cents: c.valor_total_cents, servicos: c.servicos || [], obra: c.obra ?? null,
     }));
     const ps = receitas.get(pe.id) || [];
     const ativos = projetos.filter((p) => p.status !== 'cancelado');
     return {
       id: pe.id, codigo: pe.codigo ?? null, nome: pe.nome, tipo: pe.tipo, documento: pe.documento, email: pe.email, telefone: pe.telefone,
-      cidade: pe.cidade, endereco: pe.endereco, observacoes: pe.observacoes, criado_em: pe.criado_em ?? null, projetos,
+      natureza: pe.natureza ?? 'fisica', data_nascimento: pe.data_nascimento, rg: pe.rg, consumidor_final_nfse: pe.consumidor_final_nfse ?? null,
+      cep: pe.cep, endereco: pe.endereco, numero: pe.numero, complemento: pe.complemento, bairro: pe.bairro, cidade: pe.cidade, estado: pe.estado, observacoes: pe.observacoes, criado_em: pe.criado_em ?? null, projetos,
       servicos: [...new Set(ativos.flatMap((p) => p.servicos.map((s) => s.nome)))],
       contratado_cents: soma(ativos, (p) => p.valor_total_cents),
       lancado_cents: soma(ps, (p) => p.valor_cents), pago_cents: soma(ps, (p) => p.valor_pago_cents),

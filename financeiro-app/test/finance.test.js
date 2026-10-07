@@ -229,3 +229,18 @@ test('clientes: serviços contratados, situação financeira e códigos sugerido
   d.contratos[0].codigo = 'CA260601';
   assert.equal(sugestoesCodigo(d, HOJE).projeto, 'CA260602');
 });
+
+test('cliente: pessoa física/jurídica, documento por natureza, endereço do cliente e da obra', () => {
+  const d = base();
+  assert.throws(() => validarCadastro(d, 'pessoas', { nome: 'X', natureza: 'fisica', documento: '12345678000199' }), /CPF/);
+  assert.throws(() => validarCadastro(d, 'pessoas', { nome: 'X', natureza: 'juridica', documento: '12345678909' }), /CNPJ/);
+  assert.throws(() => validarCadastro(d, 'pessoas', { nome: 'X', estado: 'São Paulo' }), /Estado/);
+  assert.throws(() => validarCadastro(d, 'pessoas', { nome: 'X', data_nascimento: '31/02/2000' }), /nascimento/);
+  const p = validarCadastro(d, 'pessoas', { nome: 'Djair', natureza: 'fisica', documento: '894.409.608-25', rg: '8375443 SSP/SP', cep: '18270-000',
+    endereco: 'Estrada Municipal', numero: '22', bairro: 'Congonhal', cidade: 'Tatuí', estado: 'sp', consumidor_final_nfse: 'nao', data_nascimento: '1980-05-10' });
+  assert.equal(p.estado, 'SP'); assert.equal(p.consumidor_final_nfse, false);
+  assert.equal(validarCadastro(d, 'pessoas', { nome: 'Empresa', documento: '12.345.678/0001-99' }).natureza, 'juridica');
+  const c = validarCadastro(d, 'contratos', { codigo: 'CA260109', nome: 'Obra', obra: { endereco: ' Rua A ', cidade: 'Tatuí', estado: 'sp', numero: '' } });
+  assert.deepEqual([c.obra.endereco, c.obra.estado, c.obra.numero], ['Rua A', 'SP', null]);
+  assert.equal(validarCadastro(d, 'contratos', { codigo: 'CA260110', nome: 'Sem obra', obra: { endereco: '' } }).obra, null);
+});
