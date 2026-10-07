@@ -55,3 +55,12 @@ Para testar o login localmente: `ADMIN_SENHA=qualquer-coisa npm run demo`.
 - **Projetos**: código no padrão `CA` + ano + mês + número (ex.: `CA261001`), nome, área em m² (opcional) e os **serviços contratados** com valor; o valor do projeto é a soma dos serviços.
 - **Serviços** (Cadastros → Serviços): catálogo de serviços do escritório, cada um ligado a uma categoria de receita.
 - "Novo cliente" faz tudo em 3 etapas (dados → projeto e serviços → cobrança opcional, que já gera as parcelas a receber).
+
+## Documentos, recibos e notas fiscais
+
+- **Categorias com subcategorias** (Cadastros → Categorias): "Automóvel" com Combustível, Estacionamento, Pedágios, Mecânico e Higienização já vem pronta. A subcategoria herda o tipo e o grupo da DRE da categoria principal e aparece como "Automóvel › Combustível" nos relatórios.
+- **Anexos**: comprovantes, notas fiscais e outros arquivos (PDF, imagem ou XML, até 3 MB) ficam no armazenamento privado do aplicativo (`arquivos/`). XML de nota fiscal tem número, valor e data lidos automaticamente.
+- **Recibo**: ao registrar um recebimento, marque "Emitir recibo". Número sequencial `REC-0001`, valor por extenso e impressão/PDF.
+- **Notas fiscais**: o cliente pediu NF? O lançamento entra na fila "A emitir", com os dados prontos para copiar. Depois registre o número e anexe o arquivo. A emissão automática depende de ligar um emissor (prefeitura ou provedor).
+- **Busca em tudo** (Ctrl+K): clientes, projetos, lançamentos, arquivos anexados, recibos e notas.
+- **Rascunho automático**: o que foi digitado em qualquer formulário fica guardado no navegador. Clicar fora não fecha a janela, e ao reabrir o formulário continua de onde parou.

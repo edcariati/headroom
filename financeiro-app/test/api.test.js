@@ -16,6 +16,9 @@ test('primeiro acesso cria o plano de contas padrão uma única vez', async () =
   const cats = await j(store, 'GET', 'cadastros/categorias');
   assert.equal(cats.status, 200);
   assert.ok(cats.corpo.length >= 20 && cats.corpo.every((c) => c.grupo_dre));
+  const auto = cats.corpo.find((c) => c.nome === 'Automóvel');
+  assert.ok(auto && cats.corpo.filter((c) => c.pai_id === auto.id).map((c) => c.nome).sort().join() === 'Combustível,Estacionamento,Higienização,Mecânico,Pedágios');
+  assert.equal(cats.corpo.find((c) => c.nome === 'Combustível').caminho, 'Automóvel › Combustível');
   await j(store, 'GET', 'cadastros/categorias');
   assert.equal((await j(store, 'GET', 'cadastros/categorias')).corpo.length, cats.corpo.length);
 });
@@ -196,4 +199,60 @@ test('fluxos pela API: contato, conferência, entrega e comprovante na baixa', a
   assert.equal(f.passos.length, 9);
   assert.equal(f.passos[5].pendencias, 0); assert.equal(f.passos[7].pendencias, 0); assert.equal(f.passos[8].pendencias, 0);
   assert.equal(f.passos[7].ultimo, HOJE);
+});
+
+test('anexos, recibo, nota fiscal, edição do lançamento e busca pela API', async () => {
+  const store = new StoreMemoria();
+  const conta = (await j(store, 'POST', 'cadastros/contas', { corpo: { nome: 'Inter', saldo_inicial_cents: 0 } })).corpo;
+  const cli = (await j(store, 'POST', 'cadastros/pessoas', { corpo: { nome: 'Maria Souza', documento: '12345678909' } })).corpo;
+  const cat = (await j(store, 'GET', 'cadastros/categorias')).corpo.find((c) => c.tipo === 'receita');
+  const lanc = (await j(store, 'POST', 'lancamentos', { corpo: { tipo: 'receita', nome: 'Projeto Silva', valor_total_cents: 90000, parcelas: 3, primeiro_vencimento: '2026-06-01',
+    categoria_id: cat.id, pessoa_id: cli.id, conta_id: conta.id, nf_solicitada: true } })).corpo;
+  // cliente pediu NF: nota entra na fila
+  const notas = (await j(store, 'GET', 'notas')).corpo;
+  assert.equal(notas.length, 1); assert.equal(notas[0].status, 'a_emitir'); assert.equal(notas[0].valor_cents, 90000); assert.equal(notas[0].pessoa_nome, 'Maria Souza');
+  const parcela = (await j(store, 'GET', 'parcelas', { query: { tipo: 'receita', de: '2026-01-01', ate: '2026-12-31' } })).corpo.itens[0];
+  // recibo exige recebimento
+  assert.equal((await j(store, 'POST', 'recibos', { corpo: { parcela_id: parcela.id } })).status, 400);
+  await j(store, 'POST', `parcelas/${parcela.id}/baixa`, { corpo: { data: '2026-06-02', conta_id: conta.id } });
+  const rec = await j(store, 'POST', 'recibos', { corpo: { parcela_id: parcela.id, forma: 'Pix' } });
+  assert.equal(rec.status, 201); assert.equal(rec.corpo.numero, 'REC-0001'); assert.equal(rec.corpo.valor_cents, 30000); assert.equal(rec.corpo.pessoa_nome, 'Maria Souza');
+  const de_novo = await j(store, 'POST', 'recibos', { corpo: { parcela_id: parcela.id } });
+  assert.equal(de_novo.status, 200); assert.equal(de_novo.corpo.id, rec.corpo.id); // não duplica
+  // anexos: comprovante em PDF e nota em XML (os dados da nota são lidos do XML)
+  const pdf = Buffer.from('%PDF-1.4 teste').toString('base64');
+  const comp = await j(store, 'POST', 'anexos', { corpo: { nome: 'pix-comprovante.pdf', tipo: 'application/pdf', dados: pdf, categoria: 'comprovante', vinculo: { tipo: 'parcela', id: parcela.id } } });
+  assert.equal(comp.status, 201);
+  assert.equal((await j(store, 'POST', 'anexos', { corpo: { nome: 'x.exe', tipo: 'application/x-msdownload', dados: pdf, categoria: 'outro', vinculo: { tipo: 'parcela', id: parcela.id } } })).status, 400);
+  assert.equal((await j(store, 'POST', 'anexos', { corpo: { nome: 'a.pdf', tipo: 'application/pdf', dados: pdf, categoria: 'outro', vinculo: { tipo: 'lancamento', id: 'nao-existe' } } })).status, 404);
+  assert.equal((await j(store, 'POST', 'anexos', { corpo: { nome: 'grande.pdf', tipo: 'application/pdf', dados: Buffer.alloc(3 * 1024 * 1024 + 1, 1).toString('base64'), categoria: 'outro', vinculo: { tipo: 'lancamento', id: lanc.id } } })).status, 413);
+  const xml = '<?xml version="1.0"?><CompNfse><Nfse><InfNfse><Numero>1234</Numero><DataEmissao>2026-06-05T10:00:00</DataEmissao><ValorServicos>900.00</ValorServicos><PrestadorServico><RazaoSocial>Cariati Arquitetura</RazaoSocial></PrestadorServico><TomadorServico><RazaoSocial>Maria Souza</RazaoSocial></TomadorServico></InfNfse></Nfse></CompNfse>';
+  const nf = await j(store, 'POST', 'anexos', { corpo: { nome: 'nfse-1234.xml', tipo: 'text/xml', dados: Buffer.from(xml).toString('base64'), categoria: 'nota_fiscal', vinculo: { tipo: 'lancamento', id: lanc.id } } });
+  assert.deepEqual(nf.corpo.extraido, { numero: '1234', valor_cents: 90000, data_emissao: '2026-06-05', emitente: 'Cariati Arquitetura', tomador: 'Maria Souza' });
+  const arq = await j(store, 'GET', `anexos/${comp.corpo.id}/arquivo`);
+  assert.equal(arq.status, 200); assert.equal(arq.tipo, 'application/pdf'); assert.equal(arq.corpo.toString(), '%PDF-1.4 teste');
+  assert.match(arq.cabecalhos['Content-Disposition'], /^inline/); assert.equal(arq.cabecalhos['X-Content-Type-Options'], 'nosniff');
+  assert.match((await j(store, 'GET', `anexos/${nf.corpo.id}/arquivo`)).cabecalhos['Content-Disposition'], /^attachment/);
+  // nota emitida: exige número; anexa o XML
+  assert.equal((await j(store, 'PUT', `notas/${notas[0].id}`, { corpo: { status: 'emitida' } })).status, 400);
+  const emitida = await j(store, 'PUT', `notas/${notas[0].id}`, { corpo: { status: 'emitida', numero: '1234', anexo_id: nf.corpo.id } });
+  assert.equal(emitida.corpo.status, 'emitida'); assert.ok(emitida.corpo.data_emissao);
+  // vínculos para as listas
+  const v = (await j(store, 'GET', 'vinculos')).corpo;
+  assert.equal(v.recibos[parcela.id], rec.corpo.id); assert.equal(v.anexos[parcela.id].comprovante, 1); assert.equal(v.anexos[lanc.id].nota_fiscal, 1); assert.equal(v.notas[lanc.id], 'emitida');
+  // editar o lançamento inteiro
+  const ed = await j(store, 'PUT', `lancamentos/${lanc.id}`, { corpo: { nome: 'Projeto Silva (revisado)', nota_fiscal: '1234', etiquetas: 'residencial', observacao: 'Cliente pediu NF' } });
+  assert.equal(ed.status, 200);
+  assert.equal((await j(store, 'PUT', `lancamentos/${lanc.id}`, { corpo: { categoria_id: 'nao' } })).status, 404);
+  const apos = (await j(store, 'GET', 'parcelas', { query: { tipo: 'receita', de: '2026-01-01', ate: '2026-12-31' } })).corpo.itens[0];
+  assert.match(apos.nome, /revisado/);
+  // busca em tudo
+  assert.ok((await j(store, 'GET', 'busca', { query: { q: 'silva' } })).corpo.lancamentos.length >= 1);
+  assert.equal((await j(store, 'GET', 'busca', { query: { q: '1234' } })).corpo.anexos[0].titulo, 'nfse-1234.xml');
+  assert.equal((await j(store, 'GET', 'busca', { query: { q: 'rec-0001' } })).corpo.recibos.length, 1);
+  assert.equal((await j(store, 'GET', 'busca', { query: { q: 'maria' } })).corpo.clientes[0].titulo, 'Maria Souza');
+  assert.equal((await j(store, 'GET', 'busca', { query: { q: 'a' } })).status, 400);
+  // excluir anexo apaga o arquivo
+  assert.equal((await j(store, 'DELETE', `anexos/${comp.corpo.id}`)).status, 200);
+  assert.equal((await j(store, 'GET', `anexos/${comp.corpo.id}/arquivo`)).status, 404);
 });

@@ -103,8 +103,35 @@ export function ligarPeriodo(raiz, aoMudar) {
   };
 }
 
+// Rascunho dos formulários: o que foi digitado fica guardado no navegador até salvar ou descartar.
+const RASC_VALIDADE_MS = 7 * 24 * 3600 * 1000;
+const lerRasc = (k) => { try { const r = JSON.parse(localStorage.getItem(k)); return r && Date.now() - r.t < RASC_VALIDADE_MS ? r : null; } catch { return null; } };
+const gravarRasc = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* sem storage */ } };
+const apagarRasc = (k) => { try { localStorage.removeItem(k); } catch { /* sem storage */ } };
+function coletar(form) {
+  const v = {};
+  for (const el of form.elements) {
+    if (!el.name || el.type === 'password' || el.type === 'file' || el.type === 'submit' || el.type === 'button') continue;
+    if (el.type === 'radio') { if (el.checked) v[el.name] = el.value; } else if (el.type === 'checkbox') v[el.name] = el.checked; else v[el.name] = el.value;
+  }
+  return v;
+}
+function aplicar(form, v) {
+  for (const [nome, valor] of Object.entries(v)) {
+    const els = [...form.elements].filter((e) => e.name === nome);
+    for (const el of els) {
+      if (el.type === 'radio') el.checked = el.value === valor;
+      else if (el.type === 'checkbox') el.checked = !!valor;
+      else if (el.tagName === 'SELECT' && ![...el.options].some((o) => o.value === valor)) continue;
+      else el.value = valor;
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
+}
+
 // Modal (vira "bottom sheet" no celular). onSubmit(dados) pode lançar erro: a mensagem aparece no formulário.
-export function modal(titulo, corpo, { onSubmit, rotulo = 'Salvar', pequeno = false, rodape = null, classe = '', perigo = false } = {}) {
+// chave: identifica o rascunho (inclua o id ao editar um registro); chave: false desliga o rascunho.
+export function modal(titulo, corpo, { onSubmit, rotulo = 'Salvar', pequeno = false, rodape = null, classe = '', perigo = false, chave, proteger = false } = {}) {
   const dlg = document.createElement('dialog');
   dlg.innerHTML = `<form method="dialog" class="folha ${classe}" novalidate>
     <div class="folha-topo"><h2>${esc(titulo)}</h2><button type="button" class="icon-btn" data-fechar aria-label="Fechar">${icon('x')}</button></div>
@@ -112,11 +139,38 @@ export function modal(titulo, corpo, { onSubmit, rotulo = 'Salvar', pequeno = fa
     <div class="folha-rodape">${rodape ?? `<button type="button" class="btn btn-ghost" data-fechar>Cancelar</button>${onSubmit ? `<button class="btn ${perigo ? 'btn-danger' : 'btn-primary'}" type="submit">${esc(rotulo)}</button>` : ''}`}</div></form>`;
   if (pequeno) dlg.style.width = 'min(440px, calc(100vw - 24px))';
   document.body.append(dlg);
-  const fechar = () => { dlg.close(); dlg.remove(); };
-  $$('[data-fechar]', dlg).forEach((b) => { b.onclick = fechar; });
-  dlg.addEventListener('cancel', (e) => { e.preventDefault(); fechar(); });
-  dlg.addEventListener('click', (e) => { if (e.target === dlg) fechar(); });
   const form = $('form', dlg);
+  const rascunho = onSubmit && chave !== false && !(chave === undefined && /^Editar/.test(titulo)) ? `rasc:${chave ?? titulo}` : null;
+  let sujo = false, extra = null, tmr = null, fim = false;
+  const salvar = () => {
+    if (!rascunho || fim) return;
+    clearTimeout(tmr);
+    const v = coletar(form);
+    gravarRasc(rascunho, { t: Date.now(), v, x: extra?.ler?.() ?? null, passo: extra?.passo?.() ?? null });
+  };
+  const agendar = () => { sujo = true; clearTimeout(tmr); tmr = setTimeout(salvar, 350); };
+  let restaurado = rascunho ? lerRasc(rascunho) : null;
+  const aviso = () => {
+    const el = document.createElement('div');
+    el.className = 'aviso-rascunho';
+    el.innerHTML = `${icon('info')}<span style="flex:1">Rascunho recuperado: você pode continuar de onde parou.</span><button type="button" class="btn btn-ghost btn-sm" data-descartar>Descartar</button>`;
+    $('.folha-corpo', dlg).prepend(el);
+    $('[data-descartar]', el).onclick = () => { fim = true; apagarRasc(rascunho); sujo = false; clearTimeout(tmr); fechar(true); toast('Rascunho descartado.'); };
+  };
+  if (restaurado) { aplicar(form, restaurado.v); sujo = true; aviso(); }
+  form.addEventListener('input', agendar);
+  form.addEventListener('change', agendar);
+  const fechar = (sem = false) => {
+    if (!sem && sujo && rascunho) { salvar(); toast('Rascunho guardado. Abra de novo para continuar de onde parou.', { tipo: 'info' }); }
+    window.removeEventListener('pagehide', salvar);
+    dlg.close(); dlg.remove();
+  };
+  $$('[data-fechar]', dlg).forEach((b) => { b.onclick = () => fechar(); });
+  // clicar fora ou apertar Esc com algo digitado não fecha: evita perder o que está na tela
+  const protegido = () => { if (!sujo || !(rascunho || proteger)) return false; dlg.classList.remove('chacoalha'); void dlg.offsetWidth; dlg.classList.add('chacoalha'); return true; };
+  dlg.addEventListener('cancel', (e) => { e.preventDefault(); if (!protegido()) fechar(); });
+  dlg.addEventListener('click', (e) => { if (e.target === dlg && !protegido()) fechar(); });
+  window.addEventListener('pagehide', salvar);
   form.onsubmit = async (e) => {
     e.preventDefault();
     if (!onSubmit) return fechar();
@@ -134,23 +188,71 @@ export function modal(titulo, corpo, { onSubmit, rotulo = 'Salvar', pequeno = fa
       const dados = Object.fromEntries(new FormData(form));
       $$('input[type=checkbox]', form).forEach((c) => { dados[c.name] = c.checked; });
       await onSubmit(dados, form);
-      fechar();
+      fim = true; clearTimeout(tmr);
+      if (rascunho) apagarRasc(rascunho);
+      sujo = false;
+      fechar(true);
     } catch (err) {
       $('.erro', dlg).innerHTML = `${icon('alert')}<span>${esc(err.message)}</span>`;
       if (botao) botao.disabled = false;
     }
   };
   dlg.showModal();
-  return { fechar, dlg };
+  return {
+    fechar: () => fechar(true), dlg, salvarRascunho: agendar,
+    // editores próprios (lista de serviços, etapa atual...) entram no rascunho: { ler, aplicar, passo, irPasso }
+    definirExtra(obj) {
+      extra = obj;
+      if (restaurado) { if (restaurado.x != null) obj.aplicar?.(restaurado.x); if (restaurado.passo != null) obj.irPasso?.(restaurado.passo); restaurado = null; }
+    },
+  };
 }
 
 export function confirmar(msg, rotulo = 'Excluir') {
   return new Promise((resolve) => {
     let ok = false;
-    const m = modal('Confirmar ação', `<p>${esc(msg)}</p><p class="suave">Você poderá desfazer por alguns segundos.</p>`, { onSubmit: async () => { ok = true; }, rotulo, pequeno: true, perigo: true });
+    const m = modal('Confirmar ação', `<p>${esc(msg)}</p><p class="suave">Você poderá desfazer por alguns segundos.</p>`, { onSubmit: async () => { ok = true; }, rotulo, pequeno: true, perigo: true, chave: false });
     m.dlg.addEventListener('close', () => resolve(ok));
   });
 }
 
 export const opcoes = (lista, sel, vazio = '—', rot = (x) => x.nome) =>
   `<option value="">${esc(vazio)}</option>${lista.map((x) => `<option value="${x.id}"${String(sel) === String(x.id) ? ' selected' : ''}>${esc(rot(x))}</option>`).join('')}`;
+
+// Valor por extenso para o recibo: 123456 (centavos) -> "mil duzentos e trinta e quatro reais e cinquenta e seis centavos".
+const UN = ['zero', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove', 'dez', 'onze', 'doze', 'treze', 'quatorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove'];
+const DZ = ['', '', 'vinte', 'trinta', 'quarenta', 'cinquenta', 'sessenta', 'setenta', 'oitenta', 'noventa'];
+const CT = ['', 'cento', 'duzentos', 'trezentos', 'quatrocentos', 'quinhentos', 'seiscentos', 'setecentos', 'oitocentos', 'novecentos'];
+function ate999(n) {
+  if (n === 100) return 'cem';
+  const c = Math.floor(n / 100), r = n % 100, partes = [];
+  if (c) partes.push(CT[c]);
+  if (r) partes.push(r < 20 ? UN[r] : `${DZ[Math.floor(r / 10)]}${r % 10 ? ` e ${UN[r % 10]}` : ''}`);
+  return partes.join(' e ');
+}
+function inteiroExtenso(n) {
+  if (n === 0) return 'zero';
+  const mi = Math.floor(n / 1e6), mil = Math.floor((n % 1e6) / 1e3), resto = n % 1e3, partes = [];
+  if (mi) partes.push(`${ate999(mi)} ${mi === 1 ? 'milhão' : 'milhões'}`);
+  if (mil) partes.push(mil === 1 ? 'mil' : `${ate999(mil)} mil`);
+  if (resto) partes.push(ate999(resto));
+  // "e" antes do último grupo quando ele é menor que 100 ou múltiplo de 100
+  return partes.length > 1 && (resto && (resto < 100 || resto % 100 === 0) || (!resto && mil && (mil < 100 || mil % 100 === 0))) ? `${partes.slice(0, -1).join(' ')} e ${partes.at(-1)}` : partes.join(' ');
+}
+export function porExtenso(cents) {
+  const reais = Math.floor(cents / 100), cent = cents % 100, partes = [];
+  if (reais) partes.push(`${inteiroExtenso(reais)} ${reais === 1 ? 'real' : (reais % 1e6 === 0 && reais >= 1e6 ? 'de reais' : 'reais')}`);
+  if (cent) partes.push(`${inteiroExtenso(cent)} ${cent === 1 ? 'centavo' : 'centavos'}`);
+  return partes.length ? partes.join(' e ') : 'zero real';
+}
+// Lê o arquivo escolhido como base64 (sem o prefixo "data:") e confere o limite de 3 MB.
+export function lerArquivoBase64(arquivo) {
+  return new Promise((resolve, reject) => {
+    if (arquivo.size > 3 * 1024 * 1024) return reject(new Error('O arquivo passa de 3 MB. Reduza o tamanho e tente de novo.'));
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1] || '');
+    r.onerror = () => reject(new Error('Não foi possível ler o arquivo.'));
+    r.readAsDataURL(arquivo);
+  });
+}
+export const urlArquivo = (id) => urlApi(`anexos/${id}/arquivo`);

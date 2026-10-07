@@ -6,6 +6,7 @@ import * as V from './views.js';
 import { clientesView, formCliente } from './clientes.js';
 import { aReceberView } from './areceber.js';
 import { fluxosView } from './fluxos.js';
+import { abrirRecibo, documentosView, formAnexar, formNovaNota, notasView } from './documentos.js';
 import { novoUsuario, usuariosView } from './usuarios.js';
 
 // ---------- telas ----------
@@ -13,6 +14,8 @@ const novoMenu = () => abrirNovo();
 const ROTAS = {
   resumo: { titulo: 'Resumo', grupo: 'Financeiro', icone: 'home', sub: 'Caixa, contas e próximos vencimentos num só olhar.', fn: (el) => V.resumo(el), cta: { rotulo: 'Novo lançamento', icone: 'plus', acao: novoMenu } },
   areceber: { titulo: 'A receber', grupo: 'Financeiro', icone: 'alvo', sub: 'Quem está devendo, o que vence e como isso afeta o caixa.', fn: (el) => aReceberView(el), cta: { rotulo: 'Nova receita', icone: 'plus', acao: () => formLancamento('receita', renderAgora) } },
+  documentos: { titulo: 'Documentos', grupo: 'Financeiro', icone: 'clipe', sub: 'Comprovantes, notas fiscais e recibos guardados no aplicativo, com busca.', fn: (el) => documentosView(el), cta: { rotulo: 'Anexar documento', icone: 'plus', acao: () => formAnexar(renderAgora) } },
+  notas: { titulo: 'Notas fiscais', grupo: 'Financeiro', icone: 'contrato', sub: 'Pedidos de nota fiscal, fila de emissão e notas emitidas.', fn: (el) => notasView(el), cta: { rotulo: 'Nova nota', icone: 'plus', acao: () => formNovaNota(renderAgora) } },
   fluxos: { titulo: 'Fluxos', grupo: 'Financeiro', icone: 'raio', sub: 'O que o financeiro entrega em cada passo e o que está pendente.', fn: (el) => fluxosView(el), cta: { rotulo: 'Novo lançamento', icone: 'plus', acao: novoMenu } },
   clientes: { titulo: 'Clientes', grupo: 'Financeiro', icone: 'usuarios', sub: 'Quem são os clientes, seus códigos, projetos e serviços contratados.', fn: (el) => clientesView(el), cta: { rotulo: 'Novo cliente', icone: 'plus', acao: () => formCliente(renderAgora) } },
   pagamentos: { titulo: 'Pagamentos do cliente', grupo: 'Financeiro', icone: 'contrato', sub: 'Contratos, parcelas e quanto ainda falta receber.', fn: (el) => V.pagamentos(el), cta: { rotulo: 'Nova receita de contrato', icone: 'plus', acao: () => formLancamento('receita', renderAgora) } },
@@ -178,7 +181,7 @@ function abrirPaleta() {
   if ($('dialog.paleta')) return;
   const dlg = document.createElement('dialog');
   dlg.className = 'paleta';
-  dlg.innerHTML = `<div class="folha"><div class="paleta-campo">${icon('search')}<input id="paleta-in" type="text" placeholder="Buscar telas, ações ou lançamentos…" aria-label="Buscar" autocomplete="off" role="combobox" aria-expanded="true" aria-controls="paleta-lista"><kbd>Esc</kbd></div>
+  dlg.innerHTML = `<div class="folha"><div class="paleta-campo">${icon('search')}<input id="paleta-in" type="text" placeholder="Buscar clientes, lançamentos, documentos, telas…" aria-label="Buscar" autocomplete="off" role="combobox" aria-expanded="true" aria-controls="paleta-lista"><kbd>Esc</kbd></div>
     <div class="paleta-lista" id="paleta-lista" role="listbox" aria-label="Resultados"></div><div class="paleta-rodape"><span>↑↓ navegar</span><span>↵ abrir</span><span>Esc fechar</span></div></div>`;
   document.body.append(dlg);
   const fechar = () => { dlg.close(); dlg.remove(); };
@@ -218,10 +221,16 @@ function abrirPaleta() {
     const minha = ++seqBusca;
     tmr = setTimeout(async () => {
       try {
-        const r = await api(`parcelas?${new URLSearchParams({ busca: q, de: '2000-01-01', ate: '2100-12-31', pageSize: 6 })}`);
+        const r = await api(`busca?${new URLSearchParams({ q })}`);
         if (minha !== seqBusca) return;
-        achados = r.itens.map((p) => ({ grupo: 'Lançamentos', icone: p.tipo === 'receita' ? 'receitas' : 'despesas', rot: `${p.nome} · ${brl(p.valor_cents)}`, sub: `${p.tipo === 'receita' ? 'Receita' : 'Despesa'} · vence ${dataBR(p.vencimento)}${p.pessoa_nome ? ' · ' + p.pessoa_nome : ''}`,
-          exec: () => { const ano = p.vencimento.slice(0, 4); setPeriodo({ de: `${ano}-01-01`, ate: `${ano}-12-31` }); location.hash = `#/${p.tipo === 'receita' ? 'receitas' : 'despesas'}?status=&busca=${encodeURIComponent(p.lancamento_nome)}`; } }));
+        const G = [['clientes', 'Clientes', 'usuarios'], ['projetos', 'Projetos', 'contrato'], ['lancamentos', 'Lançamentos', 'receitas'], ['anexos', 'Documentos anexados', 'clipe'], ['recibos', 'Recibos', 'impressora'], ['notas', 'Notas fiscais', 'contrato']];
+        achados = G.flatMap(([k, grupo, icone]) => (r[k] || []).map((x) => ({ grupo, icone, rot: x.titulo, sub: x.sub, exec: async () => {
+          if (x.recibo) return abrirRecibo(await api(`recibos/${x.id}`));
+          if (k === 'clientes' || k === 'projetos') clientesView.filtro = { busca: x.busca };
+          if (k === 'anexos') documentosView.filtro = { busca: x.busca, categoria: '', aba: 'arquivos' };
+          if (k === 'lancamentos') { const l = await api(`parcelas?${new URLSearchParams({ busca: x.busca, de: '2000-01-01', ate: '2100-12-31', pageSize: 1 })}`); const ano = l.itens[0]?.vencimento.slice(0, 4); if (ano) setPeriodo({ de: `${ano}-01-01`, ate: `${ano}-12-31` }); location.hash = `#/${x.rota}?status=&busca=${encodeURIComponent(x.busca)}`; return; }
+          location.hash = `#/${x.rota}`; renderAgora();
+        } })));
         desenhar();
       } catch { /* sem resultados ao vivo */ }
     }, 250);

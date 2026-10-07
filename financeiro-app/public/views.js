@@ -2,7 +2,8 @@ import { $, $$, MESES, api, brl, confirmar, controlePeriodo, dataBR, esc, exclui
 import { CORES, animarContadores, chipStatus, estadoVazio, gauge, grafico, icon, kpi, linha, revelar, rosca, skeletonPagina, spark } from './ui.js';
 import { formConferencia } from './fluxos.js';
 import { blocoDiretor } from './painel.js';
-import { CADASTROS, GRUPOS, formBaixa, formCadastro, formEditarParcela, formLancamento, formTransferencia, limparCache } from './forms.js';
+import { documentosParcela } from './documentos.js';
+import { CADASTROS, GRUPOS, formBaixa, formCadastro, formEditarLancamento, formEditarParcela, formLancamento, formTransferencia, limparCache } from './forms.js';
 
 export const setCrumbs = (lista) => window.dispatchEvent(new CustomEvent('crumbs', { detail: lista }));
 const pronto = (el) => { revelar(el); animarContadores(el); };
@@ -108,7 +109,7 @@ export async function lista(el, tipo, query = {}) {
   const p = getPeriodo();
   const rec = tipo === 'receita';
   if (!el.dataset.pronto || el.dataset.tela !== tipo) el.innerHTML = skeletonPagina();
-  const r = await api(`parcelas?${qs({ tipo, ...p, status: e.status, busca: e.busca, page: e.page, pageSize: 25 })}`);
+  const [r, vinc] = await Promise.all([api(`parcelas?${qs({ tipo, ...p, status: e.status, busca: e.busca, page: e.page, pageSize: 25 })}`), api('vinculos').catch(() => ({ recibos: {}, anexos: {}, notas: {} }))]);
   el.dataset.pronto = '1'; el.dataset.tela = tipo;
   const f = r.faixas;
   const perc = pct(f.pagos.valor, f.total.valor);
@@ -126,9 +127,10 @@ export async function lista(el, tipo, query = {}) {
     <td class="num ${rec ? 'verde' : 'vermelho'}" data-label="Valor"><b>${brl(i.valor_cents)}</b>${i.valor_pago_cents && i.status !== 'pago' ? `<small class="suave" style="display:block">pago ${brl(i.valor_pago_cents)}</small>` : ''}</td>
     <td data-label="Vencimento">${dataBR(i.vencimento)}</td><td data-label="${rec ? 'Recebido em' : 'Pago em'}">${dataBR(i.data_pagamento)}</td>
     <td data-label="${rec ? 'Cliente' : 'Fornecedor'}">${esc(i.pessoa_nome || '-')}</td><td data-label="Categoria">${esc(i.categoria_nome || '-')}</td>
-    <td data-label="Projeto">${esc(i.contrato_codigo || '-')}</td><td data-label="Status">${chipStatus(i.status)}</td>
+    <td data-label="Projeto">${esc(i.contrato_codigo || '-')}</td><td data-label="Status">${chipStatus(i.status)}${i.nf_solicitada ? `<small><span class="chip tag" title="O cliente pediu nota fiscal">NF ${vinc.notas[i.lancamento_id] === 'emitida' ? 'emitida' : 'pedida'}</span></small>` : ''}${rec && vinc.recibos[i.id] ? '<small><span class="chip">Recibo</span></small>' : ''}</td>
     <td class="acoes" data-label=""><div class="acoes-linha">${i.status !== 'pago' ? `<button class="btn btn-sm btn-ok" data-acao="baixar" data-id="${i.id}">${icon('check')}${rec ? 'Receber' : 'Pagar'}</button>` : `<button class="btn btn-sm" data-acao="estornar" data-id="${i.id}">${icon('desfazer')}Estornar</button>`}
-      ${i.valor_pago_cents === 0 ? `<button class="btn btn-sm" data-acao="editar" data-id="${i.id}" aria-label="Editar parcela">${icon('editar')}</button>` : ''}
+      <button class="btn btn-sm" data-acao="editar-lanc" data-id="${i.id}" aria-label="Editar ${rec ? 'receita' : 'despesa'}" title="Editar todos os campos">${icon('editar')}</button>
+      <button class="btn btn-sm" data-acao="docs" data-id="${i.id}" aria-label="Documentos: comprovantes, recibo e nota fiscal" title="Comprovantes${rec ? ', recibo e nota fiscal' : ''}">${icon('clipe')}${(vinc.anexos[i.id]?.total || 0) + (vinc.anexos[i.lancamento_id]?.total || 0) ? `<span class="badge-n">${(vinc.anexos[i.id]?.total || 0) + (vinc.anexos[i.lancamento_id]?.total || 0)}</span>` : ''}</button>
       <button class="btn btn-sm btn-danger" data-acao="excluir" data-id="${i.id}" data-lanc="${i.lancamento_id}" aria-label="Excluir lançamento inteiro" title="Exclui o lançamento inteiro, com todas as parcelas">${icon('lixo')}</button></div></td></tr>`).join('');
   const filtrado = e.status || e.busca;
   el.innerHTML = `
@@ -164,7 +166,8 @@ export async function lista(el, tipo, query = {}) {
     const item = r.itens.find((i) => String(i.id) === b.dataset.id);
     try {
       if (b.dataset.acao === 'baixar') formBaixa(item, recarregar);
-      else if (b.dataset.acao === 'editar') formEditarParcela(item, recarregar);
+      else if (b.dataset.acao === 'editar-lanc') formEditarLancamento(item, recarregar);
+      else if (b.dataset.acao === 'docs') documentosParcela(item, recarregar);
       else if (b.dataset.acao === 'estornar') { await api(`parcelas/${item.id}/estorno`, { method: 'POST' }); toast('Pagamento estornado. Você pode registrar de novo quando quiser.', { tipo: 'info' }); recarregar(); }
       else if (b.dataset.acao === 'excluir' && await confirmar(`Excluir "${item.lancamento_nome}" e todas as suas parcelas?`)) {
         const linhasDoLanc = () => $$(`tr[data-lanc="${b.dataset.lanc}"]`, el);
@@ -415,7 +418,7 @@ export async function cadastrosView(el, query = {}) {
     const rot = esc(cfg.colunas.find((c) => c[0] === k)[1]);
     if (t === 'grupo') return `<td data-label="${rot}">${esc(GRUPOS[v] || v)}</td>`;
     if (k === 'tipo' && aba === 'categorias') return `<td data-label="${rot}"><span class="chip tipo-${esc(v)}">${esc(v)}</span></td>`;
-    if (k === 'nome' || k === 'codigo') return `<td class="${k === 'nome' && aba !== 'contratos' ? 'nome' : ''}" data-label="${rot}"><strong>${esc(v ?? '')}</strong></td>`;
+    if (k === 'nome' || k === 'codigo') return `<td class="${k === 'nome' && aba !== 'contratos' ? 'nome' : ''}" data-label="${rot}"><strong>${aba === 'categorias' && r.pai_id ? '<span class="suave">└ </span>' : ''}${esc(v ?? '')}</strong></td>`;
     return `<td data-label="${rot}">${esc(v ?? '')}</td>`;
   };
   el.innerHTML = `${tabs(Object.entries(CADASTROS).map(([k, c]) => [k, c.titulo]), aba)}

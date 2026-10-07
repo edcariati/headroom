@@ -11,7 +11,7 @@ export function formContato({ pessoa_id, nome, parcela_id = null }, aoSalvar) {
     <div class="linha2"><label class="f">Data *<input class="campo" type="date" name="data" value="${hojeISO()}" required></label>
       <label class="f">Canal<select class="campo" name="canal">${Object.entries(CANAIS).map(([k, r]) => `<option value="${k}">${r}</option>`).join('')}</select></label></div>
     <label class="f">Resposta do cliente ou combinado *<textarea class="campo" name="resposta" rows="3" required placeholder="Ex.: Vai pagar na sexta, pediu o boleto de novo"></textarea></label>`, {
-    rotulo: 'Registrar',
+    rotulo: 'Registrar', chave: `contato:${pessoa_id}`,
     onSubmit: async (d) => {
       await api('contatos', { method: 'POST', body: { pessoa_id, parcela_id, data: d.data, canal: d.canal, resposta: d.resposta } });
       toast('Contato registrado.');

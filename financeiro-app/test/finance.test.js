@@ -340,3 +340,41 @@ test('painel do diretor: crescimento, parcelados, previsão de 12 meses, atrasos
   assert.equal(r.dre.a_receber_cents, 75000);
   assert.equal(r.carteira[0].nome, 'Cliente A'); assert.equal(r.carteira[0].valor_cents, 25000);
 });
+
+test('categorias com subcategorias: herdam tipo e grupo, caminho nos relatórios e exclusão protegida', () => {
+  const d = base();
+  const auto = { id: 'a1', nome: 'Automóvel', tipo: 'despesa', grupo_dre: 'despesas_operacionais', pai_id: null };
+  d.categorias.push(auto); d.mapa.categorias.set('a1', auto);
+  const sub = validarCadastro(d, 'categorias', { nome: 'Combustível', pai_id: 'a1' });
+  assert.deepEqual([sub.tipo, sub.grupo_dre, sub.pai_id], ['despesa', 'despesas_operacionais', 'a1']);
+  const sub2 = { ...sub, id: 'a2' }; d.categorias.push(sub2); d.mapa.categorias.set('a2', sub2);
+  assert.throws(() => validarCadastro(d, 'categorias', { nome: 'combustível', pai_id: 'a1' }), /já existe/i);
+  assert.throws(() => validarCadastro(d, 'categorias', { nome: 'Filha', pai_id: 'a2' }), /um nível/);
+  assert.throws(() => validarCadastro(d, 'categorias', { nome: 'Automóvel', pai_id: 'a1' }, auto), /si mesma|subcategorias/);
+  assert.ok(emUso(d, 'categorias', 'a1')); // tem subcategoria
+  desp(d, { nome: 'Gasolina', categoria_id: 'a2', valor_total_cents: 20000, primeiro_vencimento: '2026-06-10', primeira_paga: true });
+  assert.equal(listarParcelas(d, { tipo: 'despesa', de: '2026-06-01', ate: '2026-06-30' }, HOJE).itens[0].categoria_nome, 'Automóvel › Combustível');
+  const r = dre(d, 2026, { regime: 'caixa' }, HOJE);
+  assert.equal(r.linhas.find((l) => l.chave === 'despesas_operacionais').categorias[0].nome, 'Automóvel › Combustível');
+  assert.ok(emUso(d, 'categorias', 'a2'));
+});
+
+test('serviço do projeto guarda parcelas, primeiro vencimento e a receita gerada', () => {
+  const d = base();
+  const c = validarCadastro(d, 'contratos', { codigo: 'CA260120', nome: 'P', servicos: [
+    { nome: 'Projeto', valor_cents: 1000000, parcelas: 10, primeiro_vencimento: '2026-07-10', lancamento_id: 'abc' }, { nome: 'Consultoria', valor_cents: 50000 }] });
+  assert.deepEqual(c.servicos[0], { servico_id: null, nome: 'Projeto', valor_cents: 1000000, parcelas: 10, primeiro_vencimento: '2026-07-10', lancamento_id: 'abc' });
+  assert.equal(c.servicos[1].parcelas, undefined);
+  assert.equal(c.valor_total_cents, 1050000);
+  assert.throws(() => validarCadastro(d, 'contratos', { codigo: 'CA260121', nome: 'P', servicos: [{ nome: 'X', valor_cents: 1, parcelas: 0 }] }), /1 a 24/);
+  assert.throws(() => validarCadastro(d, 'contratos', { codigo: 'CA260123', nome: 'P', servicos: [{ nome: 'X', valor_cents: 1, parcelas: 25 }] }), /1 a 24/);
+  assert.equal(validarCadastro(d, 'contratos', { codigo: 'CA260124', nome: 'P', servicos: [{ nome: 'X', valor_cents: 2400, parcelas: 24 }] }).servicos[0].parcelas, 24);
+  assert.throws(() => validarCadastro(d, 'contratos', { codigo: 'CA260122', nome: 'P', servicos: [{ nome: 'X', valor_cents: 1, primeiro_vencimento: '10/07/2026' }] }), /vencimento/);
+});
+
+test('recorrência de receitas e despesas vai até 180 meses', () => {
+  const d = base();
+  assert.equal(desp(d, { nome: 'Aluguel', valor_total_cents: 100000, recorrente: true, repeticoes: 180, primeiro_vencimento: '2026-07-05' }).parcelas.length, 180);
+  assert.throws(() => criarLancamento(d, { tipo: 'despesa', nome: 'X', valor_total_cents: 1000, recorrente: true, repeticoes: 181, primeiro_vencimento: '2026-07-05' }), /180 meses/);
+  assert.equal(rec(d, { nome: 'Parcelado', valor_total_cents: 3600000, parcelas: 360, primeiro_vencimento: '2026-07-05' }).parcelas.length, 360); // parcelamento comum segue até 360
+});

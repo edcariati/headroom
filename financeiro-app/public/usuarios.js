@@ -30,6 +30,7 @@ function formNovo(depois) {
 function formMinhaSenha() {
   modal('Alterar minha senha', `<label class="f">Senha atual *<input class="campo" type="password" name="atual" required autocomplete="current-password"></label>
     <label class="f">Nova senha *<input class="campo" type="password" name="nova" required minlength="8" autocomplete="new-password"><span class="dica">Mínimo de 8 caracteres.</span></label>`, {
+    chave: false,
     onSubmit: async (d) => { await api('minha-senha', { method: 'POST', body: { atual: d.atual, nova: d.nova } }); toast('Senha alterada.'); },
   });
 }

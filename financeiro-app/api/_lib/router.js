@@ -91,7 +91,12 @@ export async function tratar(req, ctx) {
       if (metodo === 'GET' && !c) {
         const lista = [...d[b]];
         if (b === 'contratos') return ok(lista.sort((x, y) => y.codigo.localeCompare(x.codigo)).map((x) => ({ ...x, pessoa_nome: d.mapa.pessoas.get(x.pessoa_id)?.nome ?? null })));
-        if (b === 'categorias') return ok(lista.sort((x, y) => x.tipo.localeCompare(y.tipo) || x.nome.localeCompare(y.nome)));
+        if (b === 'categorias') {
+          // subcategorias logo abaixo da categoria principal
+          const comCaminho = lista.map((x) => ({ ...x, caminho: F.caminhoCategoria(d, x), nivel: x.pai_id ? 1 : 0 }));
+          const chave = (x) => (x.pai_id ? F.caminhoCategoria(d, d.mapa.categorias.get(x.pai_id)) : x.caminho);
+          return ok(comCaminho.sort((x, y) => x.tipo.localeCompare(y.tipo) || chave(x).localeCompare(chave(y)) || x.nivel - y.nivel || x.nome.localeCompare(y.nome)));
+        }
         return ok(lista.sort((x, y) => x.nome.localeCompare(y.nome)));
       }
       if (metodo === 'POST' && !c) {
@@ -108,6 +113,10 @@ export async function tratar(req, ctx) {
         if (!existente) throw new F.ErroValidacao('Registro não encontrado.', 404);
         const reg = { ...existente, ...F.validarCadastro(d, b, body, existente), id: c };
         await gravar(store, b, reg);
+        if (b === 'categorias' && !reg.pai_id) {
+          // tipo e grupo da DRE da categoria principal valem para as subcategorias
+          for (const f of d.categorias.filter((x) => x.pai_id === c && (x.tipo !== reg.tipo || x.grupo_dre !== reg.grupo_dre))) await gravar(store, 'categorias', { ...f, tipo: reg.tipo, grupo_dre: reg.grupo_dre });
+        }
         return ok(reg);
       }
       if (metodo === 'DELETE' && c) {
@@ -125,6 +134,77 @@ export async function tratar(req, ctx) {
     if (a === 'conferencias' && !b && metodo === 'GET') return ok(d.conferencias.filter((x) => !query.conta_id || x.conta_id === query.conta_id).sort((x, y) => y.data.localeCompare(x.data)));
     if (a === 'entregas' && !b && metodo === 'POST') { const x = F.criarEntrega(d, body, agora(), H); await gravar(store, 'entregas', x); return ok(x, 201); }
 
+    // ----- anexos (comprovantes e notas fiscais): o arquivo fica guardado dentro do aplicativo, no armazenamento privado -----
+    if (a === 'anexos') {
+      if (metodo === 'POST' && !b) {
+        const { meta, bytes } = F.prepararAnexo(d, body, agora());
+        await store.gravar(`arquivos/${meta.id}.json`, { dados: bytes.toString('base64') });
+        await gravar(store, 'anexos', meta);
+        return ok(meta, 201);
+      }
+      if (metodo === 'GET' && !b) {
+        const q = String(query.busca || '').toLowerCase();
+        const contexto = (x) => { const l = d.mapa.lancamentos.get(x.lancamento_id); const pe = d.mapa.pessoas.get(l?.pessoa_id ?? (x.vinculo.tipo === 'pessoa' ? x.vinculo.id : null));
+          return x.vinculo.tipo === 'pessoa' ? pe?.nome ?? '' : x.vinculo.tipo === 'contrato' ? d.mapa.contratos.get(x.vinculo.id)?.codigo ?? '' : [l?.nome, pe?.nome].filter(Boolean).join(' · '); };
+        const lista = d.anexos.filter((x) => (!query.categoria || x.categoria === query.categoria) && (!query.vinculo_tipo || x.vinculo.tipo === query.vinculo_tipo) && (!query.vinculo_id || x.vinculo.id === query.vinculo_id)
+          && (!query.lancamento_id || x.lancamento_id === query.lancamento_id)).map((x) => ({ ...x, contexto: contexto(x) }))
+          .filter((x) => !q || `${x.nome} ${x.descricao || ''} ${x.contexto} ${x.extraido?.numero || ''} ${x.extraido?.emitente || ''}`.toLowerCase().includes(q));
+        return ok(lista.sort((x, y) => y.criado_em.localeCompare(x.criado_em)));
+      }
+      if (metodo === 'GET' && b && c === 'arquivo') {
+        const meta = d.mapa.anexos.get(b);
+        if (!meta) throw new F.ErroValidacao('Anexo não encontrado.', 404);
+        const f = await store.ler(`arquivos/${b}.json`);
+        if (!f) throw new F.ErroValidacao('Arquivo não encontrado.', 404);
+        const emLinha = ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'].includes(meta.mime);
+        return { status: 200, tipo: meta.mime, corpo: Buffer.from(f.dados, 'base64'), cabecalhos: {
+          'Content-Disposition': `${emLinha ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(meta.nome)}`,
+          'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox", 'Cache-Control': 'private, no-store' } };
+      }
+      if (metodo === 'DELETE' && b) {
+        if (!d.mapa.anexos.get(b)) throw new F.ErroValidacao('Anexo não encontrado.', 404);
+        await excluir(store, 'anexos', b);
+        await store.excluir(`arquivos/${b}.json`);
+        return ok({ ok: true });
+      }
+    }
+
+    // ----- recibos -----
+    if (a === 'recibos') {
+      if (metodo === 'POST' && !b) {
+        const { recibo, novo } = F.criarRecibo(d, body, agora(), H);
+        if (novo) await gravar(store, 'recibos', recibo);
+        return ok(recibo, novo ? 201 : 200);
+      }
+      if (metodo === 'GET' && !b) return ok(d.recibos.filter((r) => !query.parcela_id || r.parcela_id === query.parcela_id).sort((x, y) => y.numero.localeCompare(x.numero)));
+      if (metodo === 'GET' && b) { const r = d.mapa.recibos.get(b); if (!r) throw new F.ErroValidacao('Recibo não encontrado.', 404); return ok(r); }
+    }
+
+    // ----- notas fiscais: pedido de emissão e registro da nota emitida -----
+    if (a === 'notas') {
+      if (metodo === 'GET' && !b) {
+        return ok(d.notas.map((n) => ({ ...n, pessoa_nome: d.mapa.pessoas.get(n.pessoa_id)?.nome ?? null, anexo: d.mapa.anexos.get(n.anexo_id) ?? null }))
+          .filter((n) => !query.status || n.status === query.status).sort((x, y) => (x.status === y.status ? y.criado_em.localeCompare(x.criado_em) : x.status === 'a_emitir' ? -1 : 1)));
+      }
+      if (metodo === 'POST' && !b) { const n = F.criarNota(d, body, agora(), H); await gravar(store, 'notas', n); return ok(n, 201); }
+      if (metodo === 'PUT' && b) {
+        const ex = d.mapa.notas.get(b);
+        if (!ex) throw new F.ErroValidacao('Nota não encontrada.', 404);
+        const n = F.atualizarNota(d, ex, body); await gravar(store, 'notas', n); return ok(n);
+      }
+      if (metodo === 'DELETE' && b) { if (!d.mapa.notas.get(b)) throw new F.ErroValidacao('Nota não encontrada.', 404); await excluir(store, 'notas', b); return ok({ ok: true }); }
+    }
+
+    // vínculos para as listas: quais parcelas têm recibo, anexos e nota
+    if (a === 'vinculos' && metodo === 'GET') {
+      const recibos = {}, anexos = {}, notas = {};
+      for (const r of d.recibos) recibos[r.parcela_id] = r.id;
+      for (const x of d.anexos) { const k = x.vinculo.tipo === 'parcela' ? x.vinculo.id : x.lancamento_id; if (k) { anexos[k] ??= { total: 0, nota_fiscal: 0, comprovante: 0 }; anexos[k].total++; if (x.categoria === 'nota_fiscal') anexos[k].nota_fiscal++; if (x.categoria === 'comprovante') anexos[k].comprovante++; } }
+      for (const n of d.notas) notas[n.lancamento_id] = n.status;
+      return ok({ recibos, anexos, notas });
+    }
+    if (a === 'busca' && metodo === 'GET') return ok(F.buscar(d, query.q, H));
+
     // ----- lançamentos e parcelas -----
     if (a === 'parcelas' && !b && metodo === 'GET') return ok(F.listarParcelas(d, filtrosParcela(query), H));
     if (a === 'parcelas.csv' && metodo === 'GET') {
@@ -137,7 +217,14 @@ export async function tratar(req, ctx) {
     if (a === 'lancamentos' && !b && metodo === 'POST') {
       const l = F.criarLancamento(d, body, agora());
       await gravar(store, 'lancamentos', l);
+      // cliente pediu nota fiscal: já entra na fila de emissão
+      if (l.nf_solicitada && l.tipo === 'receita') { d.lancamentos.push(l); d.mapa.lancamentos.set(l.id, l); await gravar(store, 'notas', F.criarNota(d, { lancamento_id: l.id }, agora(), H)); }
       return ok({ id: l.id }, 201);
+    }
+    if (a === 'lancamentos' && b && metodo === 'PUT') {
+      const l = F.editarLancamento(d, b, body);
+      await gravar(store, 'lancamentos', l);
+      return ok({ ok: true });
     }
     if (a === 'lancamentos' && b && metodo === 'DELETE') {
       if (!d.mapa.lancamentos.get(b)) throw new F.ErroValidacao('Lançamento não encontrado.', 404);
