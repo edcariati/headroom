@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   criarDados, criarLancamento, baixarParcela, estornarParcela, editarParcela, dividirCentavos, resumo, fluxoCaixa, dre, listarParcelas,
   criarTransferencia, saldoContas, extratoConta, ErroValidacao, resultadosGerais, resultadosPorProjeto, outrosRelatorios,
-  validarCadastro, emUso, pagamentosCliente, clientes, sugestoesCodigo, aReceber, criarContato, criarConferencia, criarEntrega, fluxos,
+  validarCadastro, emUso, pagamentosCliente, clientes, sugestoesCodigo, aReceber, criarContato, criarConferencia, criarEntrega, fluxos, painel,
 } from '../api/_lib/finance.js';
 
 const HOJE = '2026-06-15';
@@ -308,4 +308,35 @@ test('fluxos: pendências de cada passo, contato, comprovante, conferência e re
   d.entregas.push(criarEntrega(d, { data: '2026-06-10' }, undefined, HOJE));
   assert.equal(fluxos(d, HOJE).passos[8].pendencias, 0);
   assert.equal(fluxos(d, '2026-07-01').passos[8].pendencias, 1); // 21 dias depois
+});
+
+test('painel do diretor: crescimento, parcelados, previsão de 12 meses, atrasos e DRE competência x caixa', () => {
+  const d = base(); // hoje = 2026-06-15; Inter começa com 1.000,00
+  Object.assign(d.pessoas[0], { telefone: '1' });
+  // contrato em 4 parcelas de 250,00 a partir de 01/04: abril paga, maio e junho vencidas, julho a vencer
+  const l = rec(d, { nome: 'Projeto em 4x', pessoa_id: 'p1', contrato_id: 't1', valor_total_cents: 100000, parcelas: 4, primeiro_vencimento: '2026-04-01', competencia: '2026-04-01' });
+  pagar(d, l, 1, { data: '2026-04-02', conta_id: 'c1' });
+  // recebimento no ano anterior para medir crescimento
+  rec(d, { nome: 'Ano passado', pessoa_id: 'p1', valor_total_cents: 50000, primeiro_vencimento: '2025-03-10', primeira_paga: true, competencia: '2025-03-10' });
+  desp(d, { nome: 'Aluguel', valor_total_cents: 30000, primeiro_vencimento: '2026-07-05' });
+  const r = painel(d, HOJE);
+  assert.equal(r.evolucao.length, 12); assert.equal(r.evolucao[11].mes, '2026-06');
+  assert.equal(r.crescimento.ano_recebido.atual_cents, 25000); assert.equal(r.crescimento.ano_recebido.anterior_cents, 50000);
+  assert.equal(r.crescimento.ano_recebido.variacao_pct, -50);
+  const c = r.parcelados[0];
+  assert.deepEqual([c.total_parcelas, c.pagas, c.faltam, c.atrasadas], [4, 1, 3, 2]);
+  assert.deepEqual([c.falta_cents, c.atrasado_cents, c.recebido_cents], [75000, 50000, 25000]);
+  assert.equal(c.proxima.vencimento, '2026-07-01');
+  assert.equal(r.inadimplencia.vencido_cents, 50000); assert.equal(r.inadimplencia.clientes, 1);
+  assert.equal(r.cobrar[0].nome, 'Cliente A');
+  const jul = r.previsao.meses.find((m) => m.mes === '2026-07');
+  assert.deepEqual([jul.entra_cents, jul.sai_cents], [25000, 30000]);
+  const jun = r.previsao.meses[0];
+  assert.equal(r.previsao.meses[11].mes, '2027-05');
+  assert.equal(jul.saldo_com_atrasados_cents - jul.saldo_cents, 50000); // atrasados recebidos reforçam o saldo
+  assert.ok(jun.saldo_cents <= r.previsao.saldo_atual_cents + jun.entra_cents);
+  assert.equal(r.dre.receita_competencia_cents, 100000); // as quatro parcelas têm competência em abril
+  assert.equal(r.dre.receita_caixa_cents, 25000);
+  assert.equal(r.dre.a_receber_cents, 75000);
+  assert.equal(r.carteira[0].nome, 'Cliente A'); assert.equal(r.carteira[0].valor_cents, 25000);
 });

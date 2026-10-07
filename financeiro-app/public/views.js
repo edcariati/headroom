@@ -1,6 +1,7 @@
 import { $, $$, MESES, api, brl, confirmar, controlePeriodo, dataBR, esc, excluirComDesfazer, getPeriodo, ligarPeriodo, qs, rotuloMes, toast, urlApi } from './util.js';
 import { CORES, animarContadores, chipStatus, estadoVazio, gauge, grafico, icon, kpi, linha, revelar, rosca, skeletonPagina, spark } from './ui.js';
 import { formConferencia } from './fluxos.js';
+import { blocoDiretor } from './painel.js';
 import { CADASTROS, GRUPOS, formBaixa, formCadastro, formEditarParcela, formLancamento, formTransferencia, limparCache } from './forms.js';
 
 export const setCrumbs = (lista) => window.dispatchEvent(new CustomEvent('crumbs', { detail: lista }));
@@ -18,11 +19,12 @@ const orbDe = (n, cls = '') => `<span class="orb ${cls}" style="width:44px;heigh
 export async function resumo(el) {
   const p = getPeriodo();
   el.innerHTML = skeletonPagina();
-  const [r, res, desp, pagos] = await Promise.all([
+  const [r, res, desp, pagos, painel] = await Promise.all([
     api(`resumo?${qs(p)}`),
     api(`relatorios/resultados?${qs(p)}`).catch(() => null),
     api(`relatorios/outros?${qs({ ...p, agrupar: 'categoria', tipo: 'despesa', campo: 'vencimento' })}`).catch(() => null),
     api(`parcelas?${qs({ ...p, status: 'pago', pageSize: 100, ordem: 'desc' })}`).catch(() => null),
+    api('painel').catch(() => null),
   ]);
   const totalRec = r.receitas.realizado.valor + r.receitas.em_aberto.valor + r.receitas.vencido.valor;
   const perc = pct(r.receitas.realizado.valor, totalRec);
@@ -64,6 +66,7 @@ export async function resumo(el) {
       ${kpi({ rotulo: 'Despesas vencidas', icone: 'alert', valor: r.despesas.vencido.valor, qtd: r.despesas.vencido.qtd, cor: r.despesas.vencido.qtd ? 'vermelho' : '', destino: 'despesas?status=vencido' })}
       ${kpi({ rotulo: 'Pago', icone: 'check', valor: r.despesas.realizado.valor, qtd: r.despesas.realizado.qtd, cor: 'verde', destino: 'despesas?status=pago' })}
     </div>
+    ${blocoDiretor(painel)}
     <div class="grade g2" style="margin-top:var(--s4)">
       <section class="glass painel reveal"><h3>Atalhos</h3>
         <div class="atalhos">

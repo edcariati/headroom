@@ -749,3 +749,92 @@ export function fluxos(d, hoje = hojeISO()) {
   return { hoje, passos, em_dia: emDia, total: passos.length, pendencias: soma(passos, (p) => p.pendencias),
     contas: contasAtivas.map((c) => ({ id: c.id, nome: c.nome })) };
 }
+
+// ---------- painel do diretor: crescimento, caixa dos próximos 12 meses, contratos parcelados e atrasos ----------
+
+const mesMais = (aaaamm, n) => { const [a, m] = aaaamm.split('-').map(Number); const t = a * 12 + (m - 1) + n; return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, '0')}`; };
+const variacao = (atual, anterior) => (anterior > 0 ? ((atual - anterior) / anterior) * 100 : null);
+
+export function painel(d, hoje = hojeISO()) {
+  const ano = Number(hoje.slice(0, 4)), mesAtual = hoje.slice(0, 7), mm = Number(hoje.slice(5, 7)) - 1;
+  const movs = movimentos(d, hoje), parcelas = expandir(d, hoje);
+  const recMov = movs.filter((m) => m.parcela.tipo === 'receita'), despMov = movs.filter((m) => m.parcela.tipo === 'despesa');
+  const noMes = (lista, mes) => soma(lista.filter((m) => m.data.slice(0, 7) === mes), (m) => m.valor_cents);
+
+  // últimos 12 meses (realizado)
+  const meses12 = Array.from({ length: 12 }, (_, i) => mesMais(mesAtual, i - 11));
+  const evolucao = meses12.map((mes) => ({ mes, recebido_cents: noMes(recMov, mes), pago_cents: noMes(despMov, mes) }));
+
+  // crescimento
+  const recMes = noMes(recMov, mesAtual), recMesAnt = noMes(recMov, mesMais(mesAtual, -1));
+  const ateDia = (lista, de, ate) => soma(lista.filter((m) => m.data >= de && m.data <= ate), (m) => m.valor_cents);
+  const recYtd = ateDia(recMov, `${ano}-01-01`, hoje), recYtdAnt = ateDia(recMov, `${ano - 1}-01-01`, `${ano - 1}${hoje.slice(4)}`);
+  const trimestre = (fim) => soma([0, 1, 2].map((i) => noMes(recMov, mesMais(fim, -i))), (x) => x);
+  const rec3 = trimestre(mesAtual), rec3Ant = trimestre(mesMais(mesAtual, -3));
+
+  // DRE: competência × caixa no ano
+  const linhaDre = (r, chave) => r.linhas.find((l) => l.chave === chave);
+  const dreC = dre(d, ano, { regime: 'competencia' }, hoje), dreX = dre(d, ano, { regime: 'caixa' }, hoje);
+  const recBrutaC = linhaDre(dreC, 'receita_bruta').total, recBrutaX = linhaDre(dreX, 'receita_bruta').total;
+  const opC = linhaDre(dreC, 'resultado_operacional').total, opX = linhaDre(dreX, 'resultado_operacional').total;
+  const recBrutaAnt = soma(linhaDre(dre(d, ano - 1, { regime: 'competencia' }, hoje), 'receita_bruta').valores.slice(0, mm + 1), (v) => v);
+  const recBrutaYtd = soma(linhaDre(dreC, 'receita_bruta').valores.slice(0, mm + 1), (v) => v);
+
+  // entradas e saídas previstas nos próximos 12 meses (a partir do mês atual); o que já venceu fica à parte
+  const proximos = Array.from({ length: 12 }, (_, i) => mesMais(mesAtual, i));
+  const abertas = (tipo) => parcelas.filter((p) => p.tipo === tipo && p.aberto_cents > 0);
+  const recAb = abertas('receita'), despAb = abertas('despesa');
+  const atrasadoRec = soma(recAb.filter((p) => p.vencimento < hoje), (p) => p.aberto_cents);
+  const atrasadoDesp = soma(despAb.filter((p) => p.vencimento < hoje), (p) => p.aberto_cents);
+  const saldo = soma(saldoContas(d, null, hoje), (c) => c.saldo_cents);
+  let acum = saldo, acumCom = saldo + atrasadoRec - atrasadoDesp;
+  const previsao = proximos.map((mes) => {
+    const entra = soma(recAb.filter((p) => p.vencimento >= hoje && p.vencimento.slice(0, 7) === mes), (p) => p.aberto_cents);
+    const sai = soma(despAb.filter((p) => p.vencimento >= hoje && p.vencimento.slice(0, 7) === mes), (p) => p.aberto_cents);
+    acum += entra - sai; acumCom += entra - sai;
+    return { mes, entra_cents: entra, sai_cents: sai, saldo_cents: acum, saldo_com_atrasados_cents: acumCom };
+  });
+
+  // contratos parcelados em andamento: quantas parcelas faltam, quanto falta e quem está atrasado
+  const parcelados = d.lancamentos.filter((l) => l.tipo === 'receita' && !l.recorrente && l.parcelas.length > 1).map((l) => {
+    const ps = parcelas.filter((p) => p.lancamento_id === l.id);
+    const pagas = ps.filter((p) => p.aberto_cents === 0).length;
+    const abertasL = ps.filter((p) => p.aberto_cents > 0);
+    const venc = abertasL.filter((p) => p.vencimento < hoje);
+    const prox = abertasL.find((p) => p.vencimento >= hoje);
+    const ct = d.mapa.contratos.get(l.contrato_id);
+    return { lancamento_id: l.id, nome: l.nome, cliente: d.mapa.pessoas.get(l.pessoa_id)?.nome ?? null, cliente_id: l.pessoa_id || null,
+      projeto: ct ? `${ct.codigo} ${ct.nome}` : null, total_parcelas: ps.length, pagas, faltam: abertasL.length,
+      total_cents: soma(ps, (p) => p.valor_cents), recebido_cents: soma(ps, (p) => p.valor_pago_cents), falta_cents: soma(abertasL, (p) => p.aberto_cents),
+      atrasadas: venc.length, atrasado_cents: soma(venc, (p) => p.aberto_cents), proxima: prox ? { vencimento: prox.vencimento, valor_cents: prox.aberto_cents } : null,
+      ultima_vencimento: ps.at(-1)?.vencimento ?? null };
+  }).filter((c) => c.faltam > 0).sort((a, b) => b.atrasado_cents - a.atrasado_cents || b.falta_cents - a.falta_cents);
+
+  // quem cobrar e quem mais vai pagar
+  const ar = aReceber(d, {}, hoje);
+  const cobrar = ar.clientes.filter((c) => c.vencido_cents > 0).slice(0, 6).map((c) => ({ pessoa_id: c.pessoa_id, nome: c.nome, vencido_cents: c.vencido_cents, max_atraso_dias: c.max_atraso_dias, telefone: c.telefone }));
+  const porCliente = new Map();
+  for (const p of recAb.filter((x) => x.vencimento >= hoje && x.vencimento.slice(0, 7) <= proximos[11])) {
+    const k = p.pessoa_nome || 'Sem cliente';
+    porCliente.set(k, (porCliente.get(k) || 0) + p.aberto_cents);
+  }
+  const carteira = [...porCliente].map(([nome, valor_cents]) => ({ nome, valor_cents })).sort((a, b) => b.valor_cents - a.valor_cents);
+
+  return {
+    hoje, evolucao,
+    crescimento: {
+      mes: { atual_cents: recMes, anterior_cents: recMesAnt, variacao_pct: variacao(recMes, recMesAnt) },
+      ano_recebido: { atual_cents: recYtd, anterior_cents: recYtdAnt, variacao_pct: variacao(recYtd, recYtdAnt) },
+      ano_receita: { atual_cents: recBrutaYtd, anterior_cents: recBrutaAnt, variacao_pct: variacao(recBrutaYtd, recBrutaAnt) },
+      trimestre: { atual_cents: rec3, anterior_cents: rec3Ant, variacao_pct: variacao(rec3, rec3Ant) },
+    },
+    dre: { ano, receita_competencia_cents: recBrutaC, receita_caixa_cents: recBrutaX, a_receber_cents: recBrutaC - recBrutaX,
+      resultado_competencia_cents: opC, resultado_caixa_cents: opX,
+      margem_competencia_pct: recBrutaC ? (opC / recBrutaC) * 100 : null, margem_caixa_pct: recBrutaX ? (opX / recBrutaX) * 100 : null },
+    inadimplencia: { vencido_cents: ar.totais.vencido.valor_cents, em_aberto_cents: ar.totais.em_aberto.valor_cents, clientes: ar.totais.clientes_em_atraso,
+      pct: ar.totais.em_aberto.valor_cents ? (ar.totais.vencido.valor_cents / ar.totais.em_aberto.valor_cents) * 100 : 0 },
+    previsao: { saldo_atual_cents: saldo, atrasado_receber_cents: atrasadoRec, atrasado_pagar_cents: atrasadoDesp, meses: previsao,
+      total_entradas_cents: soma(previsao, (m) => m.entra_cents) },
+    parcelados: parcelados.slice(0, 12), parcelados_total: parcelados.length, cobrar, carteira,
+  };
+}

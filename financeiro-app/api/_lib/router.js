@@ -170,6 +170,7 @@ export async function tratar(req, ctx) {
 
     // ----- dashboard e relatórios -----
     if (metodo === 'GET') {
+      if (a === 'painel') return ok(F.painel(d, H));
       if (a === 'fluxos') return ok(F.fluxos(d, H));
       if (a === 'a-receber') return ok(F.aReceber(d, query, H));
       if (a === 'clientes') return ok(F.clientes(d, query, H));

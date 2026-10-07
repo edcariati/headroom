@@ -679,3 +679,9 @@ textarea.campo { min-height: 72px; padding: var(--s3) var(--s4); resize: vertica
 .passo-fluxo-nome small { color: var(--text-2); }
 .passo-fluxo-itens { margin-bottom: var(--s3); }
 .passo-fluxo-acoes { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
+
+/* ---------- visão do diretor (Resumo) ---------- */
+.parcelas-prog { min-width: 150px; display: grid; gap: 6px; }
+.parcelas-prog small { color: var(--text-2); }
+.tbl td small { display: block; color: var(--text-2); }
+.tbl-mes th, .tbl-mes td { padding: 9px var(--s3); }
