@@ -101,7 +101,8 @@ export function criarLancamento(d, i, agora = new Date().toISOString()) {
   exigir(ehISO(competencia), 'Data de competência inválida.');
   const recorrente = !!i.recorrente;
   const n = recorrente ? Number(i.repeticoes ?? 12) : Number(i.parcelas ?? 1);
-  exigir(Number.isInteger(n) && n >= 1 && n <= 360, 'Número de parcelas deve ficar entre 1 e 360.');
+  const maximo = recorrente ? 180 : 360;
+  exigir(Number.isInteger(n) && n >= 1 && n <= maximo, recorrente ? 'A recorrência pode ter de 1 a 180 meses.' : 'Número de parcelas deve ficar entre 1 e 360.');
   if (i.categoria_id) {
     const cat = achar(d, 'categorias', i.categoria_id, 'Categoria não encontrada.');
     exigir(cat.tipo === i.tipo, `Esta categoria é de ${cat.tipo}, não de ${i.tipo}.`);
@@ -576,7 +577,7 @@ export function validarCadastro(d, tipo, b, existente = null) {
       if (s.servico_id) achar(d, 'servicos', s.servico_id, 'Serviço não encontrado.');
       const item = { servico_id: s.servico_id || null, nome: texto(s.nome), valor_cents: s.valor_cents };
       // plano de recebimento do serviço: parcelas, primeiro vencimento e a receita gerada a partir dele
-      if (s.parcelas !== undefined && s.parcelas !== null) { exigir(Number.isInteger(s.parcelas) && s.parcelas >= 1 && s.parcelas <= 360, 'Parcelas do serviço devem ficar entre 1 e 360.'); item.parcelas = s.parcelas; }
+      if (s.parcelas !== undefined && s.parcelas !== null) { exigir(Number.isInteger(s.parcelas) && s.parcelas >= 1 && s.parcelas <= 24, 'O parcelamento do serviço vai de 1 a 24 vezes.'); item.parcelas = s.parcelas; }
       if (s.primeiro_vencimento) { exigir(ehISO(s.primeiro_vencimento), 'Primeiro vencimento do serviço inválido.'); item.primeiro_vencimento = s.primeiro_vencimento; }
       if (s.lancamento_id) item.lancamento_id = String(s.lancamento_id);
       return item;

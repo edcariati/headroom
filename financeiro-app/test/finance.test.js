@@ -366,6 +366,15 @@ test('serviço do projeto guarda parcelas, primeiro vencimento e a receita gerad
   assert.deepEqual(c.servicos[0], { servico_id: null, nome: 'Projeto', valor_cents: 1000000, parcelas: 10, primeiro_vencimento: '2026-07-10', lancamento_id: 'abc' });
   assert.equal(c.servicos[1].parcelas, undefined);
   assert.equal(c.valor_total_cents, 1050000);
-  assert.throws(() => validarCadastro(d, 'contratos', { codigo: 'CA260121', nome: 'P', servicos: [{ nome: 'X', valor_cents: 1, parcelas: 0 }] }), /Parcelas/);
+  assert.throws(() => validarCadastro(d, 'contratos', { codigo: 'CA260121', nome: 'P', servicos: [{ nome: 'X', valor_cents: 1, parcelas: 0 }] }), /1 a 24/);
+  assert.throws(() => validarCadastro(d, 'contratos', { codigo: 'CA260123', nome: 'P', servicos: [{ nome: 'X', valor_cents: 1, parcelas: 25 }] }), /1 a 24/);
+  assert.equal(validarCadastro(d, 'contratos', { codigo: 'CA260124', nome: 'P', servicos: [{ nome: 'X', valor_cents: 2400, parcelas: 24 }] }).servicos[0].parcelas, 24);
   assert.throws(() => validarCadastro(d, 'contratos', { codigo: 'CA260122', nome: 'P', servicos: [{ nome: 'X', valor_cents: 1, primeiro_vencimento: '10/07/2026' }] }), /vencimento/);
+});
+
+test('recorrência de receitas e despesas vai até 180 meses', () => {
+  const d = base();
+  assert.equal(desp(d, { nome: 'Aluguel', valor_total_cents: 100000, recorrente: true, repeticoes: 180, primeiro_vencimento: '2026-07-05' }).parcelas.length, 180);
+  assert.throws(() => criarLancamento(d, { tipo: 'despesa', nome: 'X', valor_total_cents: 1000, recorrente: true, repeticoes: 181, primeiro_vencimento: '2026-07-05' }), /180 meses/);
+  assert.equal(rec(d, { nome: 'Parcelado', valor_total_cents: 3600000, parcelas: 360, primeiro_vencimento: '2026-07-05' }).parcelas.length, 360); // parcelamento comum segue até 360
 });

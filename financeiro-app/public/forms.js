@@ -59,7 +59,7 @@ export async function formLancamento(tipo, aoSalvar, prefill = {}) {
         <div></div>
       </div>
       ${interruptor('recorrente', `Repete todo mês <span class="suave">(aluguel, salário, assinatura…)</span>`)}
-      <label class="f" id="bloco-repeticoes" hidden>Quantos meses<input class="campo" type="number" name="repeticoes" min="1" max="360" value="12" inputmode="numeric"><span class="msg" data-msg="repeticoes"></span></label>
+      <label class="f" id="bloco-repeticoes" hidden>Quantos meses<input class="campo" type="number" name="repeticoes" min="1" max="180" value="12" inputmode="numeric"><span class="msg" data-msg="repeticoes"></span></label>
     </section>
     <section data-passo="2" class="empilha" aria-label="Etapa 2: Classificação" hidden>
       <div class="linha2">
@@ -118,7 +118,7 @@ export async function formLancamento(tipo, aoSalvar, prefill = {}) {
     valor: (v) => { const x = parseDinheiro(v); return x && x > 0 ? '' : 'Digite um valor maior que zero, como 1.250,00.'; },
     primeiro_vencimento: (v) => (v ? '' : 'Escolha a data do primeiro vencimento.'),
     parcelas: (v) => { const x = Number(v); return Number.isInteger(x) && x >= 1 && x <= 360 ? '' : 'Use um número de 1 a 360.'; },
-    repeticoes: (v) => { const x = Number(v); return Number.isInteger(x) && x >= 1 && x <= 360 ? '' : 'Use um número de 1 a 360.'; },
+    repeticoes: (v) => { const x = Number(v); return Number.isInteger(x) && x >= 1 && x <= 180 ? '' : 'Use de 1 a 180 meses.'; },
     categoria_id: (v) => (v ? '' : 'Escolha uma categoria.'),
   };
   const validar = (nome) => {

@@ -28,7 +28,7 @@ function editorServicos(raiz, catalogo, iniciais, aoMudar) {
     raiz.innerHTML = `<div class="servicos-lista">${linhas.map((s, i) => { const gerado = !!s.lancamento_id; return `<div class="servico-linha" data-i="${i}">
         <input class="campo" data-nome value="${esc(s.nome)}" placeholder="Nome do serviço" aria-label="Serviço ${i + 1}" autocomplete="off">
         <input class="campo" data-valor inputmode="decimal" value="${s.valor_cents ? dinheiroInput(s.valor_cents) : ''}" placeholder="Valor 0,00" aria-label="Valor do serviço ${i + 1} em reais" autocomplete="off"${gerado ? ' disabled' : ''}>
-        <input class="campo" data-parc type="number" min="1" max="360" value="${s.parcelas || 1}" aria-label="Número de parcelas do serviço ${i + 1}" title="Parcelas"${gerado ? ' disabled' : ''}>
+        <input class="campo" data-parc type="number" min="1" max="24" value="${s.parcelas || 1}" aria-label="Número de parcelas do serviço ${i + 1}" title="Parcelas"${gerado ? ' disabled' : ''}>
         <input class="campo" data-venc type="date" value="${esc(s.primeiro_vencimento || '')}" aria-label="Primeiro vencimento do serviço ${i + 1}" title="Primeiro vencimento"${gerado ? ' disabled' : ''}>
         <button type="button" class="icon-btn" data-rm aria-label="Remover serviço ${i + 1}">${icon('x')}</button>
         <div class="servico-plano" data-plano>${gerado ? `<span class="chip s-pago">${icon('check')}Recebimentos já gerados</span> <span class="suave">${esc(planoTxt(s))}</span>` : `<span class="suave">${esc(planoTxt(s))}</span>`}</div></div>`; }).join('')}</div>
@@ -42,7 +42,7 @@ function editorServicos(raiz, catalogo, iniciais, aoMudar) {
     if (!l) return;
     if (e.target.matches('[data-nome]')) l.nome = e.target.value;
     if (e.target.matches('[data-valor]')) l.valor_cents = parseDinheiro(e.target.value) || 0;
-    if (e.target.matches('[data-parc]')) l.parcelas = Math.max(1, Math.min(360, Number(e.target.value) || 1));
+    if (e.target.matches('[data-parc]')) l.parcelas = Math.max(1, Math.min(24, Number(e.target.value) || 1));
     if (e.target.matches('[data-venc]')) l.primeiro_vencimento = e.target.value;
     $('[data-total]', raiz).textContent = brl(total());
     if (!l.lancamento_id) $('[data-plano]', linhaEl).innerHTML = `<span class="suave">${esc(planoTxt(l))}</span>`;
