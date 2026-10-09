@@ -88,7 +88,7 @@ function agrupar(linhas, avisos) {
   return { porParcela, lancs };
 }
 
-export function montarImportacao(d, linhas, { clientes = [], agora = new Date().toISOString(), hoje = new Date().toISOString().slice(0, 10) } = {}) {
+export function montarImportacao(d, linhas, { clientes = [], desde = null, agora = new Date().toISOString(), hoje = new Date().toISOString().slice(0, 10) } = {}) {
   const avisos = [];
   const { porParcela, lancs } = agrupar(linhas, avisos);
   const novos = { contas: [], categorias: [], centros: [], pessoas: [], contratos: [], lancamentos: [] };
@@ -184,13 +184,17 @@ export function montarImportacao(d, linhas, { clientes = [], agora = new Date().
     return pr;
   };
 
-  const resumo = { clientes_novos: 0, clientes_atualizados: 0, parcelas_lidas: linhas.length, parcelas_unicas: porParcela.size, duplicadas_ignoradas: linhas.length - porParcela.size - 0,
+  const resumo = { parcelas_antes_do_corte: 0, clientes_novos: 0, clientes_atualizados: 0, parcelas_lidas: linhas.length, parcelas_unicas: porParcela.size, duplicadas_ignoradas: linhas.length - porParcela.size - 0,
     lancamentos_novos: 0, lancamentos_existentes: 0, parcelas_pagas: 0, parcelas_abertas: 0 };
   resumo.duplicadas_ignoradas = linhas.filter((r) => r['ID Parcela']).length - porParcela.size;
   resumo.clientes_novos = clientesNovos; resumo.clientes_atualizados = clientesAtualizados;
   const totais = { receita: { pago: 0, aberto: 0 }, despesa: { pago: 0, aberto: 0 } };
 
-  for (const [idOrigem, itens] of lancs) {
+  for (const [idOrigem, todas] of lancs) {
+    // Só entra o que vence a partir da data de corte (ex.: 2026-01-01); o que é anterior fica de fora.
+    const itens = desde ? todas.filter((r) => (iso(r['Vencimento parcela']) || '') >= desde) : todas;
+    resumo.parcelas_antes_do_corte += todas.length - itens.length;
+    if (!itens.length) continue;
     const id = hash(`lancamento:${idOrigem}`);
     if (d.mapa.lancamentos.has(id)) { resumo.lancamentos_existentes++; continue; }
     const r0 = itens[0];

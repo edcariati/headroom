@@ -55,3 +55,15 @@ test('cadastro de clientes completa quem já tem lançamento e cria os demais', 
   // receita usa a categoria do plano importado quando existe uma com o mesmo nome
   assert.equal(r.novos.lancamentos.find((l) => l.nome === 'Projeto X').categoria_id, 'rc3_9');
 });
+
+test('data de corte deixa de fora as parcelas anteriores', () => {
+  const pl = registrosDoPlano();
+  const d = criarDados({ categorias: [...pl.categorias, ...registrosPlano2()], centros: pl.centros });
+  const r = montarImportacao(d, linhas, { desde: '2026-01-01' });
+  assert.equal(r.resumo.parcelas_antes_do_corte, 1);
+  assert.equal(r.resumo.lancamentos_novos, 2);
+  assert.equal(r.novos.lancamentos.find((l) => l.nome === 'Projeto X').parcelas.length, 1);
+  const r2 = montarImportacao(d, linhas, { desde: '2027-01-01' });
+  assert.equal(r2.resumo.lancamentos_novos, 1);
+  assert.equal(r2.novos.contratos.length, 1);
+});
