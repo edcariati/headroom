@@ -3,6 +3,7 @@ import * as F from './finance.js';
 import { carregarDados, excluir, gravar } from './dados.js';
 import { cookieLimpo, cookieSessao, criarSessao, hashConfere, lerCookie, lerSessao, senhaConfere } from './auth.js';
 import * as U from './usuarios.js';
+import { gravarImportacao, montarImportacao } from './importacao.js';
 import { hojeISO } from './dates.js';
 
 const ok = (corpo, status = 200) => ({ status, corpo });
@@ -213,6 +214,13 @@ export async function tratar(req, ctx) {
         ['Nome', 'Valor', 'Valor pago', 'Em aberto', 'Vencimento', 'Data de pagamento', 'Pessoa', 'Categoria', 'Projeto', 'Nota fiscal', 'Status'],
         ...r.itens.map((p) => [p.nome, reais(p.valor_cents), reais(p.valor_pago_cents), reais(p.aberto_cents), p.vencimento, p.data_pagamento || '',
           p.pessoa_nome, p.categoria_nome, p.contrato_codigo, p.nota_fiscal, STATUS_TXT[p.status]])]);
+    }
+    // Importação das planilhas: com simular=true só mostra o que seria criado.
+    if (a === 'importacao' && metodo === 'POST') {
+      if (!Array.isArray(body.linhas) || !body.linhas.length) throw new F.ErroValidacao('Envie as linhas das planilhas.');
+      const r = montarImportacao(d, body.linhas, { agora: agora() });
+      if (!body.simular) await gravarImportacao(store, r.novos);
+      return ok({ simulado: !!body.simular, resumo: r.resumo, avisos: r.avisos.slice(0, 50) });
     }
     if (a === 'lancamentos' && !b && metodo === 'POST') {
       const l = F.criarLancamento(d, body, agora());
