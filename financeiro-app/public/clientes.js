@@ -1,6 +1,7 @@
 // Clientes: cadastro com código, serviços contratados e projeto, mais a tela de listagem.
 import { $, $$, api, brl, dataBR, dinheiroInput, esc, hojeISO, modal, opcoes, parseDinheiro, qs, toast } from './util.js';
 import { animarContadores, estadoVazio, gauge, icon, kpi, revelar, skeletonPagina } from './ui.js';
+import { cronogramaOk, editorCronograma, gerarCronograma, mensagemCronograma } from './cronograma.js';
 import { cadastros, formCadastro, formLancamento, limparCache, opcoesCategorias } from './forms.js';
 
 const pronto = (el) => { revelar(el); animarContadores(el); };
@@ -17,12 +18,14 @@ const addMes = (iso, n) => {
 };
 const planoTxt = (l) => {
   if (!l.valor_cents) return '';
+  if (l.cronograma?.length) { const ds = l.cronograma.map((x) => x.vencimento).filter(Boolean).sort(); return `${l.cronograma.length} parcelas personalizadas · ${ds.length ? `${dataBR(ds[0])}${ds.length > 1 ? ` até ${dataBR(ds.at(-1))}` : ''}` : 'sem datas'}`; }
   const n = Math.max(1, Number(l.parcelas) || 1);
   return `${n}x de ${brl(Math.floor(l.valor_cents / n))}${l.primeiro_vencimento ? ` · ${dataBR(l.primeiro_vencimento)}${n > 1 ? ` até ${dataBR(addMes(l.primeiro_vencimento, n - 1))}` : ''}` : ''}`;
 };
 function editorServicos(raiz, catalogo, iniciais, aoMudar) {
   let linhas = iniciais.map((s) => ({ parcelas: 1, primeiro_vencimento: '', ...s }));
   const ativos = catalogo.filter((s) => s.ativo);
+  const crons = new Map(); // editores de parcelas abertos, por linha
   const total = () => linhas.reduce((s, l) => s + (l.valor_cents || 0), 0);
   const desenhar = () => {
     raiz.innerHTML = `<div class="servicos-lista">${linhas.map((s, i) => { const gerado = !!s.lancamento_id; return `<div class="servico-linha" data-i="${i}">
@@ -31,11 +34,26 @@ function editorServicos(raiz, catalogo, iniciais, aoMudar) {
         <input class="campo" data-parc type="number" min="1" max="24" value="${s.parcelas || 1}" aria-label="Número de parcelas do serviço ${i + 1}" title="Parcelas"${gerado ? ' disabled' : ''}>
         <input class="campo" data-venc type="date" value="${esc(s.primeiro_vencimento || '')}" aria-label="Primeiro vencimento do serviço ${i + 1}" title="Primeiro vencimento"${gerado ? ' disabled' : ''}>
         <button type="button" class="icon-btn" data-rm aria-label="Remover serviço ${i + 1}">${icon('x')}</button>
-        <div class="servico-plano" data-plano>${gerado ? `<span class="chip s-pago">${icon('check')}Recebimentos já gerados</span> <span class="suave">${esc(planoTxt(s))}</span>` : `<span class="suave">${esc(planoTxt(s))}</span>`}</div></div>`; }).join('')}</div>
+        <div class="servico-plano" data-plano>${gerado ? `<span class="chip s-pago">${icon('check')}Recebimentos já gerados</span> <span class="suave">${esc(planoTxt(s))}</span>` : `<span class="suave" data-plano-txt>${esc(planoTxt(s))}</span>`}</div>
+        ${gerado ? '' : `<div class="servico-pers"><button type="button" class="btn btn-ghost btn-sm" data-pers aria-expanded="${s.aberto ? 'true' : 'false'}">${icon('calendario')}${s.aberto ? 'Recolher parcelas' : s.cronograma ? 'Editar parcelas' : 'Personalizar datas e valores das parcelas'}</button></div>
+        ${s.aberto ? `<div class="servico-crono" data-crono="${i}"></div>` : ''}`}</div>`; }).join('')}</div>
       ${linhas.length ? '<p class="suave" style="font-size:.78rem;margin:0 0 var(--s2)">Em cada linha: serviço · valor · parcelas · primeiro vencimento. As parcelas vencem de mês em mês.</p>' : ''}
       <select class="campo" data-add aria-label="Adicionar serviço"><option value="">+ Adicionar serviço…</option>
         ${ativos.map((s) => `<option value="${s.id}">${esc(s.nome)}</option>`).join('')}<option value="__outro">Outro (digitar o nome)</option></select>
       <div class="servicos-total"><span class="suave">Total dos serviços</span><b class="num" data-total>${brl(total())}</b></div>`;
+    crons.clear();
+    $$('[data-crono]', raiz).forEach((host) => {
+      const i = Number(host.dataset.crono), l = linhas[i];
+      if (!l.cronograma) l.cronograma = gerarCronograma(l.valor_cents || 0, l.parcelas || 1, l.primeiro_vencimento || hojeISO());
+      crons.set(i, editorCronograma(host, { total: l.valor_cents || 0, linhas: l.cronograma, maximo: 24, aoMudar: () => {
+        l.cronograma = crons.get(i).linhas(); l.parcelas = l.cronograma.length;
+        const ds = l.cronograma.map((x) => x.vencimento).filter(Boolean).sort(); if (ds[0]) l.primeiro_vencimento = ds[0];
+        const linhaEl = host.closest('.servico-linha');
+        $('[data-parc]', linhaEl).value = l.parcelas; $('[data-venc]', linhaEl).value = l.primeiro_vencimento || '';
+        $('[data-plano-txt]', linhaEl).textContent = planoTxt(l);
+        aoMudar?.();
+      } }));
+    });
   };
   raiz.addEventListener('input', (e) => {
     const linhaEl = e.target.closest('.servico-linha'), l = linhas[Number(linhaEl?.dataset.i)];
@@ -44,11 +62,22 @@ function editorServicos(raiz, catalogo, iniciais, aoMudar) {
     if (e.target.matches('[data-valor]')) l.valor_cents = parseDinheiro(e.target.value) || 0;
     if (e.target.matches('[data-parc]')) l.parcelas = Math.max(1, Math.min(24, Number(e.target.value) || 1));
     if (e.target.matches('[data-venc]')) l.primeiro_vencimento = e.target.value;
+    if (l.cronograma && e.target.matches('[data-valor],[data-parc],[data-venc]')) {
+      // valor, parcelas e primeiro vencimento geram o cronograma; mudar um deles refaz as parcelas
+      l.cronograma = gerarCronograma(l.valor_cents || 0, l.parcelas || 1, l.primeiro_vencimento || hojeISO());
+      const ed = crons.get(Number(linhaEl.dataset.i)); if (ed) ed.definir(l.cronograma, l.valor_cents || 0);
+    }
     $('[data-total]', raiz).textContent = brl(total());
-    if (!l.lancamento_id) $('[data-plano]', linhaEl).innerHTML = `<span class="suave">${esc(planoTxt(l))}</span>`;
+    if (!l.lancamento_id) $('[data-plano]', linhaEl).innerHTML = `<span class="suave" data-plano-txt>${esc(planoTxt(l))}</span>`;
     aoMudar?.();
   });
   raiz.addEventListener('click', (e) => {
+    const pers = e.target.closest('[data-pers]');
+    if (pers) {
+      const l = linhas[Number(pers.closest('.servico-linha').dataset.i)];
+      if (!l.aberto && !(l.valor_cents > 0)) { toast('Informe o valor do serviço antes de personalizar as parcelas.', 'erro'); return; }
+      l.aberto = !l.aberto; desenhar(); return;
+    }
     const b = e.target.closest('[data-rm]');
     if (!b) return;
     linhas.splice(Number(b.closest('.servico-linha').dataset.i), 1);
@@ -66,7 +95,9 @@ function editorServicos(raiz, catalogo, iniciais, aoMudar) {
   return {
     total,
     valores: () => valida().map((l) => ({ servico_id: l.servico_id || null, nome: l.nome.trim(), valor_cents: l.valor_cents || 0, parcelas: l.parcelas || 1,
-      primeiro_vencimento: l.primeiro_vencimento || null, ...(l.lancamento_id ? { lancamento_id: l.lancamento_id } : {}) })),
+      primeiro_vencimento: l.primeiro_vencimento || null, ...(l.lancamento_id ? { lancamento_id: l.lancamento_id } : {}), ...(l.cronograma?.length ? { cronograma: l.cronograma.map((x) => ({ ...x })) } : {}) })),
+    // confere os cronogramas personalizados: cada um precisa fechar com o valor do serviço
+    validar: () => { for (const l of valida()) { if (l.cronograma?.length && !l.lancamento_id && !cronogramaOk(l.cronograma, l.valor_cents || 0)) return `Parcelas de "${l.nome.trim()}": ${mensagemCronograma(l.cronograma, l.valor_cents || 0)}`; } return null; },
     nomes: () => valida().map((l) => l.nome.trim()),
     primeiraCategoria: () => linhas.map((l) => catalogo.find((s) => s.id === l.servico_id)?.categoria_id).find(Boolean) || '',
     // serviços com valor que ainda não geraram recebimentos
@@ -84,8 +115,10 @@ async function gerarRecebimentos(ed, { pessoaId, contratoId, projeto, competenci
   let n = 0;
   for (const { i, l } of ed.pendentes()) {
     const venc = l.primeiro_vencimento || hojeISO();
+    const crono = l.cronograma?.length ? l.cronograma : null;
     const r = await api('lancamentos', { method: 'POST', body: { tipo: 'receita', nome: `${l.nome.trim()} — ${projeto}`, valor_total_cents: l.valor_cents, primeiro_vencimento: venc,
-      competencia: competencia || venc, parcelas: l.parcelas || 1, pessoa_id: pessoaId || null, contrato_id: contratoId, categoria_id: ed.categoriaDe(l), conta_id: contaId || null } });
+      ...(crono ? { parcelas_detalhe: crono.map((x) => ({ vencimento: x.vencimento, valor_cents: x.valor_cents })) } : {}),
+      competencia: competencia || venc, parcelas: crono ? crono.length : l.parcelas || 1, pessoa_id: pessoaId || null, contrato_id: contratoId, categoria_id: ed.categoriaDe(l), conta_id: contaId || null } });
     ed.marcarGerado(i, r.id); n++;
   }
   return n;
@@ -239,6 +272,7 @@ export async function formContrato({ reg = null, pessoa_id = null, aoSalvar } = 
     chave: `projeto:${reg?.id ?? 'novo'}`,
     onSubmit: async (d) => {
       if (!d.p_codigo.trim() || !d.p_nome.trim()) throw new Error('Informe o código e o nome do projeto.');
+      const erroServ = ed.validar(); if (erroServ) throw new Error(erroServ);
       const cli = c.pessoas.find((x) => x.id === d.pessoa_id);
       const montar = () => {
         const servicos = ed.valores();
@@ -304,6 +338,7 @@ export async function formCliente(aoSalvar) {
     rotulo: 'Cadastrar cliente', rodape, classe: 'folha-passos', chave: 'cliente:novo',
     onSubmit: async (d) => {
       const temProjeto = !!(d.p_nome.trim() || ed.valores().length);
+      const erroServ = ed.validar(); if (erroServ) throw new Error(erroServ);
       if (!pessoaId) {
         const r = await api('cadastros/pessoas', { method: 'POST', body: lerPessoa(d) });
         pessoaId = r.id; limparCache();
@@ -344,6 +379,7 @@ export async function formCliente(aoSalvar) {
       const tem = f.p_nome.value.trim() || ed.valores().length;
       if (tem && !f.p_nome.value.trim()) { toast('Informe o nome do projeto.', 'erro'); f.p_nome.focus(); return false; }
       if (tem && !f.p_codigo.value.trim()) { toast('Informe o código do projeto.', 'erro'); f.p_codigo.focus(); return false; }
+      const erroServ = ed.validar(); if (erroServ) { toast(erroServ, 'erro'); return false; }
       return true;
     },
     4: () => true,

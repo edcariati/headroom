@@ -734,3 +734,15 @@ dialog.chacoalha { animation: chacoalha .35s ease; }
 }
 
 .badge-n { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 4px; border-radius: 99px; background: var(--amber); color: #1A0F00; font-size: .68rem; font-weight: 700; }
+
+/* ---------- cronograma de parcelas ---------- */
+.cronograma { display: grid; gap: var(--s3); padding: var(--s3); border-radius: var(--r-md); border: 1px solid var(--linha); background: var(--glass); }
+.cronograma-tabela { display: grid; gap: var(--s2); max-height: 260px; overflow: auto; padding-right: 2px; }
+.cronograma-linha { display: grid; grid-template-columns: 28px minmax(130px, 1fr) minmax(110px, 1fr) 44px; gap: var(--s2); align-items: center; }
+.cronograma-n { font-size: .78rem; font-weight: 700; color: var(--text-2); text-align: center; }
+.cronograma-rodape { display: flex; justify-content: space-between; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+.cronograma-acoes, .cronograma-entrada { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; }
+.cronograma-entrada .campo { width: auto; flex: 1 1 130px; min-width: 120px; }
+
+.servico-pers { grid-column: 1 / -1; }
+.servico-crono { grid-column: 1 / -1; }
