@@ -160,6 +160,7 @@ export function montarImportacao(d, linhas, { agora = new Date().toISOString(), 
     const id = hash(`lancamento:${idOrigem}`);
     if (d.mapa.lancamentos.has(id)) { resumo.lancamentos_existentes++; continue; }
     const r0 = itens[0];
+    if (/^teste/i.test(limpar(r0.Projeto))) { avisos.push(`Lançamento de teste ignorado: "${limpar(r0.Nome)}" (projeto ${limpar(r0.Projeto)}).`); continue; }
     const tipo = limpar(r0.Tipo) === 'Despesa' ? 'despesa' : 'receita';
     const pessoa = pessoaPor(tipo === 'receita' ? r0.Cliente : r0.Fornecedor, tipo === 'receita' ? 'cliente' : 'fornecedor');
     const parcelas = itens.map((r, k) => {
@@ -206,11 +207,21 @@ export function montarImportacao(d, linhas, { agora = new Date().toISOString(), 
     });
     if (pagas.length) l.conta_id = contaDe().id;
     if (projeto) {
-      if (tipo === 'receita') projeto.valor_total_cents += total;
+      if (tipo === 'receita') { projeto.valor_total_cents += total; (projeto._rec ||= []).push(l); }
       projeto.competencia = !projeto.competencia || comp < projeto.competencia ? comp : projeto.competencia;
     }
     incluir('lancamentos', l);
     resumo.lancamentos_novos++;
+  }
+  // Cada receita do projeto vira um serviço contratado (valor, parcelas e primeiro vencimento); projeto todo pago = concluído.
+  for (const pr of novos.contratos) {
+    const recs = pr._rec || [];
+    delete pr._rec;
+    if (!recs.length) continue;
+    pr.servicos = recs.map((l) => ({ servico_id: null, nome: l.nome, valor_cents: l.parcelas.reduce((a, x) => a + x.valor_cents, 0),
+      parcelas: l.parcelas.length, primeiro_vencimento: l.parcelas[0].vencimento, lancamento_id: l.id }));
+    pr.valor_total_cents = pr.servicos.reduce((a, x) => a + x.valor_cents, 0);
+    if (recs.every((l) => l.parcelas.every((x) => x.pagamentos.length))) pr.status = 'concluido';
   }
   return { novos, resumo: { ...resumo, totais, criados: Object.fromEntries(Object.entries(novos).map(([k, v]) => [k, v.length])) }, avisos };
 }
