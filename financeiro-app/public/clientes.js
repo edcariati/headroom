@@ -22,6 +22,10 @@ const planoTxt = (l) => {
   const n = Math.max(1, Number(l.parcelas) || 1);
   return `${n}x de ${brl(Math.floor(l.valor_cents / n))}${l.primeiro_vencimento ? ` · ${dataBR(l.primeiro_vencimento)}${n > 1 ? ` até ${dataBR(addMes(l.primeiro_vencimento, n - 1))}` : ''}` : ''}`;
 };
+const porGrupo = (lista) => {
+  const grupos = Map.groupBy(lista, (s) => s.grupo || '');
+  return [...grupos].map(([g, itens]) => { const ops = itens.map((s) => `<option value="${s.id}">${esc(s.nome)}</option>`).join(''); return g ? `<optgroup label="${esc(g)}">${ops}</optgroup>` : ops; }).join('');
+};
 function editorServicos(raiz, catalogo, iniciais, aoMudar) {
   let linhas = iniciais.map((s) => ({ parcelas: 1, primeiro_vencimento: '', ...s }));
   const ativos = catalogo.filter((s) => s.ativo);
@@ -39,7 +43,7 @@ function editorServicos(raiz, catalogo, iniciais, aoMudar) {
         ${s.aberto ? `<div class="servico-crono" data-crono="${i}"></div>` : ''}`}</div>`; }).join('')}</div>
       ${linhas.length ? '<p class="suave" style="font-size:.78rem;margin:0 0 var(--s2)">Em cada linha: serviço · valor · parcelas · primeiro vencimento. As parcelas vencem de mês em mês.</p>' : ''}
       <select class="campo" data-add aria-label="Adicionar serviço"><option value="">+ Adicionar serviço…</option>
-        ${ativos.map((s) => `<option value="${s.id}">${esc(s.nome)}</option>`).join('')}<option value="__outro">Outro (digitar o nome)</option></select>
+        ${porGrupo(ativos)}<option value="__outro">Outro (digitar o nome)</option></select>
       <div class="servicos-total"><span class="suave">Total dos serviços</span><b class="num" data-total>${brl(total())}</b></div>`;
     crons.clear();
     $$('[data-crono]', raiz).forEach((host) => {

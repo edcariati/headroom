@@ -1,6 +1,6 @@
 // Service worker mínimo: guarda só os arquivos estáticos do app para abrir rápido e funcionar como PWA.
 // A API (/api/) NUNCA é guardada: dados financeiros sempre vêm do servidor.
-const VERSAO = 'v7';
+const VERSAO = 'v8';
 const CACHE = `financeiro-${VERSAO}`;
 const BASE = ['/', '/index.html', '/styles.css', '/theme.js', '/app.js', '/util.js', '/ui.js', '/forms.js', '/views.js', '/clientes.js', '/areceber.js', '/usuarios.js', '/fluxos.js', '/documentos.js', '/painel.js', '/cronograma.js', '/logo-cariati.png', '/icon-192.png'];
 

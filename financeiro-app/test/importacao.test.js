@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { criarDados, resumo, listarParcelas } from '../api/_lib/finance.js';
 import { montarImportacao } from '../api/_lib/importacao.js';
-import { registrosDoPlano, registrosPlano2 } from '../api/_lib/plano.js';
+import { registrosCategoriasReceita, registrosDoPlano, registrosPlano2 } from '../api/_lib/plano.js';
 
 const base = { 'Status parcela': 'Pago', 'Conta bancária': 'Sicoob', Juros: 0, 'Notas fiscais': null, 'Centro de custo': null, Projeto: 'CA250102 Fulano', Fornecedor: null };
 const linhas = [
@@ -34,4 +34,24 @@ test('importa parcelas pagas e previstas e não duplica ao repetir', () => {
   assert.deepEqual(r.novos.contas.map((c) => c.nome), ['Banco base antigo']);
   assert.equal(r.novos.lancamentos[0].parcelas[0].pagamentos[0].banco_origem, 'Sicoob');
   assert.equal(montarImportacao(d, linhas).resumo.lancamentos_existentes, 2); // segunda rodada não cria nada
+});
+
+test('cadastro de clientes completa quem já tem lançamento e cria os demais', () => {
+  const pl = registrosDoPlano();
+  const d = criarDados({ categorias: [...pl.categorias, ...registrosPlano2(), ...registrosCategoriasReceita()], centros: pl.centros });
+  const clientes = [
+    { 'Código': 351, Nome: 'Ana  Souza', Tipo: 'pf', 'CPF/CNPJ': '04182691814', Telefone: '(15) 99722-7598', CEP: '18272548', Rua: 'Rua A', 'Número': ' 72 ', Cidade: 'Tatuí', Estado: 'SP', Email: 'ana@x.com' },
+    { 'Código': 352, Nome: 'Empresa Z', Tipo: 'pj', 'Razão Social': 'Z Ltda', 'CPF/CNPJ': '12345678000199', Estado: null },
+    { 'Código': 353, Nome: 'Sem Doc', Tipo: 'pf', 'CPF/CNPJ': '123' },
+  ];
+  const r = montarImportacao(d, linhas, { clientes });
+  assert.equal(r.resumo.clientes_novos, 3);
+  const ana = r.novos.pessoas.filter((p) => p.nome === 'Ana  Souza' || p.nome === 'Ana Souza');
+  assert.equal(ana.length, 1); // cliente da planilha e do lançamento são a mesma pessoa
+  assert.deepEqual([ana[0].codigo, ana[0].documento, ana[0].telefone, ana[0].numero, ana[0].estado], ['351', '04182691814', '15997227598', '72', 'SP']);
+  assert.equal(r.novos.pessoas.find((p) => p.nome === 'Empresa Z').natureza, 'juridica');
+  assert.equal(r.novos.pessoas.find((p) => p.nome === 'Sem Doc').documento, null);
+  assert.ok(r.avisos.some((a) => a.includes('Sem Doc')));
+  // receita usa a categoria do plano importado quando existe uma com o mesmo nome
+  assert.equal(r.novos.lancamentos.find((l) => l.nome === 'Projeto X').categoria_id, 'rc3_9');
 });

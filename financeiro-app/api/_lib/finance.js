@@ -514,7 +514,7 @@ const CAMPOS = {
   contas: ['nome', 'banco', 'saldo_inicial_cents', 'ativa'], categorias: ['nome', 'tipo', 'grupo_dre', 'pai_id'], centros: ['nome'],
   pessoas: ['codigo', 'nome', 'tipo', 'natureza', 'data_nascimento', 'documento', 'rg', 'email', 'telefone', 'consumidor_final_nfse',
     'cep', 'endereco', 'numero', 'complemento', 'bairro', 'cidade', 'estado', 'observacoes'],
-  servicos: ['nome', 'descricao', 'valor_padrao_cents', 'categoria_id', 'ativo'],
+  servicos: ['nome', 'grupo', 'descricao', 'valor_padrao_cents', 'categoria_id', 'ativo'],
   contratos: ['codigo', 'nome', 'pessoa_id', 'valor_total_cents', 'competencia', 'status', 'area_m2', 'servicos', 'obra'],
 };
 const CAMPOS_ENDERECO = ['cep', 'endereco', 'numero', 'complemento', 'bairro', 'cidade', 'estado'];

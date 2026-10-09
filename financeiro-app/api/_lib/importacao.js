@@ -67,6 +67,7 @@ function deduzir(tipo, nome) {
   return 'cat24';
 }
 export const CONTA_BASE = 'Banco base antigo';
+const EQUIVALENTE = { cat01: 'projetos arquitetonico', cat02: 'projeto decoracao de interiores', cat03: 'gestao de obra', cat04: 'regularizacao de imovel', cat05: 'consultoria tecnica', cat06: 'venda de servicos' };
 const CENTROS = { 'projetos': 'cc3', 'gestao de obra': 'cc4' };
 
 // Lê as linhas cruas (uma por parcela) e junta por lançamento.
@@ -87,7 +88,7 @@ function agrupar(linhas, avisos) {
   return { porParcela, lancs };
 }
 
-export function montarImportacao(d, linhas, { agora = new Date().toISOString(), hoje = new Date().toISOString().slice(0, 10) } = {}) {
+export function montarImportacao(d, linhas, { clientes = [], agora = new Date().toISOString(), hoje = new Date().toISOString().slice(0, 10) } = {}) {
   const avisos = [];
   const { porParcela, lancs } = agrupar(linhas, avisos);
   const novos = { contas: [], categorias: [], centros: [], pessoas: [], contratos: [], lancamentos: [] };
@@ -103,8 +104,11 @@ export function montarImportacao(d, linhas, { agora = new Date().toISOString(), 
   };
   const categoriaPor = (tipo, nomeCat, nomeLanc) => {
     const n = norm(nomeCat);
+    // Receita: usa a categoria do plano importado (ids rc…) quando existe uma com o mesmo nome.
+    const daPlanilha = (nome) => dados.categorias.find((c) => c.id.startsWith('rc') && c.tipo === 'receita' && norm(c.nome) === nome);
+    if (tipo === 'receita' && n && daPlanilha(n)) return daPlanilha(n);
     const alvo = (tipo === 'receita' ? RECEITAS : DESPESAS)[n] ?? (n ? null : deduzir(tipo, nomeLanc));
-    if (typeof alvo === 'string') return dados.mapa.categorias.get(alvo) || dados.categorias.find((c) => c.id === alvo);
+    if (typeof alvo === 'string') return (tipo === 'receita' && daPlanilha(EQUIVALENTE[alvo])) || dados.mapa.categorias.get(alvo) || dados.categorias.find((c) => c.id === alvo);
     const [nome, grupo] = alvo || [limpar(nomeCat), tipo === 'receita' ? 'receita_bruta' : 'despesas_operacionais'];
     let c = dados.categorias.find((x) => !x.pai_id && x.tipo === tipo && norm(x.nome) === norm(nome));
     if (!c) {
@@ -134,6 +138,35 @@ export function montarImportacao(d, linhas, { agora = new Date().toISOString(), 
     return p;
   };
 
+  // Cadastro de clientes vindo do outro sistema: completa quem já existe (pelo código ou pelo nome) e cria os demais.
+  const dig = (v) => String(v ?? '').replace(/\D/g, '');
+  const prefixoNulo = (v) => { const t = limpar(v); return t && t !== '-' ? t : null; };
+  let clientesNovos = 0, clientesAtualizados = 0;
+  for (const c of clientes) {
+    const nome = limpar(c.Nome), codigo = prefixoNulo(c['Código']);
+    if (!nome) continue;
+    const juridica = limpar(c.Tipo).toLowerCase() === 'pj';
+    const doc = dig(c['CPF/CNPJ']);
+    const nasc = iso(c['Data de nascimento']);
+    const campos = {
+      codigo: codigo ? String(codigo).toUpperCase() : null, natureza: juridica ? 'juridica' : 'fisica',
+      documento: doc.length === (juridica ? 14 : 11) ? doc : null, rg: prefixoNulo(c['RG/IE']), email: prefixoNulo(c.Email), telefone: dig(c.Telefone) || null,
+      data_nascimento: nasc, cep: dig(c.CEP) || null, endereco: prefixoNulo(c.Rua), numero: prefixoNulo(c['Número']), complemento: prefixoNulo(c.Complemento),
+      bairro: prefixoNulo(c.Bairro), cidade: prefixoNulo(c.Cidade), estado: /^[A-Za-z]{2}$/.test(limpar(c.Estado)) ? limpar(c.Estado).toUpperCase() : null,
+      observacoes: [prefixoNulo(c['Razão Social']) && `Razão social: ${limpar(c['Razão Social'])}`, prefixoNulo(c['Observações'])].filter(Boolean).join(' · ') || null,
+    };
+    if (doc && !campos.documento) avisos.push(`Cliente "${nome}": CPF/CNPJ com tamanho inválido, não importado.`);
+    let p = dados.pessoas.find((x) => (campos.codigo && x.codigo && String(x.codigo).toLowerCase() === campos.codigo.toLowerCase()) || (!x.codigo && norm(x.nome) === norm(nome)));
+    if (p) {
+      for (const [k, v] of Object.entries(campos)) if (v !== null && v !== undefined) p[k] = v;
+      if (p.tipo === 'fornecedor') p.tipo = 'ambos';
+      if (!novos.pessoas.includes(p)) { novos.pessoas.push(p); clientesAtualizados++; }
+    } else {
+      incluir('pessoas', { id: hash(`cliente:${campos.codigo || norm(nome)}`), nome, tipo: 'cliente', criado_em: agora, ...campos });
+      clientesNovos++;
+    }
+  }
+
   // Projetos: o código vem no começo do nome ("CA250102 Fulano"); sem código, usa o nome inteiro.
   const projetos = new Map();
   const projetoPor = (nome, pessoa) => {
@@ -151,9 +184,10 @@ export function montarImportacao(d, linhas, { agora = new Date().toISOString(), 
     return pr;
   };
 
-  const resumo = { parcelas_lidas: linhas.length, parcelas_unicas: porParcela.size, duplicadas_ignoradas: linhas.length - porParcela.size - 0,
+  const resumo = { clientes_novos: 0, clientes_atualizados: 0, parcelas_lidas: linhas.length, parcelas_unicas: porParcela.size, duplicadas_ignoradas: linhas.length - porParcela.size - 0,
     lancamentos_novos: 0, lancamentos_existentes: 0, parcelas_pagas: 0, parcelas_abertas: 0 };
   resumo.duplicadas_ignoradas = linhas.filter((r) => r['ID Parcela']).length - porParcela.size;
+  resumo.clientes_novos = clientesNovos; resumo.clientes_atualizados = clientesAtualizados;
   const totais = { receita: { pago: 0, aberto: 0 }, despesa: { pago: 0, aberto: 0 } };
 
   for (const [idOrigem, itens] of lancs) {

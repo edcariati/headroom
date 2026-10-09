@@ -98,6 +98,7 @@ export async function tratar(req, ctx) {
           const chave = (x) => (x.pai_id ? F.caminhoCategoria(d, d.mapa.categorias.get(x.pai_id)) : x.caminho);
           return ok(comCaminho.sort((x, y) => x.tipo.localeCompare(y.tipo) || chave(x).localeCompare(chave(y)) || x.nivel - y.nivel || x.nome.localeCompare(y.nome)));
         }
+        if (b === 'servicos') return ok(lista.sort((x, y) => (x.grupo || '~').localeCompare(y.grupo || '~') || String(x.id).localeCompare(String(y.id))));
         return ok(lista.sort((x, y) => x.nome.localeCompare(y.nome)));
       }
       if (metodo === 'POST' && !c) {
@@ -218,7 +219,7 @@ export async function tratar(req, ctx) {
     // Importação das planilhas: com simular=true só mostra o que seria criado.
     if (a === 'importacao' && metodo === 'POST') {
       if (!Array.isArray(body.linhas) || !body.linhas.length) throw new F.ErroValidacao('Envie as linhas das planilhas.');
-      const r = montarImportacao(d, body.linhas, { agora: agora(), hoje: H });
+      const r = montarImportacao(d, body.linhas, { agora: agora(), hoje: H, clientes: Array.isArray(body.clientes) ? body.clientes : [] });
       if (!body.simular) await gravarImportacao(store, r.novos);
       return ok({ simulado: !!body.simular, resumo: r.resumo, avisos: r.avisos.slice(0, 50) });
     }
