@@ -66,6 +66,7 @@ function deduzir(tipo, nome) {
   if (/almoco|cafe|lanche|padaria|restaurante/.test(n)) return 'cat22';
   return 'cat24';
 }
+export const CONTA_BASE = 'Banco base antigo';
 const CENTROS = { 'projetos': 'cc3', 'gestao de obra': 'cc4' };
 
 // Lê as linhas cruas (uma por parcela) e junta por lançamento.
@@ -86,17 +87,18 @@ function agrupar(linhas, avisos) {
   return { porParcela, lancs };
 }
 
-export function montarImportacao(d, linhas, { agora = new Date().toISOString() } = {}) {
+export function montarImportacao(d, linhas, { agora = new Date().toISOString(), hoje = new Date().toISOString().slice(0, 10) } = {}) {
   const avisos = [];
   const { porParcela, lancs } = agrupar(linhas, avisos);
   const novos = { contas: [], categorias: [], centros: [], pessoas: [], contratos: [], lancamentos: [] };
   const dados = criarDados(Object.fromEntries(Object.keys(novos).map((c) => [c, d[c]]))); // cópia de trabalho
   const incluir = (col, obj) => { dados[col].push(obj); dados.mapa[col].set(obj.id, obj); novos[col].push(obj); return obj; };
 
-  const contaPor = (nome) => {
-    const n = norm(nome) || 'sem conta informada';
-    let c = dados.contas.find((x) => norm(x.nome) === n || norm(x.banco) === n);
-    if (!c) c = incluir('contas', { id: hash(`conta:${n}`), nome: limpar(nome) || 'Sem conta informada', banco: limpar(nome) || null, saldo_inicial_cents: 0, ativa: 1 });
+  // Tudo o que foi pago entra numa conta única de base. O banco de origem fica anotado em cada pagamento,
+  // para depois cadastrar as contas reais e redistribuir.
+  const contaPor = () => {
+    let c = dados.contas.find((x) => norm(x.nome) === norm(CONTA_BASE));
+    if (!c) c = incluir('contas', { id: hash('conta:base-antiga'), nome: CONTA_BASE, banco: 'Importação das planilhas', saldo_inicial_cents: 0, ativa: 1 });
     return c;
   };
   const categoriaPor = (tipo, nomeCat, nomeLanc) => {
@@ -165,8 +167,8 @@ export function montarImportacao(d, linhas, { agora = new Date().toISOString() }
       return { r, numero: m ? Number(m[1]) : null, total: m ? Number(m[2]) : null, venc: iso(r['Vencimento parcela']), valor: Math.abs(cents(r['Valor parcela'])), k };
     }).sort((a, b) => a.venc.localeCompare(b.venc));
     if (parcelas.some((p) => !p.venc || !(p.valor > 0))) { avisos.push(`Lançamento "${limpar(r0.Nome)}" ignorado: parcela com data ou valor inválido.`); continue; }
-    const pagas = parcelas.filter((p) => limpar(p.r['Status parcela']) === 'Pago');
-    const contaDe = (p) => contaPor(p.r['Conta bancária']);
+    const pagas = parcelas.filter((p) => limpar(p.r['Status parcela']) === 'Pago' && (iso(p.r['Data de pagamento parcela']) || p.venc) <= hoje);
+    const contaDe = () => contaPor();
     const projeto = projetoPor(r0.Projeto, tipo === 'receita' ? pessoa : null);
     const cat = categoriaPor(tipo, r0['Categoria financeira'], r0.Nome);
     const centro = centroPor(r0['Centro de custo']);
@@ -188,13 +190,21 @@ export function montarImportacao(d, linhas, { agora = new Date().toISOString() }
     parcelas.forEach((p, k) => {
       const pa = l.parcelas[k];
       if (preservar) { pa.numero = p.numero; pa.total = Math.max(p.total || 0, ...nums); }
-      if (limpar(p.r['Status parcela']) === 'Pago') {
-        const data = iso(p.r['Data de pagamento parcela']) || p.venc;
-        pa.pagamentos.push({ data, valor_cents: p.valor, conta_id: contaDe(p).id });
+      const dataPg = iso(p.r['Data de pagamento parcela']) || p.venc;
+      if (limpar(p.r['Status parcela']) === 'Pago' && dataPg > hoje) {
+        avisos.push(`"${limpar(r0.Nome)}" (${p.venc.split('-').reverse().join('/')}) consta como paga em ${dataPg.split('-').reverse().join('/')}, data no futuro: ficou em aberto para você conferir.`);
+        totais[tipo].aberto += p.valor; resumo.parcelas_abertas++;
+      } else if (limpar(p.r['Status parcela']) === 'Pago') {
+        const data = dataPg;
+        const pg = { data, valor_cents: p.valor, conta_id: contaDe().id };
+        const origem = limpar(p.r['Conta bancária']), forma = limpar(p.r['Forma de pagamento parcela']);
+        if (origem) pg.banco_origem = origem;
+        if (forma) pg.forma = forma;
+        pa.pagamentos.push(pg);
         totais[tipo].pago += p.valor; resumo.parcelas_pagas++;
       } else { totais[tipo].aberto += p.valor; resumo.parcelas_abertas++; }
     });
-    if (pagas.length) l.conta_id = contaDe(pagas[0]).id;
+    if (pagas.length) l.conta_id = contaDe().id;
     if (projeto) {
       if (tipo === 'receita') projeto.valor_total_cents += total;
       projeto.competencia = !projeto.competencia || comp < projeto.competencia ? comp : projeto.competencia;

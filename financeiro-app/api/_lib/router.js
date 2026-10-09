@@ -218,7 +218,7 @@ export async function tratar(req, ctx) {
     // Importação das planilhas: com simular=true só mostra o que seria criado.
     if (a === 'importacao' && metodo === 'POST') {
       if (!Array.isArray(body.linhas) || !body.linhas.length) throw new F.ErroValidacao('Envie as linhas das planilhas.');
-      const r = montarImportacao(d, body.linhas, { agora: agora() });
+      const r = montarImportacao(d, body.linhas, { agora: agora(), hoje: H });
       if (!body.simular) await gravarImportacao(store, r.novos);
       return ok({ simulado: !!body.simular, resumo: r.resumo, avisos: r.avisos.slice(0, 50) });
     }

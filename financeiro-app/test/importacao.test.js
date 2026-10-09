@@ -31,5 +31,7 @@ test('importa parcelas pagas e previstas e não duplica ao repetir', () => {
   assert.equal(listarParcelas(d, { tipo: 'despesa', de: '2000-01-01', ate: '2030-12-31' }, '2026-10-09').itens[0].categoria_nome, 'Automóvel › Combustível');
   const de = resumo(d, { de: '2025-01-01', ate: '2027-12-31' }, '2026-10-09');
   assert.ok(de);
+  assert.deepEqual(r.novos.contas.map((c) => c.nome), ['Banco base antigo']);
+  assert.equal(r.novos.lancamentos[0].parcelas[0].pagamentos[0].banco_origem, 'Sicoob');
   assert.equal(montarImportacao(d, linhas).resumo.lancamentos_existentes, 2); // segunda rodada não cria nada
 });
