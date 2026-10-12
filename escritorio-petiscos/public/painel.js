@@ -499,6 +499,7 @@
         <legend>${l.id}</legend>
         <label>Codinome<input type="text" maxlength="40" data-campo="codinome" value="${esc(l.codinome)}" /></label>
         <label>Nome<input type="text" maxlength="60" data-campo="nome" value="${esc(l.nome)}" /></label>
+        <label>Preço (R$)<input type="text" inputmode="decimal" maxlength="10" data-campo="preco" value="${l.preco != null ? Number(l.preco).toFixed(2).replace(".", ",") : ""}" /></label>
         <label class="largo">Ingredientes<textarea maxlength="300" data-campo="descricao">${esc(l.descricao)}</textarea></label>
       </fieldset>`)
       .join("");
@@ -620,7 +621,7 @@
       <div class="cartao">
         <h3>Cuidados</h3>
         <div class="duas-colunas">
-          <div><p class="rotulo-desc">🌱 Lanche vegano (11. O Naturalista)</p><ul class="lista-padrao">${z.vegano.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>
+          <div><p class="rotulo-desc">🌱 Lanche vegano (11. ${esc(infoLanche(11).codinome || infoLanche(11).nome)})</p><ul class="lista-padrao">${z.vegano.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>
           <div><p class="rotulo-desc">⚠️ Alergênicos para avisar o avaliador</p><ul class="lista-padrao">${z.alergenicos.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>
         </div>
       </div>
@@ -722,10 +723,11 @@
           custo += q * unit;
         });
         const completo = falta.length === 0;
+        const pv = l.preco ?? c.precos?.[l.id];
         return `<tr><td><b>${l.id}. ${esc(l.codinome || l.nome)}</b> <span class="obs">${esc(l.nome)}</span></td>
           <td class="num" data-rot="Custo">${reais(custo)}${completo ? "" : ' <span class="obs">(parcial)</span>'}</td>
-          <td class="num" data-rot="Preço atual">${c.precos?.[l.id] ? reais(c.precos[l.id]) : "–"}</td>
-          <td class="num" data-rot="CMV atual">${completo && c.precos?.[l.id] ? `<b class="${custo / c.precos[l.id] > alvo ? "cmv-alto" : "cmv-ok"}">${num((100 * custo) / c.precos[l.id])}%</b>` : "–"}</td>
+          <td class="num" data-rot="Preço atual">${pv ? reais(pv) : "–"}</td>
+          <td class="num" data-rot="CMV atual">${completo && pv ? `<b class="${custo / pv > alvo ? "cmv-alto" : "cmv-ok"}">${num((100 * custo) / pv)}%</b>` : "–"}</td>
           <td class="num" data-rot="Preço sugerido">${completo && alvo > 0 ? `<b>${reais(custo / alvo)}</b>` : "–"}</td>
           <td class="falta" data-rot="Falta">${completo ? '<span class="ok-tag">completo</span>' : `<span class="obs">${esc([...new Set(falta)].join(", "))}</span>`}</td></tr>`;
       }).join("");

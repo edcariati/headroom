@@ -4,29 +4,63 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Cardápio · Escritório Petiscos &amp; Cia</title>
-  <meta name="description" content="Os lanches da degustação do Escritório Petiscos & Cia e seus ingredientes." />
-  <meta name="theme-color" content="#24150c" />
+  <meta name="description" content="Cardápio completo do Escritório Petiscos & Cia: lanches, almoço executivo, especiais da semana, da chapa e opções leves." />
+  <meta name="theme-color" content="#120b07" />
   <meta property="og:title" content="Cardápio · Escritório Petiscos & Cia" />
-  <meta property="og:description" content="Os lanches da degustação e seus ingredientes." />
-  <meta property="og:image" content="https://escritorio-petiscos.vercel.app/poster.jpg" />
+  <meta property="og:description" content="Lanches, almoço executivo, especiais da semana, da chapa e opções leves." />
+  <meta property="og:image" content="https://escritorio-petiscos.vercel.app/poster-escuro.jpg" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍔</text></svg>" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Roboto+Slab:wght@400;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Oswald:wght@500;600&family=Roboto+Slab:wght@400;700&family=Caveat:wght@600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
-<body>
+<body class="painel-bg menu-casa">
   <main class="pagina larga" style="max-width:980px;padding-bottom:40px">
     <header class="marca">
-      <div class="chamada">Feito pra matar a fome</div>
       <div class="nome">ESCRITÓRIO</div>
       <div class="cia">PETISCOS &amp; CIA</div>
+      <div class="manuscrito">Mais que refeições, bons momentos.</div>
     </header>
 
-    <section class="cardapio">
-      <h1>Cardápio</h1>
-      <div class="cardapio-sub">Degustação · a equipe completa</div>
-      <div class="lista-cardapio" id="lista"><p class="vazio">Carregando…</p></div>
+    <nav class="menu-nav nao-imprimir" aria-label="Seções do cardápio">
+      <a href="#lanches">Lanches</a><a href="#almoco">Almoço</a><a href="#especiais">Especiais</a><a href="#chapa">Da chapa</a><a href="#leves">Leves</a>
+    </nav>
+    <p class="aviso-precos escondido" id="aviso-precos">Preços ocultos durante a degustação.</p>
+
+    <section class="menu-secao" id="lanches">
+      <h2 class="menu-titulo">Vida de <em>Escritório</em></h2>
+      <p class="menu-sub">Lanches que merecem uma pausa.</p>
+      <div class="menu-lanches" id="lista"><p class="vazio">Carregando…</p></div>
+      <p class="manuscrito centro">O expediente acaba. A vontade de comer bem, não.</p>
+    </section>
+
+    <section class="menu-secao" id="almoco">
+      <h2 class="menu-titulo">Pratos <em>Executivos</em></h2>
+      <p class="menu-sub">Almoço: comida de verdade, do jeito que a gente gosta.</p>
+      <div id="executivos"></div>
+      <p class="manuscrito centro">Aqui o almoço tem outro sabor.</p>
+    </section>
+
+    <section class="menu-secao" id="especiais">
+      <h2 class="menu-titulo">Especiais <em>da Semana</em></h2>
+      <p class="menu-sub">Cada dia com um novo sabor para você voltar sempre.</p>
+      <div id="lista-especiais"></div>
+      <p class="manuscrito centro">Boa comida é sempre uma boa ideia.</p>
+    </section>
+
+    <section class="menu-secao" id="chapa">
+      <h2 class="menu-titulo">Da Chapa <em>&amp; Da Casa</em></h2>
+      <p class="menu-sub">Carnes nobres, sabor e boas companhias.</p>
+      <div id="lista-chapa"></div>
+      <p class="manuscrito centro">Carne boa aproxima pessoas.</p>
+    </section>
+
+    <section class="menu-secao" id="leves">
+      <h2 class="menu-titulo">Opções <em>mais leves</em></h2>
+      <p class="menu-sub">Igualmente especiais.</p>
+      <div id="lista-leves" class="leves-grade"></div>
+      <p class="manuscrito centro">Mais opções para um dia ainda melhor.</p>
     </section>
 
     <p class="link-cardapio nao-imprimir">
@@ -37,22 +71,48 @@
 
   <script src="config.js"></script>
   <script src="api.js"></script>
+  <script src="cardapio-dados.js"></script>
   <script>
-    (async function () {
+    (function () {
       const { rpc, esc, vegano, SELO_VEGANO } = window.EP;
-      const lista = document.getElementById("lista");
-      try {
-        const lanches = await rpc("listar_lanches");
-        lista.innerHTML = lanches.map((l) => `
-          <article class="item-cardapio">
-            <div class="num">${l.id}</div>
-            <div class="cod">${esc(l.codinome || l.nome)}</div>
-            <div class="nome">${esc(l.nome)} ${vegano(l) ? SELO_VEGANO : ""}</div>
-            <p class="ing">${esc(l.descricao || "")}</p>
+      const C = window.CARDAPIO_CASA;
+      // Na degustação (link com ?degustacao) os preços ficam ocultos para não influenciar o "quanto pagaria".
+      const semPrecos = new URLSearchParams(location.search).has("degustacao");
+      if (semPrecos) document.getElementById("aviso-precos").classList.remove("escondido");
+      const preco = (v) => (semPrecos || v == null ? "" : `<span class="menu-preco">${Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>`);
+      const linha = (nome, valor, desc) => `<div class="menu-item"><div class="menu-linha"><span class="menu-nome">${esc(nome)}</span><span class="pontos"></span>${preco(valor)}</div>${desc ? `<div class="menu-desc">${esc(desc)}</div>` : ""}</div>`;
+
+      document.getElementById("executivos").innerHTML =
+        `<div class="menu-nota">🍽️ ${esc(C.executivos.nota)}</div>` +
+        C.executivos.grupos.map((g) => `<div class="menu-bloco"><h3 class="menu-grupo">${g.icone} ${esc(g.titulo)}</h3>${g.itens.map(([n, v]) => linha(n, v)).join("")}${g.obs ? `<p class="menu-obs">${esc(g.obs)}</p>` : ""}</div>`).join("");
+
+      document.getElementById("lista-especiais").innerHTML = C.especiais.map((d) => `
+        <div class="menu-bloco">
+          <div class="menu-dia"><h3 class="menu-grupo">${esc(d.dia)}</h3><span class="menu-tema">${esc(d.tema)}</span><span class="manuscrito chamada-dia">${esc(d.chamada)}</span></div>
+          <p class="menu-desc">${esc(d.texto)}</p>
+          ${d.itens.map(([n, v]) => linha(n, v)).join("")}
+        </div>`).join("");
+
+      document.getElementById("lista-chapa").innerHTML =
+        C.chapa.itens.map((p) => `<div class="menu-bloco"><h3 class="menu-grupo">${esc(p.nome)}</h3><p class="menu-desc">${esc(p.texto)}</p>${p.opcoes.map(([n, v]) => linha(n, v)).join("")}</div>`).join("") +
+        `<div class="menu-nota">🍟 ${esc(C.chapa.nota)}</div>`;
+
+      document.getElementById("lista-leves").innerHTML = C.leves.map((g) => `
+        <div class="menu-bloco"><h3 class="menu-grupo">${esc(g.titulo)}</h3><p class="menu-obs">${esc(g.sub)}</p>
+        ${g.itens.map(([n, v, d]) => linha(n, v, d)).join("")}</div>`).join("");
+
+      rpc("listar_lanches").then((lanches) => {
+        document.getElementById("lista").innerHTML = lanches.map((l) => `
+          <article class="menu-lanche">
+            <div class="menu-num">${l.id}</div>
+            <div class="menu-lanche-corpo">
+              <div class="menu-linha"><span class="menu-cod">${esc(l.codinome || l.nome)}</span><span class="pontos"></span>${preco(l.preco)}</div>
+              <div class="menu-tipo">${esc(l.nome)} ${vegano(l) ? SELO_VEGANO : ""}</div>
+              <div class="menu-desc">${esc(l.descricao || "")}</div>
+            </div>
           </article>`).join("");
-      } catch (e) {
-        lista.innerHTML = `<p class="vazio">${esc(e.message)}</p>`;
-      }
+      }).catch((e) => { document.getElementById("lista").innerHTML = `<p class="vazio">${esc(e.message)}</p>`; });
+
       document.getElementById("btn-imprimir").addEventListener("click", (ev) => { ev.preventDefault(); window.print(); });
     })();
   </script>

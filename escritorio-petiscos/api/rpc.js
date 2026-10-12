@@ -3,7 +3,7 @@
 // Estrutura no Blob:
 //   p/{id}.json              avaliador { id, segredo, nome, idade, criado_em }
 //   av/{id}/{lanche}.json    avaliação de um lanche por um avaliador
-//   cfg/cardapio.json        lanches editados no painel { "1": { nome, codinome, descricao }, ... }
+//   cfg/cardapio-v2.json     lanches editados no painel { "1": { nome, codinome, descricao, preco }, ... }
 //   cfg/processo-cozinha.pdf processo de cozinha (só o painel lê e grava)
 //
 // O avaliador recebe o token "{id}.{segredo}" e só ele pode gravar as próprias notas.
@@ -12,22 +12,24 @@
 import { put, get, list, del } from "@vercel/blob";
 import { randomUUID, timingSafeEqual, createHash } from "node:crypto";
 
-// Cardápio da degustação (valores iniciais; o painel pode editar).
+// Cardápio "Vida de Escritório" (valores iniciais; o painel pode editar): [nome, codinome, descrição, preço]
 const CARDAPIO = [
-  ["Burger", "O CLT", "Pão, carne, queijo muçarela, maionese e catupiry."],
-  ["Salada", "O Estagiário", "Pão, carne, queijo muçarela, maionese, catupiry, tomate, cebola e repolho."],
-  ["Bacon", "O PJ", "Pão, carne, queijo muçarela, repolho, maionese, catupiry e tomate."],
-  ["Onion Burger", "O Analista", "Pão, carne, queijo cheddar, barbecue e anéis de cebola empanados."],
-  ["Bacon MK", "O Especialista", "Pão, carne, queijo provolone, bacon e doce de leite."],
-  ["Burgueritos", "O Sócio", "Pão, carne, queijo cheddar Polenghi, maionese e Doritos."],
-  ["Toscana", "O Embaixador", "Pão, carne, linguiça toscana, queijo provolone, maionese, rúcula e abacaxi chapeado."],
-  ["Gorgon Burger", "O Visionário", "Pão, carne, queijo gorgonzola, cebola caramelizada no barbecue com mel e rúcula."],
-  ["Frango", "O Comandante", "Pão, frango empanado ou filé, repolho, queijo provolone, maionese e catupiry."],
-  ["Kids", "O Júnior", "Pão, carne e queijo muçarela."],
-  ["Vegan", "O Naturalista", "Pão, carne e queijo veganos, tomate, rúcula e cebola."],
-  ["Double", "O Diretor", "Pão, 2 carnes, 2 queijos cheddar, maionese, catupiry e tomate."],
-  ["Alma Gêmea", "O Apaixonado", "Pão, carne, queijo muçarela e goiabada."],
+  ["Burger clássico", "CLT", "Pão, carne, queijo muçarela, maionese e catupiry.", 33.9],
+  ["Burger salada", "13º", "Pão, carne, queijo muçarela, maionese, catupiry, tomate, cebola e repolho.", 35.9],
+  ["Bacon", "PJ", "Pão, carne, queijo muçarela, repolho, maionese, catupiry e tomate.", 39.9],
+  ["Onion Burger", "Hora Extra", "Pão, carne, queijo cheddar, barbecue e anéis de cebola empanados.", 37.9],
+  ["Bacon MK", "Bônus do Mês", "Pão, carne, queijo provolone, bacon e doce de leite.", 36.9],
+  ["Burgueritos", "Negócio Fechado", "Pão, carne, queijo cheddar Polenghi, maionese e Doritos.", 35.9],
+  ["Toscana", "Sextou na Chapa", "Pão, carne, linguiça toscana, queijo provolone, maionese, rúcula e abacaxi chapeado.", 41.9],
+  ["Gorgon Burger", "Ideia Genial", "Pão, carne, queijo gorgonzola, cebola caramelizada no barbecue com mel e rúcula.", 38.9],
+  ["Frango", "Férias", "Pão, frango empanado ou filé, repolho, queijo provolone, maionese e catupiry.", 32.9],
+  ["Kids", "Meio Período", "Pão, carne e queijo muçarela.", 29.9],
+  ["Vegano", "Expediente Verde", "Pão, carne e queijo veganos, tomate, rúcula e cebola.", 34.9],
+  ["Double", "Expediente Duplo", "Pão, 2 carnes, 2 queijos cheddar, maionese, catupiry e tomate.", 59.9],
+  ["Alma Gêmea", "Direitos Iguais", "Pão, carne, queijo muçarela e goiabada.", 34.9],
 ];
+// Edições do painel (chave nova: as edições do cardápio antigo não valem mais)
+const CFG_CARDAPIO = "cfg/cardapio-v2.json";
 const TOTAL = CARDAPIO.length;
 const OPCOES = {
   espera: ["ate10", "10a20", "mais20"],
@@ -89,12 +91,13 @@ const idValido = (id) => typeof id === "string" && /^[0-9a-f-]{36}$/.test(id);
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function nomesLanches() {
-  const cfg = (await lerJson("cfg/cardapio.json")) || {};
-  return CARDAPIO.map(([nome, codinome, descricao], i) => ({
+  const cfg = (await lerJson(CFG_CARDAPIO)) || {};
+  return CARDAPIO.map(([nome, codinome, descricao, preco], i) => ({
     id: i + 1,
     nome: cfg[i + 1]?.nome || nome,
     codinome: cfg[i + 1]?.codinome || codinome,
     descricao: cfg[i + 1]?.descricao || descricao,
+    preco: cfg[i + 1]?.preco ?? preco,
   }));
 }
 
@@ -213,7 +216,7 @@ const FUNCOES = {
 
   async admin_renomear({ p_senha, p_nomes }) {
     await checarSenha(p_senha);
-    const cfg = (await lerJson("cfg/cardapio.json")) || {};
+    const cfg = (await lerJson(CFG_CARDAPIO)) || {};
     const limites = { nome: 60, codinome: 40, descricao: 300 };
     for (const [k, v] of Object.entries(p_nomes || {})) {
       const n = Number(k);
@@ -223,9 +226,11 @@ const FUNCOES = {
         const t = String(v[campo] ?? "").trim().slice(0, max);
         if (t) item[campo] = t;
       }
+      const preco = Number(String(v.preco ?? "").replace(",", "."));
+      if (v.preco !== undefined && v.preco !== "" && isFinite(preco) && preco >= 0 && preco <= 9999) item.preco = Math.round(preco * 100) / 100;
       cfg[n] = item;
     }
-    await gravarJson("cfg/cardapio.json", cfg);
+    await gravarJson(CFG_CARDAPIO, cfg);
     return null;
   },
 
