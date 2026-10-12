@@ -346,7 +346,7 @@ export async function formTransferencia(aoSalvar) {
 
 // Configuração dos cadastros: [campo, rótulo, tipo, opções]
 export const CADASTROS = {
-  contas: { titulo: 'Contas bancárias', singular: 'conta', campos: [['nome', 'Nome', 'text'], ['banco', 'Banco', 'text'], ['saldo_inicial_cents', 'Saldo inicial', 'money'], ['ativa', 'Situação', 'select', { ativa: 'Ativa', inativa: 'Inativa' }]],
+  contas: { titulo: 'Contas bancárias', singular: 'conta', campos: [['nome', 'Nome', 'text'], ['banco', 'Banco', 'text'], ['agencia', 'Agência', 'text'], ['numero_conta', 'Número da conta', 'text'], ['tipo_conta', 'Tipo de conta', 'select', { corrente: 'Conta corrente', poupanca: 'Poupança', pagamento: 'Conta de pagamento', caixa: 'Caixa (dinheiro)', outra: 'Outra' }], ['saldo_inicial_cents', 'Saldo inicial', 'money'], ['ativa', 'Situação', 'select', { ativa: 'Ativa', inativa: 'Inativa' }], ['observacao', 'Observações e apontamentos', 'textarea']],
     colunas: [['nome', 'Nome'], ['banco', 'Banco'], ['saldo_inicial_cents', 'Saldo inicial', 'money']] },
   categorias: { titulo: 'Categorias', singular: 'categoria', campos: [['nome', 'Nome', 'text'], ['pai_id', 'Subcategoria de', 'categoria_pai'], ['tipo', 'Tipo', 'select', { receita: 'Receita', despesa: 'Despesa' }],
     ['grupo_dre', 'Grupo da DRE', 'select', GRUPOS]], colunas: [['nome', 'Nome'], ['tipo', 'Tipo'], ['grupo_dre', 'Grupo da DRE', 'grupo']] },

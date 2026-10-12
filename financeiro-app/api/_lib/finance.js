@@ -511,7 +511,7 @@ export function outrosRelatorios(d, f = {}, hoje = hojeISO()) {
 
 const ENUMS = { tipo_pessoa: ['cliente', 'fornecedor', 'ambos'], status_contrato: ['ativo', 'concluido', 'cancelado'] };
 const CAMPOS = {
-  contas: ['nome', 'banco', 'saldo_inicial_cents', 'ativa'], categorias: ['nome', 'tipo', 'grupo_dre', 'pai_id'], centros: ['nome'],
+  contas: ['nome', 'banco', 'agencia', 'numero_conta', 'tipo_conta', 'saldo_inicial_cents', 'ativa', 'observacao'], categorias: ['nome', 'tipo', 'grupo_dre', 'pai_id'], centros: ['nome'],
   pessoas: ['codigo', 'nome', 'tipo', 'natureza', 'data_nascimento', 'documento', 'rg', 'email', 'telefone', 'consumidor_final_nfse',
     'cep', 'endereco', 'numero', 'complemento', 'bairro', 'cidade', 'estado', 'observacoes'],
   servicos: ['nome', 'grupo', 'descricao', 'valor_padrao_cents', 'categoria_id', 'ativo'],
@@ -545,6 +545,9 @@ export function validarCadastro(d, tipo, b, existente = null) {
   }
   if (tipo === 'contas') {
     r.saldo_inicial_cents = r.saldo_inicial_cents ?? 0;
+    if (r.tipo_conta) exigir(['corrente', 'poupanca', 'pagamento', 'caixa', 'outra'].includes(r.tipo_conta), 'Tipo de conta inválido.');
+    for (const k of ['agencia', 'numero_conta']) if (r[k]) r[k] = texto(r[k]).slice(0, 30);
+    if (r.observacao) r.observacao = texto(r.observacao).slice(0, 1000);
     exigir(Number.isInteger(r.saldo_inicial_cents), 'Saldo inicial inválido.');
     r.ativa = r.ativa === false || r.ativa === 0 ? 0 : 1;
   }
@@ -885,8 +888,8 @@ export function painel(d, hoje = hojeISO()) {
 
 export const TIPOS_ANEXO = { 'application/pdf': 'pdf', 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'text/xml': 'xml', 'application/xml': 'xml' };
 export const LIMITE_ANEXO_BYTES = 3 * 1024 * 1024;
-export const CATEGORIAS_ANEXO = ['comprovante', 'nota_fiscal', 'recibo', 'contrato', 'outro'];
-const VINCULOS = { parcela: null, lancamento: 'lancamentos', pessoa: 'pessoas', contrato: 'contratos', nota: 'notas' };
+export const CATEGORIAS_ANEXO = ['comprovante', 'nota_fiscal', 'recibo', 'extrato', 'contrato', 'outro'];
+const VINCULOS = { parcela: null, lancamento: 'lancamentos', pessoa: 'pessoas', contrato: 'contratos', nota: 'notas', conta: 'contas', conferencia: 'conferencias' };
 
 // Lê número, valor, data e partes de uma NF-e ou NFS-e em XML. Devolve só o que encontrar.
 export function extrairNotaXml(xml) {

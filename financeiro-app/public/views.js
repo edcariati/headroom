@@ -1,8 +1,8 @@
-import { $, $$, MESES, api, brl, confirmar, controlePeriodo, dataBR, esc, excluirComDesfazer, getPeriodo, ligarPeriodo, qs, rotuloMes, toast, urlApi } from './util.js';
+import { $, $$, MESES, api, brl, confirmar, controlePeriodo, dataBR, esc, excluirComDesfazer, getPeriodo, ligarPeriodo, modal, qs, rotuloMes, toast, urlApi } from './util.js';
 import { CORES, animarContadores, chipStatus, estadoVazio, gauge, grafico, icon, kpi, linha, revelar, rosca, skeletonPagina, spark } from './ui.js';
 import { formConferencia } from './fluxos.js';
 import { blocoDiretor } from './painel.js';
-import { documentosParcela } from './documentos.js';
+import { CATEGORIAS as CAT_DOC, ACEITA, documentosParcela, enviarAnexo, itemAnexo } from './documentos.js';
 import { CADASTROS, GRUPOS, formBaixa, formCadastro, formEditarLancamento, formEditarParcela, formLancamento, formTransferencia, limparCache } from './forms.js';
 
 export const setCrumbs = (lista) => window.dispatchEvent(new CustomEvent('crumbs', { detail: lista }));
@@ -242,6 +242,29 @@ export async function transferencias(el) {
 }
 
 // ---------- Contas e extratos ----------
+// Anexar recibo, extrato ou um apontamento (texto + arquivo opcional) direto na conta.
+function formAnexoConta(contaId, cadConta, aoSalvar) {
+  modal('Anexar recibo ou apontamento', `
+    <div class="linha2"><label class="f">Tipo *<select class="campo" name="categoria">${Object.entries(CAT_DOC).filter(([k]) => ['recibo', 'extrato', 'comprovante', 'outro'].includes(k)).map(([k, r]) => `<option value="${k}">${r}</option>`).join('')}</select></label>
+      <label class="f">Arquivo <span class="suave">(opcional · PDF, imagem ou XML, até 3 MB)</span><input class="campo" type="file" name="arquivo" accept="${ACEITA}"></label></div>
+    <p class="suave" style="margin:0">Sem arquivo, o apontamento fica anotado nas observações da conta, com a data.</p>
+    <label class="f">Apontamento *<textarea class="campo" name="descricao" rows="3" required placeholder="Ex.: Recibo de depósito conferido; saldo de jan/2026 confere com o extrato"></textarea></label>`, {
+    rotulo: 'Salvar', chave: `conta-anexo:${contaId}`,
+    onSubmit: async (d) => {
+      const arquivo = d.arquivo?.name ? d.arquivo : null;
+      if (arquivo) await enviarAnexo(arquivo, { vinculo: { tipo: 'conta', id: contaId }, categoria: d.categoria, descricao: d.descricao });
+      else {
+        // só o texto: entra nas observações da conta, com a data
+        const hoje = new Date().toISOString().slice(0, 10);
+        const linha = `${dataBR(hoje)}: ${d.descricao.trim()}`;
+        await api(`cadastros/contas/${contaId}`, { method: 'PUT', body: { nome: cadConta.nome, observacao: [cadConta.observacao, linha].filter(Boolean).join('\n') } });
+      }
+      toast('Salvo na conta.');
+      aoSalvar?.();
+    },
+  });
+}
+
 export async function contas(el, query = {}) {
   el.innerHTML = skeletonPagina();
   const lista = await api('contas-saldos');
@@ -249,6 +272,9 @@ export async function contas(el, query = {}) {
   const ex = sel ? await api(`contas/${sel}/extrato`) : null;
   const conferencias = sel ? await api(`conferencias?conta_id=${sel}`) : [];
   const ultConf = conferencias[0];
+  const [anexosConta, anexosConf] = sel ? await Promise.all([api(`anexos?vinculo_tipo=conta&vinculo_id=${sel}`), api('anexos?vinculo_tipo=conferencia')]) : [[], []];
+  const TIPOS_CONTA = { corrente: 'Conta corrente', poupanca: 'Poupança', pagamento: 'Conta de pagamento', caixa: 'Caixa (dinheiro)', outra: 'Outra' };
+  const cadConta = sel ? (await api('cadastros/contas')).find((c) => c.id === sel) : null;
   const total = lista.reduce((s, c) => s + c.saldo_cents, 0);
   const atual = lista.find((c) => c.id === sel);
   setCrumbs(['Financeiro', 'Contas e extratos', ...(atual ? [atual.nome] : [])]);
@@ -258,14 +284,26 @@ export async function contas(el, query = {}) {
       <section class="glass painel hero mira reveal" style="display:grid;place-items:center">${gauge({ pct: perc, rotulo: atual?.nome || 'Conta', valor: `<span data-count="${atual?.saldo_cents || 0}" data-fmt="brl">${brl(atual?.saldo_cents || 0)}</span>`, sub: `${fmtPct(perc)} do saldo total`, cor: 'violet', ariaLabel: `${atual?.nome}: ${fmtPct(perc)} do saldo total` })}</section>
       <div class="grade-kpi" style="align-content:center">${lista.map((c) => `<button class="kpi reveal${c.id === sel ? ' ativa' : ''}" data-conta="${c.id}" type="button"><span class="kpi-topo"><span class="kpi-rot">${icon('banco')}${esc(c.nome)}</span></span><span class="kpi-val ${c.saldo_cents < 0 ? 'vermelho' : ''}" data-count="${c.saldo_cents}" data-fmt="brl">${brl(c.saldo_cents)}</span><span class="kpi-var suave">${esc(c.banco || '')}</span></button>`).join('')}</div></div>`
     : estadoVazio({ titulo: 'Nenhuma conta cadastrada', texto: 'Cadastre suas contas bancárias com o saldo inicial para ver saldos e extratos.', acaoRotulo: 'Nova conta', acaoId: 'estado-novo' })}
+    ${ex ? `    <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--s3);flex-wrap:wrap;margin:var(--s6) 0 var(--s3)"><h2 style="margin:0">Conferências e apontamentos</h2>
+      <button class="btn btn-sm" type="button" data-anexar-conta>${icon('clipe')}Anexar recibo ou apontamento</button></div>
+    <section class="glass painel reveal">
+      ${cadConta && [cadConta.banco, cadConta.agencia && `Ag. ${cadConta.agencia}`, cadConta.numero_conta && `Conta ${cadConta.numero_conta}`, TIPOS_CONTA[cadConta.tipo_conta]].filter(Boolean).length ? `<p class="suave" style="margin:0 0 var(--s3)">${esc([cadConta.banco, cadConta.agencia && `Ag. ${cadConta.agencia}`, cadConta.numero_conta && `Conta ${cadConta.numero_conta}`, TIPOS_CONTA[cadConta.tipo_conta]].filter(Boolean).join(' · '))}</p>` : ''}
+      ${cadConta?.observacao ? `<p style="margin:0 0 var(--s3);white-space:pre-line"><b>Observações da conta:</b> ${esc(cadConta.observacao)}</p>` : ''}
+      ${anexosConta.length ? `<ul class="anexos-lista" style="list-style:none;padding:0;margin:0 0 var(--s3)">${anexosConta.map(itemAnexo).join('')}</ul>` : ''}
+      ${conferencias.length ? conferencias.map((cf) => { const arqs = anexosConf.filter((a) => a.vinculo.id === cf.id); return `<div style="padding:var(--s3) 0;border-top:1px solid var(--borda,rgba(255,255,255,.08))"><b>${dataBR(cf.data)}</b> · extrato ${brl(cf.saldo_banco_cents)} · aplicativo ${brl(cf.saldo_app_cents)} · ${cf.diferenca_cents ? `<span class="vermelho">diferença de ${brl(cf.diferenca_cents)}</span>` : '<span class="verde">saldo igual</span>'}
+        ${cf.observacao ? `<p style="margin:var(--s2) 0 0;white-space:pre-line">${esc(cf.observacao)}</p>` : ''}${arqs.length ? `<ul class="anexos-lista" style="list-style:none;padding:0;margin:var(--s2) 0 0">${arqs.map(itemAnexo).join('')}</ul>` : ''}</div>`; }).join('') : '<p class="suave" style="margin:0">Nenhuma conferência registrada. Use "Conferir com o extrato" para anotar o que foi conferido e guardar o extrato ou o recibo.</p>'}
+    </section>` : ''}
     ${ex ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:var(--s3);flex-wrap:wrap;margin:var(--s6) 0 var(--s3)"><h2 style="margin:0">Extrato · ${esc(ex.conta.nome)}</h2>
       <div style="display:flex;align-items:center;gap:var(--s3);flex-wrap:wrap">${ultConf ? `<span class="suave">Última conferência: ${dataBR(ultConf.data)}${ultConf.diferenca_cents ? ` · diferença de ${brl(ultConf.diferenca_cents)}` : ' · saldo igual ao extrato'}</span>` : '<span class="suave">Ainda não conferida com o extrato</span>'}
       <button class="btn btn-sm" type="button" data-conferir>${icon('check')}Conferir com o extrato</button></div></div>${ex.movimentos.length ? '' : '<p class="suave" style="margin-bottom:var(--s3)">Ainda não há movimentos nesta conta.</p>'}<section class="glass reveal"><div class="tabela-wrap"><table class="tbl"><thead><tr><th>Data</th><th>Descrição</th><th>Pessoa</th><th class="num">Valor</th><th class="num">Saldo</th></tr></thead><tbody>
       <tr><td data-label="Data"></td><td class="nome suave" data-label="Descrição">Saldo inicial</td><td data-label="Pessoa"></td><td class="num" data-label="Valor"></td><td class="num" data-label="Saldo"><b>${brl(ex.saldo_inicial_cents)}</b></td></tr>
       ${[...ex.movimentos].reverse().map((m) => `<tr><td data-label="Data">${dataBR(m.data)}</td><td class="nome" data-label="Descrição"><strong>${esc(m.descricao)}</strong>${m.origem === 'transferencia' ? ` <span class="chip">${icon('transfer')}transferência</span>` : ''}</td><td data-label="Pessoa">${esc(m.pessoa || '')}</td><td class="num" data-label="Valor">${sv(m.valor_cents)}</td><td class="num" data-label="Saldo">${brl(m.saldo_cents)}</td></tr>`).join('')}</tbody></table></div></section>` : ''}`;
-  el.onclick = (e) => {
+  el.onclick = async (e) => {
     if (e.target.closest('#estado-novo')) return formCadastro('contas', null, () => { limparCache(); contas(el); });
     if (e.target.closest('[data-conferir]')) return formConferencia(lista, sel, () => { contas(el, query); });
+    if (e.target.closest('[data-anexar-conta]')) return formAnexoConta(sel, cadConta, () => contas(el, query));
+    const delA = e.target.closest('[data-del-anexo]');
+    if (delA) { if (await confirmar('Excluir este arquivo anexado?')) { try { await api(`anexos/${delA.dataset.delAnexo}`, { method: 'DELETE' }); toast('Arquivo excluído.'); contas(el, query); } catch (err) { toast(err.message, 'erro'); } } return; }
     const b = e.target.closest('[data-conta]');
     if (b) location.hash = `#/contas?conta=${b.dataset.conta}`;
   };

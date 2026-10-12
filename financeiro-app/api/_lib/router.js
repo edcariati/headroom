@@ -147,7 +147,7 @@ export async function tratar(req, ctx) {
       if (metodo === 'GET' && !b) {
         const q = String(query.busca || '').toLowerCase();
         const contexto = (x) => { const l = d.mapa.lancamentos.get(x.lancamento_id); const pe = d.mapa.pessoas.get(l?.pessoa_id ?? (x.vinculo.tipo === 'pessoa' ? x.vinculo.id : null));
-          return x.vinculo.tipo === 'pessoa' ? pe?.nome ?? '' : x.vinculo.tipo === 'contrato' ? d.mapa.contratos.get(x.vinculo.id)?.codigo ?? '' : [l?.nome, pe?.nome].filter(Boolean).join(' · '); };
+          return x.vinculo.tipo === 'pessoa' ? pe?.nome ?? '' : x.vinculo.tipo === 'contrato' ? d.mapa.contratos.get(x.vinculo.id)?.codigo ?? '' : x.vinculo.tipo === 'conta' ? d.mapa.contas.get(x.vinculo.id)?.nome ?? '' : x.vinculo.tipo === 'conferencia' ? `Conferência · ${d.mapa.contas.get(d.mapa.conferencias.get(x.vinculo.id)?.conta_id)?.nome ?? ''}` : [l?.nome, pe?.nome].filter(Boolean).join(' · '); };
         const lista = d.anexos.filter((x) => (!query.categoria || x.categoria === query.categoria) && (!query.vinculo_tipo || x.vinculo.tipo === query.vinculo_tipo) && (!query.vinculo_id || x.vinculo.id === query.vinculo_id)
           && (!query.lancamento_id || x.lancamento_id === query.lancamento_id)).map((x) => ({ ...x, contexto: contexto(x) }))
           .filter((x) => !q || `${x.nome} ${x.descricao || ''} ${x.contexto} ${x.extraido?.numero || ''} ${x.extraido?.emitente || ''}`.toLowerCase().includes(q));
