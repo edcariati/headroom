@@ -2,6 +2,7 @@
   "cleanUrls": true,
   "regions": ["gru1"],
   "headers": [
-    { "source": "/painel", "headers": [{ "key": "X-Robots-Tag", "value": "noindex" }] }
+    { "source": "/painel", "headers": [{ "key": "X-Robots-Tag", "value": "noindex" }] },
+    { "source": "/garcom", "headers": [{ "key": "X-Robots-Tag", "value": "noindex" }] }
   ]
 }

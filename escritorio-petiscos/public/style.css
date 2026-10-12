@@ -116,7 +116,7 @@ body.painel-bg::before {
 .muted { color: var(--texto-2); font-size: 14px; }
 
 label.campo { display: block; font-weight: 700; margin: 14px 0 6px; color: var(--cafe-800); }
-input[type="text"], input[type="number"], input[type="password"], textarea, select {
+input[type="text"], input[type="number"], input[type="password"], input[type="search"], textarea, select {
   width: 100%;
   font: inherit;
   font-size: 17px;
@@ -428,6 +428,7 @@ table.mapa .nome-lanche { background: none; border: 0; font: inherit; color: var
 .camada.verde { background: #d6ecd2; border-color: #3f8a46; }
 .camada.croc { background: #e3dbf0; border-color: #6b55a3; }
 .pilha-chapa { font-size: 12.5px; margin: 8px 0 0; color: var(--texto-2); }
+.titulo-secao-cozinha { margin: 28px 0 12px; padding: 12px 18px; border-radius: var(--raio); background: rgba(18, 11, 7, 0.88); border: 1px solid rgba(232, 118, 30, 0.6); color: var(--creme); }
 tr.a-definir td { color: var(--texto-2); font-style: italic; }
 .check-item { display: flex; gap: 8px; align-items: flex-start; padding: 5px 0; font-size: 14px; cursor: pointer; }
 .check-item input { margin-top: 3px; width: 18px; height: 18px; accent-color: var(--laranja-escuro); }
@@ -505,4 +506,102 @@ tfoot td { border-top: 2px solid var(--cafe-300); }
   .menu-titulo, .menu-cod, .menu-nome, .menu-tema, .menu-nota { color: #000; }
   .menu-desc, .menu-obs, .menu-sub { color: #444; }
   .menu-nav { display: none; }
+}
+
+/* Painel: editor de bebidas */
+.bebidas-lista { display: flex; flex-direction: column; gap: 8px; }
+.bebida-linha { display: grid; grid-template-columns: 1fr 1.6fr 0.7fr 2fr auto; gap: 8px; align-items: center; }
+.bebida-linha input { font-size: 14px; padding: 8px 10px; margin: 0; }
+.bebida-linha .link { font-size: 18px; padding: 4px 8px; }
+@media (max-width: 640px) {
+  .bebida-linha { grid-template-columns: 1fr 1fr auto; padding-bottom: 8px; border-bottom: 1px solid var(--linha); }
+  .bebida-linha [data-b=nome] { grid-column: 2 / 4; }
+  .bebida-linha [data-b=descricao] { grid-column: 2 / 3; }
+}
+
+/* Cardápio: as 4 partes (lanches, pratos quentes, bebidas, doces) */
+.menu-parte { display: flex; align-items: center; gap: 12px; margin: 34px 0 6px; padding: 14px 20px; border-radius: var(--raio); background: var(--laranja); color: #1b0f08; font-family: "Oswald", var(--display); font-weight: 600; font-size: clamp(26px, 6vw, 36px); text-transform: uppercase; letter-spacing: 1.5px; scroll-margin-top: 60px; }
+.menu-parte span { font-size: 0.9em; }
+@media print { .menu-parte { break-after: avoid; background: none; color: #000; border-bottom: 3px solid #000; border-radius: 0; } }
+
+/* ---------- Garçom: mesas e calculadora ---------- */
+.garcom-pagina { max-width: 1180px; padding-bottom: 96px; }
+.garcom-topo { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; color: var(--creme); padding: 16px 0 12px; }
+.garcom-marca { font-family: var(--display); font-size: 15px; letter-spacing: 1px; color: var(--laranja); }
+.garcom-marca span { font-family: "Caveat", cursive; color: var(--cafe-300); font-size: 18px; letter-spacing: 0; margin-left: 4px; }
+.garcom-topo h1 { font-family: "Oswald", var(--display); font-weight: 600; text-transform: uppercase; font-size: clamp(26px, 6vw, 36px); margin: 2px 0 0; letter-spacing: 1px; }
+.garcom-modos { display: flex; gap: 6px; background: rgba(18, 11, 7, 0.85); border: 1px solid rgba(232, 118, 30, 0.5); border-radius: 999px; padding: 4px; }
+.garcom-modos button { border: 0; background: none; color: var(--creme); font: 700 15px var(--corpo); padding: 9px 16px; border-radius: 999px; cursor: pointer; }
+.garcom-modos button.ativo { background: var(--laranja); color: #1b0f08; }
+.garcom-dica { color: var(--cafe-300); font-size: 14px; margin: 6px 0 12px; }
+.garcom-dica.pequena { font-size: 12.5px; margin-top: 14px; }
+.comanda .garcom-dica, .pedido-itens .garcom-dica { color: var(--texto-2); }
+
+.mesas { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
+.mesa { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 92px; border-radius: var(--raio); border: 2px solid var(--linha); background: var(--papel); color: var(--cafe-800); cursor: pointer; font-family: var(--corpo); padding: 8px 4px; }
+.mesa-num { font-family: "Oswald", sans-serif; font-weight: 600; font-size: 30px; line-height: 1; }
+.mesa-info { font-size: 12.5px; color: var(--texto-2); display: flex; flex-direction: column; align-items: center; }
+.mesa-info small { font-size: 11.5px; }
+.mesa.aberta { background: var(--laranja); border-color: var(--laranja-escuro); color: #1b0f08; }
+.mesa.aberta .mesa-info { color: #1b0f08; font-weight: 700; font-size: 14px; }
+.mesa:active { transform: scale(0.97); }
+
+.pedido-layout { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: start; }
+@media (min-width: 900px) { .pedido-layout { grid-template-columns: 1fr 360px; } }
+.pedido-itens { background: var(--papel); border-radius: var(--raio); padding: 14px; box-shadow: var(--sombra); }
+.pedido-barra { display: flex; gap: 8px; align-items: center; }
+.pedido-barra input { flex: 1; margin: 0; }
+.partes { display: flex; gap: 6px; overflow-x: auto; padding: 12px 0 4px; }
+.partes button { flex: none; border: 1.5px solid var(--laranja); background: #fff; color: var(--cafe-800); font: 700 14px var(--corpo); border-radius: 999px; padding: 8px 14px; cursor: pointer; }
+.partes button.ativa { background: var(--laranja); color: #1b0f08; }
+.grupo-titulo { font-family: "Oswald", sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--laranja-escuro); font-size: 15px; margin: 16px 0 8px; }
+.itens-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.item-btn { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; min-height: 74px; padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--linha); background: #fff; color: var(--texto); cursor: pointer; font-family: var(--corpo); }
+.item-btn:active { transform: scale(0.97); background: #fff1e3; }
+.item-btn.no-pedido { border-color: var(--laranja); background: #fff6ec; }
+.item-nome { font-weight: 700; font-size: 14px; line-height: 1.2; }
+.item-sub { font-size: 12px; color: var(--texto-2); }
+.item-preco { margin-top: auto; font-family: "Oswald", sans-serif; font-weight: 600; font-size: 16px; color: var(--laranja-escuro); }
+.item-btn.sem-preco { opacity: 0.55; cursor: not-allowed; }
+.item-btn.sem-preco .item-preco { font-family: var(--corpo); font-size: 12px; color: var(--texto-2); }
+.item-qtd { position: absolute; top: -8px; right: -6px; min-width: 26px; height: 26px; border-radius: 13px; background: var(--laranja); color: #1b0f08; font: 700 14px "Oswald", sans-serif; display: flex; align-items: center; justify-content: center; padding: 0 6px; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+
+.comanda { background: var(--papel); border-radius: var(--raio); padding: 14px; box-shadow: var(--sombra); position: sticky; top: 12px; }
+.comanda-cab { display: flex; align-items: center; justify-content: space-between; }
+.comanda-cab h2 { font-family: "Oswald", sans-serif; font-weight: 600; text-transform: uppercase; color: var(--cafe-800); margin: 0 0 8px; font-size: 22px; }
+.comanda-fechar { display: none; font-size: 22px; text-decoration: none; }
+#comanda-lista { max-height: 46vh; overflow-y: auto; }
+.comanda-item { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--linha); }
+.comanda-nome { font-size: 14px; font-weight: 700; color: var(--texto); }
+.comanda-nome small { display: block; font-weight: 400; font-size: 12px; color: var(--texto-2); }
+.comanda-valor { font-family: "Oswald", sans-serif; font-size: 16px; color: var(--cafe-800); min-width: 78px; text-align: right; }
+.contador { display: inline-flex; align-items: center; gap: 6px; }
+.contador button { width: 34px; height: 34px; border-radius: 10px; border: 1.5px solid var(--laranja); background: #fff; color: var(--laranja-escuro); font: 700 20px var(--corpo); line-height: 1; cursor: pointer; }
+.contador b { min-width: 20px; text-align: center; font-size: 16px; }
+.comanda-contas { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.conta-linha { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 15px; color: var(--texto); }
+.conta-linha.servico { cursor: pointer; }
+.conta-linha.servico input { width: auto; margin: 0 6px 0 0; accent-color: var(--laranja); transform: scale(1.2); }
+.conta-linha.total { font-family: "Oswald", sans-serif; font-size: 26px; color: var(--cafe-800); border-top: 2px solid var(--cafe-800); padding-top: 8px; margin-top: 4px; }
+.conta-linha.total b { color: var(--laranja-escuro); }
+.conta-linha.dividir { font-size: 14px; color: var(--texto-2); }
+.comanda-acoes { display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; margin-top: 14px; }
+
+.barra-total { display: none; }
+@media (max-width: 899px) {
+  .comanda { display: none; position: fixed; inset: auto 0 0 0; top: auto; max-height: 88vh; overflow-y: auto; border-radius: 18px 18px 0 0; z-index: 20; padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+  body.ver-comanda .comanda { display: block; }
+  body.ver-comanda::after { content: ""; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 19; }
+  .comanda-fechar { display: block; }
+  #tela-pedido:not(.escondido) .barra-total { display: flex; position: fixed; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 10; align-items: center; justify-content: space-between; gap: 10px; border: 0; border-radius: 16px; background: var(--laranja); color: #1b0f08; font: 700 16px var(--corpo); padding: 14px 18px; box-shadow: 0 8px 24px rgba(0,0,0,.4); cursor: pointer; }
+  .barra-total b { font-family: "Oswald", sans-serif; font-size: 22px; }
+}
+.garcom .toast { bottom: calc(96px + env(safe-area-inset-bottom)); }
+body.ver-comanda .toast { visibility: hidden; }
+@media (max-width: 560px) {
+  .mesas { grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .mesa { min-height: 70px; padding: 6px 2px; border-radius: 10px; }
+  .mesa-num { font-size: 24px; }
+  .mesa-info, .mesa.aberta .mesa-info { font-size: 10.5px; }
+  .mesa-info small { font-size: 10px; }
 }

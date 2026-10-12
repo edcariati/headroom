@@ -78,6 +78,7 @@
     if (b.dataset.aba === "lanches") renderLanche();
     if (b.dataset.aba === "cozinha") { renderCozinha(); carregarProcesso(); }
     if (b.dataset.aba === "compras") renderCompras();
+    if (b.dataset.aba === "nomes") renderExtras();
   });
 
   function renderTudo() {
@@ -528,6 +529,80 @@
     }
   });
 
+  // ---------- Bebidas e doces do cardápio ----------
+  // Sugestões só para facilitar o preenchimento: nada vai ao cardápio antes de o dono salvar.
+  const SUGESTOES_EXTRA = {
+    bebidas: [
+      ["Refrigerantes", "Coca-Cola lata 350 ml"], ["Refrigerantes", "Guaraná lata 350 ml"], ["Refrigerantes", "Refrigerante 600 ml"], ["Refrigerantes", "Refrigerante 2 litros"],
+      ["Sucos", "Suco natural de laranja"], ["Sucos", "Suco natural de limão"], ["Sucos", "Suco de polpa", "Pergunte os sabores do dia."],
+      ["Águas", "Água mineral sem gás 500 ml"], ["Águas", "Água mineral com gás 500 ml"], ["Águas", "Água de coco"],
+      ["Cafés", "Café coado"], ["Cafés", "Café expresso"], ["Cafés", "Café com leite"],
+      ["Cervejas", "Cerveja lata 350 ml"], ["Cervejas", "Cerveja long neck"],
+    ],
+    doces: [
+      ["Sobremesas", "Pudim de leite"], ["Sobremesas", "Mousse de maracujá"], ["Sobremesas", "Pavê"],
+      ["Doces", "Brigadeiro"], ["Doces", "Bolo do dia", "Pergunte o sabor."], ["Sorvetes", "Sorvete (1 bola)"],
+    ],
+  };
+  const NOME_SECAO = { bebidas: "bebida", doces: "doce" };
+  const extraCarregado = {};
+
+  const linhaExtra = (b = {}) => `<div class="bebida-linha">
+      <input type="text" maxlength="40" data-b="categoria" placeholder="Categoria" value="${esc(b.categoria || "")}" aria-label="Categoria" />
+      <input type="text" maxlength="60" data-b="nome" placeholder="Nome" value="${esc(b.nome || "")}" aria-label="Nome" />
+      <input type="text" inputmode="decimal" maxlength="10" data-b="preco" placeholder="Preço" value="${b.preco != null ? Number(b.preco).toFixed(2).replace(".", ",") : ""}" aria-label="Preço (R$)" />
+      <input type="text" maxlength="120" data-b="descricao" placeholder="Descrição (opcional)" value="${esc(b.descricao || "")}" aria-label="Descrição" />
+      <button type="button" class="link" data-remover title="Remover">✕</button>
+    </div>`;
+
+  async function renderExtras() {
+    if (extraCarregado.ok) return;
+    let cfg = { bebidas: [], doces: [] };
+    try { cfg = await rpc("listar_cardapio_extra"); } catch (e) { $("erro-bebidas").textContent = e.message; }
+    for (const secao of ["bebidas", "doces"]) {
+      let itens = cfg[secao] || [];
+      if (!itens.length) {
+        itens = SUGESTOES_EXTRA[secao].map(([categoria, nome, descricao]) => ({ categoria, nome, descricao: descricao || "" }));
+        $(`${secao}-aviso`).innerHTML = "<b>Lista sugerida, ainda não publicada.</b> Confira os itens, preencha os preços, apague o que não vende e clique em Salvar. Só então ela aparece no cardápio e na calculadora dos garçons.";
+      }
+      $(`lista-${secao}`).innerHTML = itens.map(linhaExtra).join("");
+    }
+    extraCarregado.ok = true;
+  }
+
+  for (const secao of ["bebidas", "doces"]) {
+    $(`lista-${secao}`).addEventListener("click", (ev) => {
+      const b = ev.target.closest("[data-remover]");
+      if (b) b.closest(".bebida-linha").remove();
+    });
+    $(`btn-add-${secao}`).addEventListener("click", () => {
+      const ultima = [...document.querySelectorAll(`#lista-${secao} [data-b=categoria]`)].pop();
+      $(`lista-${secao}`).insertAdjacentHTML("beforeend", linhaExtra({ categoria: ultima ? ultima.value : "" }));
+      [...document.querySelectorAll(`#lista-${secao} [data-b=nome]`)].pop().focus();
+    });
+    $(`form-${secao}`).addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const itens = [...document.querySelectorAll(`#lista-${secao} .bebida-linha`)].map((l) => {
+        const o = {};
+        l.querySelectorAll("[data-b]").forEach((i) => { o[i.dataset.b] = i.value.trim(); });
+        return o;
+      });
+      const btn = $(`btn-${secao}`);
+      btn.disabled = true;
+      $(`erro-${secao}`).textContent = "";
+      try {
+        const salvos = await rpc("admin_cardapio_extra_salvar", { p_senha: senha, p_secao: secao, p_itens: itens });
+        $(`lista-${secao}`).innerHTML = salvos.map(linhaExtra).join("");
+        $(`${secao}-aviso`).textContent = `${salvos.length} ${NOME_SECAO[secao]}(s) no cardápio. Linha sem nome é ignorada.`;
+        toast("Salvo ✓");
+      } catch (e) {
+        $(`erro-${secao}`).textContent = e.message;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
+
   // ---------- Cozinha: processo completo (dados privados vindos da API) ----------
   const ler = (k, padrao) => { try { const v = localStorage.getItem(k); return v == null ? padrao : JSON.parse(v); } catch (e) { return padrao; } };
   const gravar = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
@@ -632,11 +707,73 @@
           <div><p class="rotulo-desc">Abertura</p>${check("abertura", z.abertura)}</div>
           <div><p class="rotulo-desc">Fechamento</p>${check("fechamento", z.fechamento)}</div>
         </div>
-      </div>`;
+      </div>
+      ${z.pratos ? htmlPratos(z.pratos, check) : ""}`;
     box.querySelectorAll("[data-check]").forEach((c) => c.addEventListener("change", () => {
       const m = ler("ep_checklist", {}); m[c.dataset.check] = c.checked; gravar("ep_checklist", m);
     }));
     $("btn-limpar-check").addEventListener("click", () => { gravar("ep_checklist", {}); renderCozinha(); });
+  }
+
+  // Pratos da cozinha (almoço, especiais, chapa e leves): mesma lógica visual da montagem dos lanches.
+  const TIPO_PRATO = { a: "pao", p: "carne", m: "molho", v: "verde", f: "croc" };
+  function htmlPratos(pr, check) {
+    const cartaoPrato = (p) => `<div class="pilha-lanche">
+        <div class="pilha-nome">P${p.id}. ${esc(p.nome)}</div>
+        <div class="pilha-sub">${esc(p.preco)} · ${esc(p.quem)}</div>
+        <div class="pilha">${p.montagem.map(([t, rot], i) => `<div class="camada ${TIPO_PRATO[t]}">${i + 1}. ${esc(rot)}</div>`).join("")}</div>
+        <p class="pilha-chapa"><b>Preparo:</b> ${esc(p.preparo)}</p>
+      </div>`;
+    const grupos = pr.grupos.map(([g, titulo]) => {
+      const itens = pr.pratos.filter((p) => p.grupo === g);
+      return itens.length ? `<p class="rotulo-desc" style="margin-top:16px">${esc(titulo)}</p><div class="pilhas">${itens.map(cartaoPrato).join("")}</div>` : "";
+    }).join("");
+    return `
+      <h2 class="titulo-secao-cozinha">🍽️ Pratos da cozinha</h2>
+      <div class="cartao">
+        <h3>Quem faz o quê nos pratos</h3>
+        <div class="duas-colunas">
+          <div class="papel"><div class="papel-nome">👨‍🍳 Chapeiro</div><p>${esc(pr.divisao.chapeiro)}</p></div>
+          <div class="papel"><div class="papel-nome">🧑‍🍳 Ajudante</div><p>${esc(pr.divisao.ajudante)}</p></div>
+        </div>
+        <h3 style="margin-top:18px">Semana da cozinha</h3>
+        <div class="tabela-wrap"><table>
+          <thead><tr><th>Dia</th><th>O que sai</th><th>Na véspera</th><th>No dia</th></tr></thead>
+          <tbody>${pr.semana.map((r) => `<tr><td><b>${esc(r[0])}</b></td><td>${esc(r[1])}</td><td>${esc(r[2])}</td><td>${esc(r[3])}</td></tr>`).join("")}</tbody>
+        </table></div>
+      </div>
+
+      <div class="cartao">
+        <h3>Preparo de todo dia, antes de abrir</h3>
+        ${check("pratos", pr.diario)}
+      </div>
+
+      <div class="cartao">
+        <h3>Montagem dos ${pr.pratos.length} pratos</h3>
+        <p class="muted">Cada cartão mostra o prato na ordem de montar, do primeiro item ao último. Numerados de P1 a P${pr.pratos.length} para não confundir com os lanches.</p>
+        <div class="legenda-camadas">
+          <span><i class="camada pao"></i>Arroz, feijão, massa, pão</span><span><i class="camada carne"></i>Proteína</span>
+          <span><i class="camada molho"></i>Molho e queijo</span><span><i class="camada verde"></i>Salada e verdura</span>
+          <span><i class="camada croc"></i>Frito e empanado</span>
+        </div>
+        ${grupos}
+        <p class="rotulo-desc" style="margin-top:16px">Extras (qualquer pedido)</p>
+        <div class="tabela-wrap"><table>
+          <thead><tr><th>Extra</th><th>Preço</th><th>Porção</th></tr></thead>
+          <tbody>${pr.extras.map((r) => `<tr><td>${esc(r[0])}</td><td>${esc(r[1])}</td><td>${esc(r[2])}</td></tr>`).join("")}</tbody>
+        </table></div>
+      </div>
+
+      <div class="cartao">
+        <h3>Porções padrão dos pratos</h3>
+        <p class="muted">Picanha e contrafilé vêm do cardápio. O resto é sugestão até o dono confirmar.</p>
+        <div class="tabela-wrap"><table>
+          <thead><tr><th>Item</th><th>Porção por prato</th><th>Onde vai</th></tr></thead>
+          <tbody>${pr.porcoes.map((r) => `<tr${/a definir|sugestão/.test(r[1]) ? ' class="a-definir"' : ""}><td>${esc(r[0])}</td><td>${esc(r[1])}</td><td>${esc(r[2])}</td></tr>`).join("")}</tbody>
+        </table></div>
+        <p class="muted" style="margin-top:12px"><b>Para confirmar com o dono:</b></p>
+        <ul class="lista-padrao">${pr.confirmar.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
+      </div>`;
   }
 
   // ---------- Compras e custo por lanche ----------
@@ -842,6 +979,9 @@
     $("link-publico").textContent = url;
     const msg = `Oi! Me ajuda a escolher os lanches do Escritório Petiscos & Cia? Prove e dê sua nota por aqui: ${url}`;
     $("btn-whats").href = "https://wa.me/?text=" + encodeURIComponent(msg);
+    const garcom = new URL("garcom", url).href;
+    $("link-garcom").textContent = garcom;
+    $("btn-garcom").href = garcom;
   }
   $("btn-copiar").addEventListener("click", async () => {
     try { await navigator.clipboard.writeText($("link-publico").textContent); toast("Link copiado ✓"); }

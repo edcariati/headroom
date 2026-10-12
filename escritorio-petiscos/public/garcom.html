@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Garçom · Escritório Petiscos &amp; Cia</title>
+  <meta name="robots" content="noindex" />
+  <meta name="theme-color" content="#120b07" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧾</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Oswald:wght@500;600&family=Roboto+Slab:wght@400;700&family=Caveat:wght@600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="painel-bg garcom">
+  <main class="pagina larga garcom-pagina">
+    <header class="garcom-topo">
+      <div>
+        <div class="garcom-marca">ESCRITÓRIO <span>Petiscos &amp; Cia</span></div>
+        <h1 id="titulo">Mesas do salão</h1>
+      </div>
+      <nav class="garcom-modos" aria-label="Modo">
+        <button type="button" data-modo="mesas" class="ativo">🪑 Mesas</button>
+        <button type="button" data-modo="rapida">🧮 Calculadora</button>
+      </nav>
+    </header>
+
+    <!-- Mapa das mesas -->
+    <section id="tela-mesas">
+      <p class="garcom-dica">Toque na mesa para lançar ou ver o pedido. Mesa laranja = aberta.</p>
+      <div class="mesas" id="mesas"></div>
+      <p class="garcom-dica pequena">As mesas ficam salvas neste celular, mesmo se fechar a página.</p>
+    </section>
+
+    <!-- Pedido (de uma mesa ou da calculadora rápida) -->
+    <section id="tela-pedido" class="escondido">
+      <div class="pedido-layout">
+        <div class="pedido-itens">
+          <div class="pedido-barra">
+            <button type="button" class="botao pequeno secundario" id="btn-voltar">← Mesas</button>
+            <input type="search" id="busca" placeholder="Buscar no cardápio…" aria-label="Buscar no cardápio" autocomplete="off" />
+          </div>
+          <nav class="partes" id="partes" aria-label="Partes do cardápio"></nav>
+          <div id="catalogo"><p class="carregando">Carregando cardápio…</p></div>
+        </div>
+
+        <aside class="comanda" id="comanda" aria-label="Pedido">
+          <div class="comanda-cab">
+            <h2 id="comanda-titulo">Pedido</h2>
+            <button type="button" class="link comanda-fechar" id="btn-fechar-comanda" aria-label="Fechar">✕</button>
+          </div>
+          <div id="comanda-lista"></div>
+          <div class="comanda-contas">
+            <div class="conta-linha"><span>Subtotal</span><b id="subtotal">R$ 0,00</b></div>
+            <label class="conta-linha servico"><span><input type="checkbox" id="servico" /> Serviço 10%</span><b id="valor-servico">R$ 0,00</b></label>
+            <div class="conta-linha total"><span>Total</span><b id="total">R$ 0,00</b></div>
+            <div class="conta-linha dividir">
+              <span>Dividir por</span>
+              <span class="contador"><button type="button" id="pessoas-menos" aria-label="Menos pessoas">−</button><b id="pessoas">1</b><button type="button" id="pessoas-mais" aria-label="Mais pessoas">+</button></span>
+              <b id="por-pessoa">R$ 0,00</b>
+            </div>
+          </div>
+          <div class="comanda-acoes">
+            <button type="button" class="botao secundario" id="btn-limpar">Limpar</button>
+            <button type="button" class="botao" id="btn-fechar-mesa">Fechar conta</button>
+          </div>
+        </aside>
+      </div>
+
+      <button type="button" class="barra-total" id="barra-total">
+        <span id="barra-qtd">0 itens</span><span>Ver pedido</span><b id="barra-valor">R$ 0,00</b>
+      </button>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="config.js"></script>
+  <script src="api.js"></script>
+  <script src="cardapio-dados.js"></script>
+  <script src="catalogo.js"></script>
+  <script src="garcom.js"></script>
+</body>
+</html>

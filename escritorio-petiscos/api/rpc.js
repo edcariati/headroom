@@ -30,6 +30,8 @@ const CARDAPIO = [
 ];
 // Edições do painel (chave nova: as edições do cardápio antigo não valem mais)
 const CFG_CARDAPIO = "cfg/cardapio-v2.json";
+const CFG_EXTRA = "cfg/cardapio-extra.json"; // bebidas e doces, editados no painel
+const SECOES_EXTRA = ["bebidas", "doces"];
 const TOTAL = CARDAPIO.length;
 const OPCOES = {
   espera: ["ate10", "10a20", "mais20"],
@@ -212,6 +214,32 @@ const FUNCOES = {
         .filter((a) => vivos.has(a.avaliador_id) && a.lanche_id <= TOTAL)
         .sort((a, b) => a.criado_em.localeCompare(b.criado_em)),
     };
+  },
+
+  // Bebidas e doces do cardápio: listas vazias até o dono salvar pelo painel.
+  async listar_cardapio_extra() {
+    const cfg = (await lerJson(CFG_EXTRA)) || {};
+    return { bebidas: cfg.bebidas || [], doces: cfg.doces || [] };
+  },
+
+  async admin_cardapio_extra_salvar({ p_senha, p_secao, p_itens }) {
+    await checarSenha(p_senha);
+    if (!SECOES_EXTRA.includes(p_secao)) falha("Seção inválida.");
+    if (!Array.isArray(p_itens)) falha("Lista inválida.");
+    const texto = (v, max) => String(v ?? "").trim().slice(0, max);
+    const itens = [];
+    for (const b of p_itens.slice(0, 120)) {
+      const nome = texto(b?.nome, 60);
+      if (!nome) continue;
+      const item = { categoria: texto(b.categoria, 40) || (p_secao === "doces" ? "Doces" : "Bebidas"), nome, descricao: texto(b.descricao, 120) };
+      const preco = Number(String(b.preco ?? "").replace(",", "."));
+      if (b.preco !== undefined && String(b.preco).trim() !== "" && isFinite(preco) && preco >= 0 && preco <= 9999) item.preco = Math.round(preco * 100) / 100;
+      itens.push(item);
+    }
+    const cfg = (await lerJson(CFG_EXTRA)) || {};
+    cfg[p_secao] = itens;
+    await gravarJson(CFG_EXTRA, cfg);
+    return itens;
   },
 
   async admin_renomear({ p_senha, p_nomes }) {

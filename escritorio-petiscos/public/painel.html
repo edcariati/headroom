@@ -130,6 +130,34 @@
           <div class="erro-msg" id="erro-nomes"></div>
           <button class="botao" type="submit" id="btn-nomes" style="margin-top:12px">Salvar cardápio</button>
         </form>
+
+        <form class="cartao" id="form-bebidas">
+          <div class="acoes" style="justify-content:space-between">
+            <h2 style="margin:0">Bebidas</h2>
+            <a class="botao pequeno secundario" href="/cardapio#bebidas" target="_blank" rel="noopener">🥤 Ver no cardápio</a>
+          </div>
+          <p class="muted" id="bebidas-aviso">Categoria, nome, preço e uma linha de descrição (opcional). Aparece no cardápio e na calculadora dos garçons depois que você salvar. Linha sem nome é ignorada.</p>
+          <div class="bebidas-lista" id="lista-bebidas"></div>
+          <div class="acoes" style="margin-top:12px">
+            <button class="botao pequeno secundario" type="button" id="btn-add-bebidas">+ Adicionar</button>
+          </div>
+          <div class="erro-msg" id="erro-bebidas"></div>
+          <button class="botao" type="submit" id="btn-bebidas" style="margin-top:12px">Salvar bebidas</button>
+        </form>
+
+        <form class="cartao" id="form-doces">
+          <div class="acoes" style="justify-content:space-between">
+            <h2 style="margin:0">Doces</h2>
+            <a class="botao pequeno secundario" href="/cardapio#doces" target="_blank" rel="noopener">🍮 Ver no cardápio</a>
+          </div>
+          <p class="muted" id="doces-aviso">Categoria, nome, preço e uma linha de descrição (opcional). Aparece no cardápio e na calculadora dos garçons depois que você salvar. Linha sem nome é ignorada.</p>
+          <div class="bebidas-lista" id="lista-doces"></div>
+          <div class="acoes" style="margin-top:12px">
+            <button class="botao pequeno secundario" type="button" id="btn-add-doces">+ Adicionar</button>
+          </div>
+          <div class="erro-msg" id="erro-doces"></div>
+          <button class="botao" type="submit" id="btn-doces" style="margin-top:12px">Salvar doces</button>
+        </form>
       </section>
 
       <!-- Link -->
@@ -141,6 +169,14 @@
             <code id="link-publico"></code>
             <button class="botao pequeno secundario" id="btn-copiar">Copiar</button>
             <a class="botao pequeno" id="btn-whats" target="_blank" rel="noopener">Enviar no WhatsApp</a>
+          </div>
+        </div>
+        <div class="cartao">
+          <h2>Calculadora dos garçons</h2>
+          <p class="muted">Mesas 1 a 30 e calculadora rápida, com os preços do cardápio. Abra no celular do garçom e use "Adicionar à tela de início" para virar um app. Cada celular guarda as próprias mesas.</p>
+          <div class="compartilhar">
+            <code id="link-garcom"></code>
+            <a class="botao pequeno" id="btn-garcom" target="_blank" rel="noopener">Abrir</a>
           </div>
         </div>
       </section>
