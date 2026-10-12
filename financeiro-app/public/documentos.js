@@ -3,9 +3,9 @@ import { $, $$, api, brl, confirmar, dataBR, esc, hojeISO, lerArquivoBase64, mod
 import { animarContadores, estadoVazio, icon, kpi, revelar, skeletonPagina } from './ui.js';
 import { cadastros } from './forms.js';
 
-const CATEGORIAS = { comprovante: 'Comprovante', nota_fiscal: 'Nota fiscal', recibo: 'Recibo', contrato: 'Contrato', outro: 'Outro' };
-const tamanho = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(1).replace('.', ',')} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
-const ACEITA = '.pdf,.png,.jpg,.jpeg,.webp,.xml,application/pdf,image/png,image/jpeg,image/webp,text/xml';
+export const CATEGORIAS = { comprovante: 'Comprovante', nota_fiscal: 'Nota fiscal', recibo: 'Recibo', extrato: 'Extrato bancário', contrato: 'Contrato', outro: 'Outro' };
+export const tamanho = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(1).replace('.', ',')} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
+export const ACEITA = '.pdf,.png,.jpg,.jpeg,.webp,.xml,application/pdf,image/png,image/jpeg,image/webp,text/xml';
 const mimeDe = (f) => f.type || ({ xml: 'text/xml', pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' }[(f.name.split('.').pop() || '').toLowerCase()] ?? '');
 
 export async function enviarAnexo(arquivo, { vinculo, categoria = 'outro', descricao = '' }) {
@@ -13,7 +13,7 @@ export async function enviarAnexo(arquivo, { vinculo, categoria = 'outro', descr
   return api('anexos', { method: 'POST', body: { nome: arquivo.name, tipo: mimeDe(arquivo), dados, categoria, descricao, vinculo } });
 }
 const resumoXml = (x) => (x ? `Lido do XML: ${[x.numero && `nota ${x.numero}`, x.valor_cents != null && brl(x.valor_cents), x.data_emissao && dataBR(x.data_emissao), x.emitente].filter(Boolean).join(' · ')}` : '');
-const itemAnexo = (a) => `<li class="anexo-item"><span class="esq">${icon('clipe')}<span><a href="${urlArquivo(a.id)}" target="_blank" rel="noopener"><b>${esc(a.nome)}</b></a>
+export const itemAnexo = (a) => `<li class="anexo-item"><span class="esq">${icon('clipe')}<span><a href="${urlArquivo(a.id)}" target="_blank" rel="noopener"><b>${esc(a.nome)}</b></a>
   <small>${esc(CATEGORIAS[a.categoria] || a.categoria)} · ${tamanho(a.tamanho)} · ${dataBR((a.criado_em || '').slice(0, 10))}${a.descricao ? ` · ${esc(a.descricao)}` : ''}</small>${a.extraido ? `<small class="verde">${esc(resumoXml(a.extraido))}</small>` : ''}</span></span>
   <span class="dir"><a class="btn btn-sm" href="${urlArquivo(a.id)}" target="_blank" rel="noopener">Abrir</a><button type="button" class="btn btn-sm btn-danger" data-del-anexo="${a.id}" aria-label="Excluir ${esc(a.nome)}">${icon('lixo')}</button></span></li>`;
 

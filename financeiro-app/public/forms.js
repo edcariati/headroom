@@ -1,5 +1,6 @@
 import { $, $$, api, dataBR, dinheiroInput, esc, hojeISO, modal, opcoes, parseDinheiro, toast } from './util.js';
 import { icon } from './ui.js';
+import { editorCronograma, gerarCronograma } from './cronograma.js';
 
 export const GRUPOS = {
   receita_bruta: 'Receita operacional bruta', deducoes: 'Deduções da receita bruta', custos_operacionais: 'Custos operacionais',
@@ -58,6 +59,10 @@ export async function formLancamento(tipo, aoSalvar, prefill = {}) {
         <label class="f">Número de parcelas<input class="campo" type="number" name="parcelas" min="1" max="360" value="1" inputmode="numeric"><span class="dica" data-dica="parcelas"></span><span class="msg" data-msg="parcelas"></span></label>
         <div></div>
       </div>
+      <div id="bloco-personalizar" class="empilha" style="gap:var(--s2)">
+        ${interruptor('personalizar', 'Personalizar a data e o valor de cada parcela <span class="suave">(entrada em outra data, última parcela diferente…)</span>')}
+        <div id="cronograma-lanc" hidden></div>
+      </div>
       ${interruptor('recorrente', `Repete todo mês <span class="suave">(aluguel, salário, assinatura…)</span>`)}
       <label class="f" id="bloco-repeticoes" hidden>Quantos meses<input class="campo" type="number" name="repeticoes" min="1" max="180" value="12" inputmode="numeric"><span class="msg" data-msg="repeticoes"></span></label>
     </section>
@@ -95,9 +100,13 @@ export async function formLancamento(tipo, aoSalvar, prefill = {}) {
       const valor = parseDinheiro(d.valor);
       if (!valor || valor <= 0) throw new Error('Informe um valor válido, como 1.250,00.');
       const n = (v) => v || null;
+      const personalizado = d.personalizar && !d.recorrente;
+      if (personalizado && !cr.ok()) throw new Error(cr.mensagem());
+      const linhasCr = personalizado ? cr.linhas() : null;
       await api('lancamentos', { method: 'POST', body: {
-        tipo, nome: d.nome, valor_total_cents: valor, primeiro_vencimento: d.primeiro_vencimento,
-        competencia: d.competencia || d.primeiro_vencimento, parcelas: Number(d.parcelas || 1), recorrente: d.recorrente,
+        tipo, nome: d.nome, valor_total_cents: valor, primeiro_vencimento: linhasCr ? linhasCr.map((l) => l.vencimento).sort()[0] : d.primeiro_vencimento,
+        ...(linhasCr ? { parcelas_detalhe: linhasCr } : {}),
+        competencia: d.competencia || (linhasCr ? linhasCr.map((l) => l.vencimento).sort()[0] : d.primeiro_vencimento), parcelas: linhasCr ? linhasCr.length : Number(d.parcelas || 1), recorrente: d.recorrente,
         repeticoes: Number(d.repeticoes || 12), pessoa_id: n(d.pessoa_id), categoria_id: n(d.categoria_id), centro_custo_id: n(d.centro_custo_id),
         contrato_id: n(d.contrato_id), conta_id: n(d.conta_id), nota_fiscal: d.nota_fiscal || null, etiquetas: d.etiquetas || null,
         primeira_paga: d.primeira_paga, data_pagamento: d.data_pagamento, nf_solicitada: ehReceita ? !!d.nf_solicitada : undefined,
@@ -147,13 +156,14 @@ export async function formLancamento(tipo, aoSalvar, prefill = {}) {
     $('[data-dica="valor"]', f).textContent = f.recorrente.checked ? 'Valor de CADA mês.' : 'Valor total do lançamento.';
     const pessoa = f.pessoa_id.selectedOptions[0]?.text, cat = f.categoria_id.selectedOptions[0]?.text;
     $('#resumo-lanc', f).innerHTML = `<h3>Resumo</h3><ul class="lista"><li><span>${esc(f.nome.value || '—')}</span><b class="num">${v ? dinheiroInput(v) : '—'}</b></li>
-      <li><span class="suave">${f.recorrente.checked ? `Todo mês, ${f.repeticoes.value} vezes` : `${n || 1} parcela(s)`} · 1º vencimento ${dataBR(f.primeiro_vencimento.value)}</span></li>
+      <li><span class="suave">${f.recorrente.checked ? `Todo mês, ${f.repeticoes.value} vezes` : f.personalizar.checked ? `Parcelas personalizadas: ${cr.resumo()}` : `${n || 1} parcela(s)`} · 1º vencimento ${dataBR(f.primeiro_vencimento.value)}</span></li>
       <li><span class="suave">${esc(cat && cat !== 'Escolha…' ? cat : 'Sem categoria')}${pessoa && pessoa !== '—' ? ' · ' + esc(pessoa) : ''}</span></li></ul>`;
   }
 
   f.recorrente.onchange = () => {
     $('#bloco-repeticoes', f).hidden = !f.recorrente.checked;
     $('#bloco-parcelas', f).hidden = f.recorrente.checked;
+    $('#bloco-personalizar', f).hidden = f.recorrente.checked;
     atualizarDicas();
   };
   f.primeira_paga.onchange = () => { $('#bloco-pagamento', f).hidden = !f.primeira_paga.checked; };
@@ -161,6 +171,16 @@ export async function formLancamento(tipo, aoSalvar, prefill = {}) {
   f.competencia.addEventListener('change', () => { f.competencia.dataset.manual = '1'; });
   f.pessoa_id.addEventListener('change', atualizarDicas);
   f.categoria_id.addEventListener('change', atualizarDicas);
+
+  // cronograma personalizado: cada parcela com a sua data e o seu valor
+  const totalAtual = () => parseDinheiro(f.valor.value) || 0;
+  const cr = editorCronograma($('#cronograma-lanc', f), { aoMudar: () => { f.parcelas.value = cr.linhas().length; salvarRascunho(); atualizarDicas(); } });
+  const personalizando = () => f.personalizar.checked && !f.recorrente.checked;
+  const regenerar = () => { if (personalizando()) cr.definir(gerarCronograma(totalAtual(), Number(f.parcelas.value) || 1, f.primeiro_vencimento.value), totalAtual()); };
+  f.personalizar.onchange = () => { $('#cronograma-lanc', f).hidden = !personalizando(); regenerar(); atualizarDicas(); };
+  ['valor', 'parcelas', 'primeiro_vencimento'].forEach((k) => f[k].addEventListener('input', regenerar));
+  f.primeiro_vencimento.addEventListener('change', regenerar);
+  $('#cronograma-lanc', f).insertAdjacentHTML('beforeend', '<p class="suave" style="font-size:.78rem;margin:var(--s2) 0 0">Mudar o valor, o número de parcelas ou o primeiro vencimento refaz o cronograma. Faça os ajustes por parcela depois disso.</p>');
 
   // etapas
   const ir = (n) => {
@@ -181,6 +201,7 @@ export async function formLancamento(tipo, aoSalvar, prefill = {}) {
   const passoValido = (n) => {
     const ruins = camposDoPasso[n].filter((nome) => !validar(nome));
     if (ruins.length) f.elements[ruins[0]].focus();
+    if (!ruins.length && n === 1 && personalizando() && !cr.ok()) { toast(cr.mensagem(), 'erro'); return false; }
     return !ruins.length;
   };
   $('#passo-seguir', f).onclick = () => { if (passoValido(passo)) ir(passo + 1); };
@@ -199,7 +220,7 @@ export async function formLancamento(tipo, aoSalvar, prefill = {}) {
       if (!f.nome.value && !f.valor.value) return;
       const dados = { passo };
       CAMPOS_RASCUNHO.forEach((k) => { dados[k] = f.elements[k].value; });
-      dados.recorrente = f.recorrente.checked; dados.primeira_paga = f.primeira_paga.checked; if (f.nf_solicitada) dados.nf_solicitada = f.nf_solicitada.checked;
+      dados.recorrente = f.recorrente.checked; dados.primeira_paga = f.primeira_paga.checked; if (f.nf_solicitada) dados.nf_solicitada = f.nf_solicitada.checked; dados.personalizar = f.personalizar.checked; if (f.personalizar.checked) dados.crono = cr.linhas();
       guardar(chaveRascunho, JSON.stringify(dados));
     }, 350);
   }
@@ -212,6 +233,7 @@ export async function formLancamento(tipo, aoSalvar, prefill = {}) {
       CAMPOS_RASCUNHO.forEach((k) => { if (r[k] !== undefined && f.elements[k]) f.elements[k].value = r[k]; });
       f.recorrente.checked = !!r.recorrente; f.primeira_paga.checked = !!r.primeira_paga; if (f.nf_solicitada) f.nf_solicitada.checked = !!r.nf_solicitada;
       f.recorrente.onchange(); f.primeira_paga.onchange();
+      if (r.personalizar && !r.recorrente) { f.personalizar.checked = true; $('#cronograma-lanc', f).hidden = false; cr.definir(r.crono?.length ? r.crono : gerarCronograma(totalAtual(), Number(f.parcelas.value) || 1, f.primeiro_vencimento.value), totalAtual()); }
       $('#aviso-rascunho', f).hidden = false;
       if (r.competencia && r.competencia !== r.primeiro_vencimento) f.competencia.dataset.manual = '1';
     } catch { tirar(chaveRascunho); }
@@ -324,7 +346,7 @@ export async function formTransferencia(aoSalvar) {
 
 // Configuração dos cadastros: [campo, rótulo, tipo, opções]
 export const CADASTROS = {
-  contas: { titulo: 'Contas bancárias', singular: 'conta', campos: [['nome', 'Nome', 'text'], ['banco', 'Banco', 'text'], ['saldo_inicial_cents', 'Saldo inicial', 'money'], ['ativa', 'Situação', 'select', { ativa: 'Ativa', inativa: 'Inativa' }]],
+  contas: { titulo: 'Contas bancárias', singular: 'conta', campos: [['nome', 'Nome', 'text'], ['banco', 'Banco', 'text'], ['agencia', 'Agência', 'text'], ['numero_conta', 'Número da conta', 'text'], ['tipo_conta', 'Tipo de conta', 'select', { corrente: 'Conta corrente', poupanca: 'Poupança', pagamento: 'Conta de pagamento', caixa: 'Caixa (dinheiro)', outra: 'Outra' }], ['saldo_inicial_cents', 'Saldo inicial', 'money'], ['ativa', 'Situação', 'select', { ativa: 'Ativa', inativa: 'Inativa' }], ['observacao', 'Observações e apontamentos', 'textarea']],
     colunas: [['nome', 'Nome'], ['banco', 'Banco'], ['saldo_inicial_cents', 'Saldo inicial', 'money']] },
   categorias: { titulo: 'Categorias', singular: 'categoria', campos: [['nome', 'Nome', 'text'], ['pai_id', 'Subcategoria de', 'categoria_pai'], ['tipo', 'Tipo', 'select', { receita: 'Receita', despesa: 'Despesa' }],
     ['grupo_dre', 'Grupo da DRE', 'select', GRUPOS]], colunas: [['nome', 'Nome'], ['tipo', 'Tipo'], ['grupo_dre', 'Grupo da DRE', 'grupo']] },
@@ -333,8 +355,8 @@ export const CADASTROS = {
     ['tipo', 'Tipo', 'select', { cliente: 'Cliente', fornecedor: 'Fornecedor', ambos: 'Cliente e fornecedor' }], ['documento', 'CPF/CNPJ', 'text'], ['email', 'E-mail', 'text'], ['telefone', 'Telefone', 'text'],
       ['cidade', 'Cidade', 'text'], ['endereco', 'Endereço', 'text'], ['observacoes', 'Observações', 'textarea']],
     colunas: [['codigo', 'Código'], ['nome', 'Nome'], ['tipo', 'Tipo'], ['documento', 'CPF/CNPJ'], ['email', 'E-mail'], ['telefone', 'Telefone']] },
-  servicos: { titulo: 'Serviços', singular: 'serviço', campos: [['nome', 'Nome', 'text'], ['descricao', 'Descrição', 'text'], ['valor_padrao_cents', 'Valor padrão', 'money'], ['categoria_id', 'Categoria da receita', 'categoria']],
-    colunas: [['nome', 'Nome'], ['descricao', 'Descrição'], ['valor_padrao_cents', 'Valor padrão', 'money']] },
+  servicos: { titulo: 'Serviços', singular: 'serviço', campos: [['nome', 'Nome', 'text'], ['grupo', 'Grupo (ex.: Projeto Elétrico)', 'text'], ['descricao', 'Descrição', 'textarea'], ['valor_padrao_cents', 'Valor padrão', 'money'], ['categoria_id', 'Categoria da receita', 'categoria']],
+    colunas: [['grupo', 'Grupo'], ['nome', 'Nome'], ['valor_padrao_cents', 'Valor padrão', 'money']] },
   contratos: { titulo: 'Projetos / contratos', singular: 'contrato', campos: [['codigo', 'Código', 'text'], ['nome', 'Nome', 'text'], ['pessoa_id', 'Cliente', 'pessoa'],
     ['valor_total_cents', 'Valor do contrato', 'money'], ['competencia', 'Data de competência', 'date'], ['status', 'Status', 'select', { ativo: 'Ativo', concluido: 'Concluído', cancelado: 'Cancelado' }]],
     colunas: [['codigo', 'Código'], ['nome', 'Nome'], ['pessoa_nome', 'Cliente'], ['valor_total_cents', 'Valor', 'money'], ['status', 'Status']] },

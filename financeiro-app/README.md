@@ -64,3 +64,11 @@ Para testar o login localmente: `ADMIN_SENHA=qualquer-coisa npm run demo`.
 - **Notas fiscais**: o cliente pediu NF? O lançamento entra na fila "A emitir", com os dados prontos para copiar. Depois registre o número e anexe o arquivo. A emissão automática depende de ligar um emissor (prefeitura ou provedor).
 - **Busca em tudo** (Ctrl+K): clientes, projetos, lançamentos, arquivos anexados, recibos e notas.
 - **Rascunho automático**: o que foi digitado em qualquer formulário fica guardado no navegador. Clicar fora não fecha a janela, e ao reabrir o formulário continua de onde parou.
+
+## Parcelas com data e valor editáveis
+
+- No lançamento (receita ou despesa) e nos serviços do projeto há a opção **Personalizar a data e o valor de cada parcela**. Cada parcela fica com a sua data e o seu valor (entrada em outra data, última parcela com variação).
+- **Aplicar entrada** define o valor e a data da entrada e divide o restante nas demais parcelas.
+- A soma das parcelas precisa fechar com o total: o aplicativo mostra a diferença e oferece "Jogar a diferença na última parcela".
+- Alterar o valor, o número de parcelas ou o primeiro vencimento refaz o cronograma igualmente; ajuste por parcela depois disso.
+- O servidor confere datas, valores positivos e a soma antes de criar as parcelas. O cronograma de cada serviço (até 24 parcelas) fica guardado no projeto e entra no rascunho automático.

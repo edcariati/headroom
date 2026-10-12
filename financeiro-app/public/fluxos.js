@@ -2,6 +2,7 @@
 // (contato de cobrança, conferência com o extrato e entrega do relatório quinzenal).
 import { $, api, brl, dataBR, esc, hojeISO, modal, opcoes, parseDinheiro, toast } from './util.js';
 import { animarContadores, gauge, icon, kpi, revelar, skeletonPagina } from './ui.js';
+import { ACEITA, enviarAnexo } from './documentos.js';
 
 const CANAIS = { whatsapp: 'WhatsApp', telefone: 'Telefone', email: 'E-mail', presencial: 'Presencial', outro: 'Outro' };
 export const nomeCanal = (c) => CANAIS[c] || c;
@@ -25,13 +26,19 @@ export function formConferencia(contas, contaId, aoSalvar) {
     <label class="f">Conta *<select class="campo" name="conta_id" required>${opcoes(contas, contaId, 'Escolha…')}</select></label>
     <div class="linha2"><label class="f">Data do extrato *<input class="campo" type="date" name="data" value="${hojeISO()}" required></label>
       <label class="f">Saldo no extrato do banco (R$) *<input class="campo" name="saldo" inputmode="decimal" required placeholder="0,00" autocomplete="off"></label></div>
-    <label class="f">Explicação da diferença<textarea class="campo" name="observacao" rows="2" placeholder="Só é obrigatória se o saldo do banco for diferente do aplicativo"></textarea></label>
-    <p class="suave">O aplicativo calcula o saldo da conta até a data e compara com o extrato.</p>`, {
+    <label class="f">Apontamentos da conferência<textarea class="campo" name="observacao" rows="3" placeholder="Anote o que foi conferido, pendências e o motivo de qualquer diferença (obrigatório só se o saldo do banco for diferente do aplicativo)"></textarea></label>
+    <div class="linha2"><label class="f">Documento<select class="campo" name="categoria"><option value="extrato">Extrato bancário</option><option value="recibo">Recibo</option><option value="comprovante">Comprovante</option><option value="outro">Outro</option></select></label>
+      <label class="f">Arquivo <span class="suave">(opcional · PDF, imagem ou XML, até 3 MB)</span><input class="campo" type="file" name="arquivo" accept="${ACEITA}"></label></div>
+    <p class="suave">O aplicativo calcula o saldo da conta até a data e compara com o extrato. O arquivo fica guardado dentro do aplicativo, junto desta conferência.</p>`, {
     rotulo: 'Registrar conferência',
     onSubmit: async (d) => {
       const saldo = parseDinheiro(d.saldo);
       if (saldo === null) throw new Error('Informe o saldo do extrato, como 12.345,67.');
       const r = await api('conferencias', { method: 'POST', body: { conta_id: d.conta_id, data: d.data, saldo_banco_cents: saldo, observacao: d.observacao } });
+      if (d.arquivo?.name) {
+        try { await enviarAnexo(d.arquivo, { vinculo: { tipo: 'conferencia', id: r.id }, categoria: d.categoria, descricao: `Conferência de ${dataBR(d.data)}` }); }
+        catch (e) { toast(`Conferência registrada, mas o arquivo não foi anexado: ${e.message}`, 'erro'); aoSalvar?.(); return; }
+      }
       toast(r.diferenca_cents === 0 ? 'Conta conferida: saldo igual ao extrato.' : `Conferência registrada com diferença de ${brl(r.diferenca_cents)}.`);
       aoSalvar?.();
     },

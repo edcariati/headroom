@@ -3,6 +3,7 @@ import * as F from './finance.js';
 import { carregarDados, excluir, gravar } from './dados.js';
 import { cookieLimpo, cookieSessao, criarSessao, hashConfere, lerCookie, lerSessao, senhaConfere } from './auth.js';
 import * as U from './usuarios.js';
+import { gravarImportacao, montarImportacao } from './importacao.js';
 import { hojeISO } from './dates.js';
 
 const ok = (corpo, status = 200) => ({ status, corpo });
@@ -97,6 +98,7 @@ export async function tratar(req, ctx) {
           const chave = (x) => (x.pai_id ? F.caminhoCategoria(d, d.mapa.categorias.get(x.pai_id)) : x.caminho);
           return ok(comCaminho.sort((x, y) => x.tipo.localeCompare(y.tipo) || chave(x).localeCompare(chave(y)) || x.nivel - y.nivel || x.nome.localeCompare(y.nome)));
         }
+        if (b === 'servicos') return ok(lista.sort((x, y) => (x.grupo || '~').localeCompare(y.grupo || '~') || String(x.id).localeCompare(String(y.id))));
         return ok(lista.sort((x, y) => x.nome.localeCompare(y.nome)));
       }
       if (metodo === 'POST' && !c) {
@@ -145,7 +147,7 @@ export async function tratar(req, ctx) {
       if (metodo === 'GET' && !b) {
         const q = String(query.busca || '').toLowerCase();
         const contexto = (x) => { const l = d.mapa.lancamentos.get(x.lancamento_id); const pe = d.mapa.pessoas.get(l?.pessoa_id ?? (x.vinculo.tipo === 'pessoa' ? x.vinculo.id : null));
-          return x.vinculo.tipo === 'pessoa' ? pe?.nome ?? '' : x.vinculo.tipo === 'contrato' ? d.mapa.contratos.get(x.vinculo.id)?.codigo ?? '' : [l?.nome, pe?.nome].filter(Boolean).join(' · '); };
+          return x.vinculo.tipo === 'pessoa' ? pe?.nome ?? '' : x.vinculo.tipo === 'contrato' ? d.mapa.contratos.get(x.vinculo.id)?.codigo ?? '' : x.vinculo.tipo === 'conta' ? d.mapa.contas.get(x.vinculo.id)?.nome ?? '' : x.vinculo.tipo === 'conferencia' ? `Conferência · ${d.mapa.contas.get(d.mapa.conferencias.get(x.vinculo.id)?.conta_id)?.nome ?? ''}` : [l?.nome, pe?.nome].filter(Boolean).join(' · '); };
         const lista = d.anexos.filter((x) => (!query.categoria || x.categoria === query.categoria) && (!query.vinculo_tipo || x.vinculo.tipo === query.vinculo_tipo) && (!query.vinculo_id || x.vinculo.id === query.vinculo_id)
           && (!query.lancamento_id || x.lancamento_id === query.lancamento_id)).map((x) => ({ ...x, contexto: contexto(x) }))
           .filter((x) => !q || `${x.nome} ${x.descricao || ''} ${x.contexto} ${x.extraido?.numero || ''} ${x.extraido?.emitente || ''}`.toLowerCase().includes(q));
@@ -213,6 +215,13 @@ export async function tratar(req, ctx) {
         ['Nome', 'Valor', 'Valor pago', 'Em aberto', 'Vencimento', 'Data de pagamento', 'Pessoa', 'Categoria', 'Projeto', 'Nota fiscal', 'Status'],
         ...r.itens.map((p) => [p.nome, reais(p.valor_cents), reais(p.valor_pago_cents), reais(p.aberto_cents), p.vencimento, p.data_pagamento || '',
           p.pessoa_nome, p.categoria_nome, p.contrato_codigo, p.nota_fiscal, STATUS_TXT[p.status]])]);
+    }
+    // Importação das planilhas: com simular=true só mostra o que seria criado.
+    if (a === 'importacao' && metodo === 'POST') {
+      if (!Array.isArray(body.linhas) || !body.linhas.length) throw new F.ErroValidacao('Envie as linhas das planilhas.');
+      const r = montarImportacao(d, body.linhas, { agora: agora(), hoje: H, clientes: Array.isArray(body.clientes) ? body.clientes : [], desde: body.desde || null });
+      if (!body.simular) await gravarImportacao(store, r.novos);
+      return ok({ simulado: !!body.simular, resumo: r.resumo, avisos: r.avisos.slice(0, 50) });
     }
     if (a === 'lancamentos' && !b && metodo === 'POST') {
       const l = F.criarLancamento(d, body, agora());

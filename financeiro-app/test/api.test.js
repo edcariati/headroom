@@ -256,3 +256,22 @@ test('anexos, recibo, nota fiscal, edição do lançamento e busca pela API', as
   assert.equal((await j(store, 'DELETE', `anexos/${comp.corpo.id}`)).status, 200);
   assert.equal((await j(store, 'GET', `anexos/${comp.corpo.id}/arquivo`)).status, 404);
 });
+
+test('conta guarda dados e observações; conferência e conta aceitam anexos (extrato, recibo)', async () => {
+  const store = new StoreMemoria();
+  const c = await j(store, 'POST', 'cadastros/contas', { corpo: { nome: 'Banco base antigo', agencia: '0001', numero_conta: '123-4', tipo_conta: 'corrente', observacao: 'Conta de transição' } });
+  assert.equal(c.status, 201);
+  const conta = (await j(store, 'GET', 'cadastros/contas')).corpo[0];
+  assert.deepEqual([conta.agencia, conta.numero_conta, conta.tipo_conta, conta.observacao], ['0001', '123-4', 'corrente', 'Conta de transição']);
+  assert.equal((await j(store, 'POST', 'cadastros/contas', { corpo: { nome: 'X', tipo_conta: 'invalida' } })).status, 400);
+  const edit = await j(store, 'PUT', `cadastros/contas/${conta.id}`, { corpo: { nome: 'Banco base antigo', observacao: 'Conta de transição\n12/10/2026: conferida' } });
+  assert.equal(edit.status, 200);
+  const conf = (await j(store, 'POST', 'conferencias', { corpo: { conta_id: conta.id, saldo_banco_cents: 0, data: '2026-06-15', observacao: 'Extrato de junho conferido' } })).corpo;
+  const pdf = Buffer.from('%PDF-1.4 teste').toString('base64');
+  const a1 = await j(store, 'POST', 'anexos', { corpo: { nome: 'extrato.pdf', tipo: 'application/pdf', dados: pdf, categoria: 'extrato', vinculo: { tipo: 'conferencia', id: conf.id } } });
+  const a2 = await j(store, 'POST', 'anexos', { corpo: { nome: 'recibo.pdf', tipo: 'application/pdf', dados: pdf, categoria: 'recibo', descricao: 'Depósito', vinculo: { tipo: 'conta', id: conta.id } } });
+  assert.equal(a1.status, 201); assert.equal(a2.status, 201);
+  const lista = (await j(store, 'GET', 'anexos', { query: { vinculo_tipo: 'conta', vinculo_id: conta.id } })).corpo;
+  assert.equal(lista.length, 1); assert.equal(lista[0].contexto, 'Banco base antigo');
+  assert.equal((await j(store, 'GET', 'anexos', { query: { vinculo_tipo: 'conferencia' } })).corpo[0].contexto, 'Conferência · Banco base antigo');
+});

@@ -378,3 +378,25 @@ test('recorrência de receitas e despesas vai até 180 meses', () => {
   assert.throws(() => criarLancamento(d, { tipo: 'despesa', nome: 'X', valor_total_cents: 1000, recorrente: true, repeticoes: 181, primeiro_vencimento: '2026-07-05' }), /180 meses/);
   assert.equal(rec(d, { nome: 'Parcelado', valor_total_cents: 3600000, parcelas: 360, primeiro_vencimento: '2026-07-05' }).parcelas.length, 360); // parcelamento comum segue até 360
 });
+
+test('parcelas personalizadas: entrada em outra data e última parcela diferente', () => {
+  const d = base();
+  const l = rec(d, { nome: 'Projeto', pessoa_id: 'p1', valor_total_cents: 1000000, primeiro_vencimento: '2026-07-10', parcelas_detalhe: [
+    { vencimento: '2026-08-10', valor_cents: 300000 }, { vencimento: '2026-07-01', valor_cents: 400000 }, { vencimento: '2026-09-10', valor_cents: 300000 }] });
+  assert.deepEqual(l.parcelas.map((p) => [p.numero, p.vencimento, p.valor_cents]), [[1, '2026-07-01', 400000], [2, '2026-08-10', 300000], [3, '2026-09-10', 300000]]);
+  assert.equal(l.parcelas[0].total, 3);
+  assert.equal(l.competencia, '2026-07-01'); // sem competência informada, vale a da primeira parcela
+  assert.throws(() => criarLancamento(d, { tipo: 'receita', nome: 'X', valor_total_cents: 1000, parcelas_detalhe: [{ vencimento: '2026-07-01', valor_cents: 400 }, { vencimento: '2026-08-01', valor_cents: 500 }] }), /soma das parcelas \(R\$ 9,00\).*R\$ 10,00/);
+  assert.throws(() => criarLancamento(d, { tipo: 'receita', nome: 'X', valor_total_cents: 1000, parcelas_detalhe: [{ vencimento: '01/07/2026', valor_cents: 1000 }] }), /Vencimento da parcela 1/);
+  assert.throws(() => criarLancamento(d, { tipo: 'receita', nome: 'X', valor_total_cents: 1000, parcelas_detalhe: [{ vencimento: '2026-07-01', valor_cents: 0 }, { vencimento: '2026-08-01', valor_cents: 1000 }] }), /Valor da parcela 1/);
+  assert.throws(() => criarLancamento(d, { tipo: 'receita', nome: 'X', valor_total_cents: 1000, parcelas_detalhe: [] }), /pelo menos uma/);
+  // a primeira parcela (a de menor data) pode já nascer recebida
+  const paga = rec(d, { nome: 'Com entrada paga', valor_total_cents: 500000, parcelas_detalhe: [{ vencimento: '2026-06-10', valor_cents: 200000 }, { vencimento: '2026-07-10', valor_cents: 300000 }], primeira_paga: true });
+  assert.equal(paga.parcelas[0].pagamentos[0].data, '2026-06-10'); assert.equal(paga.parcelas[1].pagamentos.length, 0);
+  // serviço do projeto com cronograma próprio (até 24 parcelas)
+  const c = validarCadastro(d, 'contratos', { codigo: 'CA260130', nome: 'P', servicos: [{ nome: 'Projeto', valor_cents: 1000000, parcelas: 9, primeiro_vencimento: '2027-01-01',
+    cronograma: [{ vencimento: '2026-08-15', valor_cents: 250000 }, { vencimento: '2026-07-01', valor_cents: 750000 }] }] });
+  assert.equal(c.servicos[0].parcelas, 2); assert.equal(c.servicos[0].primeiro_vencimento, '2026-07-01'); assert.equal(c.servicos[0].cronograma[0].valor_cents, 750000);
+  assert.throws(() => validarCadastro(d, 'contratos', { codigo: 'CA260131', nome: 'P', servicos: [{ nome: 'Projeto', valor_cents: 1000000, cronograma: [{ vencimento: '2026-07-01', valor_cents: 900000 }] }] }), /soma das parcelas/);
+  assert.throws(() => validarCadastro(d, 'contratos', { codigo: 'CA260132', nome: 'P', servicos: [{ nome: 'P', valor_cents: 2500, cronograma: Array.from({ length: 25 }, (_, k) => ({ vencimento: `2026-${String(1 + (k % 12)).padStart(2, '0')}-10`, valor_cents: 100 })) }] }), /entre 1 e 24/);
+});

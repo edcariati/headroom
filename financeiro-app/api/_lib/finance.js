@@ -92,16 +92,34 @@ function movimentos(d, hoje) {
 
 // ---------- lançamentos ----------
 
+// Confere as parcelas informadas à mão: datas válidas, valores positivos e soma igual ao total. Devolve em ordem de data.
+export function parcelasPersonalizadas(lista, total, maximo = 360) {
+  exigir(Array.isArray(lista) && lista.length >= 1, 'Informe pelo menos uma parcela.');
+  exigir(lista.length <= maximo, `O número de parcelas deve ficar entre 1 e ${maximo}.`);
+  const itens = lista.map((x, k) => {
+    exigir(ehISO(x?.vencimento), `Vencimento da parcela ${k + 1} inválido.`);
+    exigir(inteiroPos(x?.valor_cents), `Valor da parcela ${k + 1} deve ser maior que zero.`);
+    return { vencimento: x.vencimento, valor_cents: x.valor_cents };
+  }).sort((a, b) => a.vencimento.localeCompare(b.vencimento));
+  const soma_ = soma(itens, (x) => x.valor_cents);
+  const reais = (c) => `R$ ${(c / 100).toFixed(2).replace('.', ',')}`;
+  exigir(total === undefined || total === null || soma_ === total, `A soma das parcelas (${reais(soma_)}) é diferente do valor total (${reais(total)}). Ajuste os valores.`);
+  return itens;
+}
+
 export function criarLancamento(d, i, agora = new Date().toISOString()) {
   exigir(['receita', 'despesa'].includes(i.tipo), 'Tipo deve ser receita ou despesa.');
   exigir(texto(i.nome), 'Informe o nome do lançamento.');
   exigir(inteiroPos(i.valor_total_cents), 'Informe um valor maior que zero.');
-  exigir(ehISO(i.primeiro_vencimento), 'Informe a data do primeiro vencimento.');
-  const competencia = i.competencia || i.primeiro_vencimento;
-  exigir(ehISO(competencia), 'Data de competência inválida.');
   const recorrente = !!i.recorrente;
-  const n = recorrente ? Number(i.repeticoes ?? 12) : Number(i.parcelas ?? 1);
   const maximo = recorrente ? 180 : 360;
+  // Parcelas personalizadas: cada uma com a sua data e o seu valor (entrada em outra data, última parcela diferente...).
+  const detalhe = i.parcelas_detalhe == null ? null : parcelasPersonalizadas(i.parcelas_detalhe, i.valor_total_cents, maximo);
+  const primeiroVenc = detalhe ? detalhe[0].vencimento : i.primeiro_vencimento;
+  exigir(ehISO(primeiroVenc), 'Informe a data do primeiro vencimento.');
+  const competencia = i.competencia || primeiroVenc;
+  exigir(ehISO(competencia), 'Data de competência inválida.');
+  const n = detalhe ? detalhe.length : recorrente ? Number(i.repeticoes ?? 12) : Number(i.parcelas ?? 1);
   exigir(Number.isInteger(n) && n >= 1 && n <= maximo, recorrente ? 'A recorrência pode ter de 1 a 180 meses.' : 'Número de parcelas deve ficar entre 1 e 360.');
   if (i.categoria_id) {
     const cat = achar(d, 'categorias', i.categoria_id, 'Categoria não encontrada.');
@@ -112,7 +130,7 @@ export function criarLancamento(d, i, agora = new Date().toISOString()) {
   if (i.contrato_id) achar(d, 'contratos', i.contrato_id, 'Projeto não encontrado.');
   if (i.conta_id) achar(d, 'contas', i.conta_id, 'Conta não encontrada.');
   // Recorrente: o valor informado é o de cada ocorrência. Parcelado: é o total, dividido em centavos.
-  const valores = recorrente ? Array(n).fill(i.valor_total_cents) : dividirCentavos(i.valor_total_cents, n);
+  const valores = detalhe ? detalhe.map((x) => x.valor_cents) : recorrente ? Array(n).fill(i.valor_total_cents) : dividirCentavos(i.valor_total_cents, n);
   exigir(valores.every((v) => v > 0), 'Valor muito pequeno para esse número de parcelas.');
   const l = {
     id: novoId(), tipo: i.tipo, nome: texto(i.nome), pessoa_id: i.pessoa_id || null, categoria_id: i.categoria_id || null,
@@ -120,12 +138,12 @@ export function criarLancamento(d, i, agora = new Date().toISOString()) {
     competencia, nota_fiscal: texto(i.nota_fiscal) || null, etiquetas: texto(i.etiquetas) || null, observacao: texto(i.observacao) || null,
     recorrente, nf_solicitada: !!i.nf_solicitada, criado_em: agora,
     parcelas: valores.map((v, k) => {
-      const venc = addMeses(i.primeiro_vencimento, k);
+      const venc = detalhe ? detalhe[k].vencimento : addMeses(primeiroVenc, k);
       // Recorrente: a competência acompanha cada mês. Parcelado: toda a venda fica na competência informada.
       return { numero: k + 1, total: n, valor_cents: v, vencimento: venc, competencia: recorrente ? venc : competencia, pagamentos: [] };
     }),
   };
-  if (i.primeira_paga) registrarPagamento(d, l, 1, { data: i.data_pagamento || i.primeiro_vencimento, conta_id: i.conta_id });
+  if (i.primeira_paga) registrarPagamento(d, l, 1, { data: i.data_pagamento || primeiroVenc, conta_id: i.conta_id });
   return l;
 }
 
@@ -493,10 +511,10 @@ export function outrosRelatorios(d, f = {}, hoje = hojeISO()) {
 
 const ENUMS = { tipo_pessoa: ['cliente', 'fornecedor', 'ambos'], status_contrato: ['ativo', 'concluido', 'cancelado'] };
 const CAMPOS = {
-  contas: ['nome', 'banco', 'saldo_inicial_cents', 'ativa'], categorias: ['nome', 'tipo', 'grupo_dre', 'pai_id'], centros: ['nome'],
+  contas: ['nome', 'banco', 'agencia', 'numero_conta', 'tipo_conta', 'saldo_inicial_cents', 'ativa', 'observacao'], categorias: ['nome', 'tipo', 'grupo_dre', 'pai_id'], centros: ['nome'],
   pessoas: ['codigo', 'nome', 'tipo', 'natureza', 'data_nascimento', 'documento', 'rg', 'email', 'telefone', 'consumidor_final_nfse',
     'cep', 'endereco', 'numero', 'complemento', 'bairro', 'cidade', 'estado', 'observacoes'],
-  servicos: ['nome', 'descricao', 'valor_padrao_cents', 'categoria_id', 'ativo'],
+  servicos: ['nome', 'grupo', 'descricao', 'valor_padrao_cents', 'categoria_id', 'ativo'],
   contratos: ['codigo', 'nome', 'pessoa_id', 'valor_total_cents', 'competencia', 'status', 'area_m2', 'servicos', 'obra'],
 };
 const CAMPOS_ENDERECO = ['cep', 'endereco', 'numero', 'complemento', 'bairro', 'cidade', 'estado'];
@@ -527,6 +545,9 @@ export function validarCadastro(d, tipo, b, existente = null) {
   }
   if (tipo === 'contas') {
     r.saldo_inicial_cents = r.saldo_inicial_cents ?? 0;
+    if (r.tipo_conta) exigir(['corrente', 'poupanca', 'pagamento', 'caixa', 'outra'].includes(r.tipo_conta), 'Tipo de conta inválido.');
+    for (const k of ['agencia', 'numero_conta']) if (r[k]) r[k] = texto(r[k]).slice(0, 30);
+    if (r.observacao) r.observacao = texto(r.observacao).slice(0, 1000);
     exigir(Number.isInteger(r.saldo_inicial_cents), 'Saldo inicial inválido.');
     r.ativa = r.ativa === false || r.ativa === 0 ? 0 : 1;
   }
@@ -580,6 +601,11 @@ export function validarCadastro(d, tipo, b, existente = null) {
       if (s.parcelas !== undefined && s.parcelas !== null) { exigir(Number.isInteger(s.parcelas) && s.parcelas >= 1 && s.parcelas <= 24, 'O parcelamento do serviço vai de 1 a 24 vezes.'); item.parcelas = s.parcelas; }
       if (s.primeiro_vencimento) { exigir(ehISO(s.primeiro_vencimento), 'Primeiro vencimento do serviço inválido.'); item.primeiro_vencimento = s.primeiro_vencimento; }
       if (s.lancamento_id) item.lancamento_id = String(s.lancamento_id);
+      if (Array.isArray(s.cronograma) && s.cronograma.length) {
+        // parcelas personalizadas do serviço: soma igual ao valor, no máximo 24 e o primeiro vencimento acompanha a primeira
+        item.cronograma = parcelasPersonalizadas(s.cronograma, s.valor_cents, 24);
+        item.parcelas = item.cronograma.length; item.primeiro_vencimento = item.cronograma[0].vencimento;
+      }
       return item;
     });
     if (r.servicos.length) r.valor_total_cents = soma(r.servicos, (s) => s.valor_cents);
@@ -862,8 +888,8 @@ export function painel(d, hoje = hojeISO()) {
 
 export const TIPOS_ANEXO = { 'application/pdf': 'pdf', 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'text/xml': 'xml', 'application/xml': 'xml' };
 export const LIMITE_ANEXO_BYTES = 3 * 1024 * 1024;
-export const CATEGORIAS_ANEXO = ['comprovante', 'nota_fiscal', 'recibo', 'contrato', 'outro'];
-const VINCULOS = { parcela: null, lancamento: 'lancamentos', pessoa: 'pessoas', contrato: 'contratos', nota: 'notas' };
+export const CATEGORIAS_ANEXO = ['comprovante', 'nota_fiscal', 'recibo', 'extrato', 'contrato', 'outro'];
+const VINCULOS = { parcela: null, lancamento: 'lancamentos', pessoa: 'pessoas', contrato: 'contratos', nota: 'notas', conta: 'contas', conferencia: 'conferencias' };
 
 // Lê número, valor, data e partes de uma NF-e ou NFS-e em XML. Devolve só o que encontrar.
 export function extrairNotaXml(xml) {
