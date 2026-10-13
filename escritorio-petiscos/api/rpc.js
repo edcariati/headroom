@@ -11,6 +11,7 @@
 
 import { put, get, list, del } from "@vercel/blob";
 import { randomUUID, timingSafeEqual, createHash } from "node:crypto";
+import { funcoesGarcom, adminPorToken } from "./_garcom.js";
 
 // Cardápio "Vida de Escritório" (valores iniciais; o painel pode editar): [nome, codinome, descrição, preço]
 const CARDAPIO = [
@@ -30,6 +31,25 @@ const CARDAPIO = [
 ];
 // Edições do painel (chave nova: as edições do cardápio antigo não valem mais)
 const CFG_CARDAPIO = "cfg/cardapio-v2.json";
+const CFG_EXTRA = "cfg/cardapio-extra.json"; // bebidas e doces, editados no painel
+const SECOES_EXTRA = ["bebidas", "doces"];
+// Lista inicial com preços estimados; o dono confere e corrige no painel (aba Cardápio).
+const extra = (categoria, nome, preco, descricao = "") => ({ categoria, nome, descricao, preco });
+const EXTRA_INICIAL = {
+  bebidas: [
+    extra("Refrigerantes", "Coca-Cola lata 350 ml", 6), extra("Refrigerantes", "Guaraná lata 350 ml", 6),
+    extra("Refrigerantes", "Refrigerante 600 ml", 9), extra("Refrigerantes", "Refrigerante 2 litros", 14),
+    extra("Sucos", "Suco natural de laranja", 10), extra("Sucos", "Suco natural de limão", 8),
+    extra("Sucos", "Suco de polpa", 9, "Pergunte os sabores do dia."),
+    extra("Águas", "Água mineral sem gás 500 ml", 4), extra("Águas", "Água mineral com gás 500 ml", 5), extra("Águas", "Água de coco", 7),
+    extra("Cafés", "Café coado", 4), extra("Cafés", "Café expresso", 6), extra("Cafés", "Café com leite", 6),
+    extra("Cervejas", "Cerveja lata 350 ml", 8), extra("Cervejas", "Cerveja long neck", 10),
+  ],
+  doces: [
+    extra("Sobremesas", "Pudim de leite", 9), extra("Sobremesas", "Mousse de maracujá", 10), extra("Sobremesas", "Pavê", 10),
+    extra("Doces", "Brigadeiro", 3), extra("Doces", "Bolo do dia", 8, "Pergunte o sabor."), extra("Sorvetes", "Sorvete (1 bola)", 7),
+  ],
+};
 const TOTAL = CARDAPIO.length;
 const OPCOES = {
   espera: ["ate10", "10a20", "mais20"],
@@ -119,6 +139,7 @@ async function checarSenha(senha) {
   const certa = process.env.ADMIN_SENHA;
   if (!certa) falha("Senha do painel ainda não foi definida");
   if (!senha || !iguais(senha, certa)) {
+    if (await adminPorToken(senha).catch(() => false)) return; // admin cadastrado (nome e senha)
     await esperar(1000); // atrasa tentativas de adivinhar a senha
     falha("Senha incorreta");
   }
@@ -214,6 +235,32 @@ const FUNCOES = {
     };
   },
 
+  // Bebidas e doces do cardápio: lista inicial (preços estimados) até o dono salvar a dele no painel.
+  async listar_cardapio_extra() {
+    const cfg = (await lerJson(CFG_EXTRA)) || {};
+    return { bebidas: cfg.bebidas || EXTRA_INICIAL.bebidas, doces: cfg.doces || EXTRA_INICIAL.doces };
+  },
+
+  async admin_cardapio_extra_salvar({ p_senha, p_secao, p_itens }) {
+    await checarSenha(p_senha);
+    if (!SECOES_EXTRA.includes(p_secao)) falha("Seção inválida.");
+    if (!Array.isArray(p_itens)) falha("Lista inválida.");
+    const texto = (v, max) => String(v ?? "").trim().slice(0, max);
+    const itens = [];
+    for (const b of p_itens.slice(0, 120)) {
+      const nome = texto(b?.nome, 60);
+      if (!nome) continue;
+      const item = { categoria: texto(b.categoria, 40) || (p_secao === "doces" ? "Doces" : "Bebidas"), nome, descricao: texto(b.descricao, 120) };
+      const preco = Number(String(b.preco ?? "").replace(",", "."));
+      if (b.preco !== undefined && String(b.preco).trim() !== "" && isFinite(preco) && preco >= 0 && preco <= 9999) item.preco = Math.round(preco * 100) / 100;
+      itens.push(item);
+    }
+    const cfg = (await lerJson(CFG_EXTRA)) || {};
+    cfg[p_secao] = itens;
+    await gravarJson(CFG_EXTRA, cfg);
+    return itens;
+  },
+
   async admin_renomear({ p_senha, p_nomes }) {
     await checarSenha(p_senha);
     const cfg = (await lerJson(CFG_CARDAPIO)) || {};
@@ -280,6 +327,9 @@ const FUNCOES = {
     return null;
   },
 };
+
+// Garçons, mesas e fluxo do dia (banco de dados)
+Object.assign(FUNCOES, funcoesGarcom({ falha, checarSenha }));
 
 // ---------- Handler HTTP ----------
 async function lerCorpo(req) {

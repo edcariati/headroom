@@ -17,11 +17,13 @@
     <header class="marca">
       <div class="nome" style="font-size:clamp(28px,8vw,44px)">ESCRITÓRIO</div>
       <div class="cia">PETISCOS &amp; CIA</div>
-      <div class="sub">Painel da degustação</div>
+      <div class="sub" id="painel-sub">Painel da degustação</div>
     </header>
 
     <form id="login" class="cartao" style="max-width:420px;margin:0 auto">
       <h2>Acesso do dono</h2>
+      <label class="campo" for="usuario">Usuário <small class="muted">(admin cadastrado; deixe em branco para a senha principal)</small></label>
+      <input id="usuario" type="text" autocomplete="username" placeholder="Ex.: Admin" />
       <label class="campo" for="senha">Senha</label>
       <input id="senha" type="password" autocomplete="current-password" required />
       <div class="erro-msg" id="erro-login"></div>
@@ -30,18 +32,23 @@
 
     <div id="app" class="escondido">
       <nav class="abas" id="abas">
-        <button data-aba="resumo" class="ativa">Resumo</button>
-        <button data-aba="lanches">Por lanche</button>
-        <button data-aba="avaliadores">Avaliadores</button>
+        <button data-aba="dashboard">📊 Dashboard</button>
+        <button data-degustacao data-aba="resumo" class="ativa">Resumo</button>
+        <button data-degustacao data-aba="lanches">Por lanche</button>
+        <button data-degustacao data-aba="avaliadores">Avaliadores</button>
         <button data-aba="nomes">Cardápio</button>
         <button data-aba="cozinha">Cozinha</button>
         <button data-aba="compras">Compras</button>
-        <button data-aba="link">Link para enviar</button>
-        <button id="btn-atualizar" style="margin-left:auto">↻ Atualizar</button>
+        <button data-aba="fluxo">Fluxo do dia</button>
+        <button data-aba="garcons">Equipe</button>
+        <button data-degustacao data-aba="link">Link para enviar</button>
+        <a href="/garcom" target="_blank" rel="noopener" class="aba-link" style="margin-left:auto">🧾 Mesas dos garçons</a>
+        <a href="/caixa" target="_blank" rel="noopener" class="aba-link">💰 Caixa</a>
+        <button id="btn-atualizar">↻ Atualizar</button>
       </nav>
 
       <!-- Resumo -->
-      <section data-painel="resumo">
+      <section data-degustacao data-painel="resumo">
         <div class="kpis" id="kpis"></div>
         <div class="cartao">
           <h2>Ranking dos lanches</h2>
@@ -86,7 +93,7 @@
       </section>
 
       <!-- Por lanche -->
-      <section data-painel="lanches" class="escondido">
+      <section data-degustacao data-painel="lanches" class="escondido">
         <div class="cartao">
           <label class="campo" for="sel-lanche" style="margin-top:0">Escolha o lanche</label>
           <select id="sel-lanche"></select>
@@ -105,7 +112,7 @@
       </section>
 
       <!-- Avaliadores -->
-      <section data-painel="avaliadores" class="escondido">
+      <section data-degustacao data-painel="avaliadores" class="escondido">
         <div class="cartao">
           <div class="acoes" style="justify-content:space-between;margin-bottom:12px">
             <h2 style="margin:0">Avaliadores</h2>
@@ -130,10 +137,84 @@
           <div class="erro-msg" id="erro-nomes"></div>
           <button class="botao" type="submit" id="btn-nomes" style="margin-top:12px">Salvar cardápio</button>
         </form>
+
+        <form class="cartao" id="form-bebidas">
+          <div class="acoes" style="justify-content:space-between">
+            <h2 style="margin:0">Bebidas</h2>
+            <a class="botao pequeno secundario" href="/cardapio#bebidas" target="_blank" rel="noopener">🥤 Ver no cardápio</a>
+          </div>
+          <p class="muted" id="bebidas-aviso">Categoria, nome, preço e uma linha de descrição (opcional). Aparece no cardápio e na calculadora dos garçons depois que você salvar. Linha sem nome é ignorada.</p>
+          <div class="bebidas-lista" id="lista-bebidas"></div>
+          <div class="acoes" style="margin-top:12px">
+            <button class="botao pequeno secundario" type="button" id="btn-add-bebidas">+ Adicionar</button>
+          </div>
+          <div class="erro-msg" id="erro-bebidas"></div>
+          <button class="botao" type="submit" id="btn-bebidas" style="margin-top:12px">Salvar bebidas</button>
+        </form>
+
+        <form class="cartao" id="form-doces">
+          <div class="acoes" style="justify-content:space-between">
+            <h2 style="margin:0">Doces</h2>
+            <a class="botao pequeno secundario" href="/cardapio#doces" target="_blank" rel="noopener">🍮 Ver no cardápio</a>
+          </div>
+          <p class="muted" id="doces-aviso">Categoria, nome, preço e uma linha de descrição (opcional). Aparece no cardápio e na calculadora dos garçons depois que você salvar. Linha sem nome é ignorada.</p>
+          <div class="bebidas-lista" id="lista-doces"></div>
+          <div class="acoes" style="margin-top:12px">
+            <button class="botao pequeno secundario" type="button" id="btn-add-doces">+ Adicionar</button>
+          </div>
+          <div class="erro-msg" id="erro-doces"></div>
+          <button class="botao" type="submit" id="btn-doces" style="margin-top:12px">Salvar doces</button>
+        </form>
+      </section>
+
+      <!-- Dashboard (só admin) -->
+      <section data-painel="dashboard" class="escondido">
+        <div class="cartao">
+          <div class="acoes" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+            <h2 style="margin:0">Dashboard do restaurante</h2>
+            <div class="segmentado" id="dash-periodo">
+              <button type="button" data-dias="7">7 dias</button><button type="button" data-dias="30" class="ativa">30 dias</button><button type="button" data-dias="90">90 dias</button>
+            </div>
+          </div>
+          <p class="muted">Pedidos do salão em tempo real, evolução das vendas e o que mais sai. Atualiza sozinho a cada 30 segundos.</p>
+        </div>
+        <div id="dash-conteudo"><p class="carregando">Carregando…</p></div>
+      </section>
+
+      <!-- Fluxo do dia (mesas e garçons) -->
+      <section data-painel="fluxo" class="escondido">
+        <div class="cartao">
+          <div class="acoes" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+            <h2 style="margin:0">Fluxo do dia</h2>
+            <div class="acoes" style="gap:8px;flex-wrap:wrap">
+              <input type="date" id="fluxo-dia" aria-label="Dia" style="width:auto;margin:0" />
+              <button class="botao pequeno secundario" type="button" id="btn-fluxo-hoje">Hoje</button>
+              <button class="botao pequeno secundario" type="button" id="btn-fluxo-xlsx">⬇ Excel do dia</button>
+            </div>
+          </div>
+          <p class="muted" id="fluxo-aviso">Atendimentos por dia e por mesa: quem abriu, quem lançou cada item, quem fechou e o total. Hoje atualiza sozinho a cada 30 segundos.</p>
+        </div>
+        <div id="fluxo-conteudo"><p class="carregando">Carregando…</p></div>
+      </section>
+
+      <!-- Garçons -->
+      <section data-painel="garcons" class="escondido">
+        <div class="cartao">
+          <h2>Equipe</h2>
+          <p class="muted"><b>Garçom</b> entra em <a href="/garcom" target="_blank" rel="noopener">/garcom</a> com nome e PIN e lança os pedidos. <b>Caixa</b> entra em <a href="/caixa" target="_blank" rel="noopener">/caixa</a>, recebe e fecha as contas. <b>Admin</b> entra neste painel com nome e senha. Para tirar o acesso de alguém, desmarque "Ativo".</p>
+          <form class="garcom-novo" id="form-garcom-novo">
+            <input type="text" maxlength="40" id="novo-garcom-nome" placeholder="Nome" aria-label="Nome" />
+            <select id="novo-garcom-papel" aria-label="Função"><option value="garcom">Garçom</option><option value="caixa">Caixa</option><option value="admin">Admin</option></select>
+            <input type="text" maxlength="30" id="novo-garcom-pin" placeholder="Senha (garçom e caixa: 4 a 6 números)" aria-label="Senha" autocomplete="off" />
+            <button class="botao" type="submit">+ Cadastrar</button>
+          </form>
+          <div class="erro-msg" id="erro-garcons"></div>
+          <div id="lista-garcons"></div>
+        </div>
       </section>
 
       <!-- Link -->
-      <section data-painel="link" class="escondido">
+      <section data-degustacao data-painel="link" class="escondido">
         <div class="cartao">
           <h2>Link para os avaliadores</h2>
           <p class="muted">Envie este link. Qualquer pessoa abre no celular, sem login.</p>
@@ -141,6 +222,14 @@
             <code id="link-publico"></code>
             <button class="botao pequeno secundario" id="btn-copiar">Copiar</button>
             <a class="botao pequeno" id="btn-whats" target="_blank" rel="noopener">Enviar no WhatsApp</a>
+          </div>
+        </div>
+        <div class="cartao">
+          <h2>Calculadora dos garçons</h2>
+          <p class="muted">Mesas 1 a 30 e calculadora rápida, com os preços do cardápio. Cada garçom entra com o nome e o PIN (cadastro na aba Garçons). No celular, use "Adicionar à tela de início" para virar um app.</p>
+          <div class="compartilhar">
+            <code id="link-garcom"></code>
+            <a class="botao pequeno" id="btn-garcom" target="_blank" rel="noopener">Abrir</a>
           </div>
         </div>
       </section>

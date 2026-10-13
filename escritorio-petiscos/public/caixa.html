@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Caixa · Escritório Petiscos &amp; Cia</title>
+  <meta name="robots" content="noindex" />
+  <meta name="theme-color" content="#120b07" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Oswald:wght@500;600&family=Roboto+Slab:wght@400;700&family=Caveat:wght@600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="painel-bg garcom caixa">
+  <main class="pagina larga garcom-pagina">
+    <header class="garcom-topo">
+      <div>
+        <div class="garcom-marca">ESCRITÓRIO <span>Petiscos &amp; Cia</span></div>
+        <h1 id="titulo">Caixa</h1>
+        <div class="garcom-quem escondido" id="quem">👤 <b id="quem-nome"></b> · <button type="button" class="link" id="btn-sair">Sair</button></div>
+      </div>
+      <nav class="garcom-modos escondido" id="modos" aria-label="Telas do caixa">
+        <button type="button" data-tela="contas" class="ativo">🧾 Contas abertas</button>
+        <button type="button" data-tela="fechamento">💰 Fechamento do dia</button>
+      </nav>
+    </header>
+
+    <!-- Login -->
+    <section id="tela-login" class="escondido">
+      <div class="cartao login-garcom">
+        <h2>Entrar no caixa</h2>
+        <div class="garcons-lista" id="usuarios-lista"><p class="carregando">Carregando…</p></div>
+        <div id="pin-area" class="escondido">
+          <p class="muted">Senha de <b id="pin-nome"></b></p>
+          <div class="pin-pontos" id="pin-pontos"></div>
+          <div class="pin-teclado" id="pin-teclado"></div>
+          <div class="erro-msg" id="erro-login"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Contas abertas -->
+    <section id="tela-contas" class="escondido">
+      <div class="caixa-layout">
+        <div>
+          <p class="garcom-dica" id="sync">Atualizando…</p>
+          <div class="caixa-mesas" id="caixa-mesas"></div>
+        </div>
+        <aside class="comanda caixa-conta" id="conta">
+          <p class="garcom-dica">Toque numa mesa para ver a conta e receber.</p>
+        </aside>
+      </div>
+    </section>
+
+    <!-- Fechamento do dia -->
+    <section id="tela-fechamento" class="escondido">
+      <div class="kpis" id="fech-kpis"></div>
+      <div class="cartao">
+        <div class="acoes" style="justify-content:space-between"><h3 style="margin:0">Contas fechadas hoje</h3>
+          <button type="button" class="botao pequeno secundario nao-imprimir" id="btn-imprimir">🖨 Imprimir</button></div>
+        <div class="tabela-wrap" id="fech-lista"></div>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="config.js"></script>
+  <script src="api.js"></script>
+  <script src="caixa.js"></script>
+</body>
+</html>

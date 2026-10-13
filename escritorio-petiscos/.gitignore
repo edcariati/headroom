@@ -1,2 +1,3 @@
 # Dados privados do painel (custos e processo): vão só para a Vercel, nunca para o GitHub público.
 api/_privado.js
+api/_equipe.js

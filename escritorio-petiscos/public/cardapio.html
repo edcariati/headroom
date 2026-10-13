@@ -4,10 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Cardápio · Escritório Petiscos &amp; Cia</title>
-  <meta name="description" content="Cardápio completo do Escritório Petiscos & Cia: lanches, almoço executivo, especiais da semana, da chapa e opções leves." />
+  <meta name="description" content="Cardápio completo do Escritório Petiscos & Cia: lanches, pratos quentes, bebidas e doces." />
   <meta name="theme-color" content="#120b07" />
   <meta property="og:title" content="Cardápio · Escritório Petiscos & Cia" />
-  <meta property="og:description" content="Lanches, almoço executivo, especiais da semana, da chapa e opções leves." />
+  <meta property="og:description" content="Lanches, pratos quentes, bebidas e doces." />
   <meta property="og:image" content="https://escritorio-petiscos.vercel.app/poster-escuro.jpg" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍔</text></svg>" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -23,17 +23,27 @@
       <div class="manuscrito">Mais que refeições, bons momentos.</div>
     </header>
 
-    <nav class="menu-nav nao-imprimir" aria-label="Seções do cardápio">
-      <a href="#lanches">Lanches</a><a href="#almoco">Almoço</a><a href="#especiais">Especiais</a><a href="#chapa">Da chapa</a><a href="#leves">Leves</a>
+    <nav class="menu-nav nao-imprimir" aria-label="Partes do cardápio">
+      <a href="#lanches">🍔 Lanches</a><a href="#pratos">🍽 Pratos quentes</a><a href="#bebidas">🥤 Bebidas</a><a href="#doces">🍮 Doces</a>
     </nav>
     <p class="aviso-precos escondido" id="aviso-precos">Preços ocultos durante a degustação.</p>
 
-    <section class="menu-secao" id="lanches">
+    <h2 class="menu-parte" id="lanches"><span>🍔</span> Lanches</h2>
+
+    <section class="menu-secao" id="vida">
       <h2 class="menu-titulo">Vida de <em>Escritório</em></h2>
       <p class="menu-sub">Lanches que merecem uma pausa.</p>
       <div class="menu-lanches" id="lista"><p class="vazio">Carregando…</p></div>
       <p class="manuscrito centro">O expediente acaba. A vontade de comer bem, não.</p>
     </section>
+
+    <section class="menu-secao" id="naturais">
+      <h2 class="menu-titulo">Naturais, pães <em>&amp; extras</em></h2>
+      <p class="menu-sub">Leveza e muito sabor.</p>
+      <div id="lista-naturais" class="leves-grade"></div>
+    </section>
+
+    <h2 class="menu-parte" id="pratos"><span>🍽</span> Pratos quentes</h2>
 
     <section class="menu-secao" id="almoco">
       <h2 class="menu-titulo">Pratos <em>Executivos</em></h2>
@@ -56,15 +66,31 @@
       <p class="manuscrito centro">Carne boa aproxima pessoas.</p>
     </section>
 
-    <section class="menu-secao" id="leves">
-      <h2 class="menu-titulo">Opções <em>mais leves</em></h2>
-      <p class="menu-sub">Igualmente especiais.</p>
-      <div id="lista-leves" class="leves-grade"></div>
+    <section class="menu-secao" id="omeletes">
+      <h2 class="menu-titulo"><em>Omeletes</em></h2>
+      <p class="menu-sub">Simples, nutritivos e deliciosos.</p>
+      <div id="lista-omeletes"></div>
       <p class="manuscrito centro">Mais opções para um dia ainda melhor.</p>
     </section>
 
+    <h2 class="menu-parte" id="bebidas"><span>🥤</span> Bebidas</h2>
+
+    <section class="menu-secao">
+      <h2 class="menu-titulo"><em>Bebidas</em></h2>
+      <p class="menu-sub">Para acompanhar.</p>
+      <div id="lista-bebidas" class="leves-grade"><p class="vazio">Carregando…</p></div>
+    </section>
+
+    <h2 class="menu-parte" id="doces"><span>🍮</span> Doces</h2>
+
+    <section class="menu-secao">
+      <h2 class="menu-titulo"><em>Doces</em></h2>
+      <p class="menu-sub">Para fechar com chave de ouro.</p>
+      <div id="lista-doces" class="leves-grade"><p class="vazio">Carregando…</p></div>
+    </section>
+
     <p class="link-cardapio nao-imprimir">
-      <a href="/">← Voltar para a degustação</a> &nbsp;·&nbsp;
+      <a href="/sistema" id="link-voltar">← Voltar ao sistema</a> &nbsp;·&nbsp;
       <a href="#" id="btn-imprimir">🖨 Imprimir / salvar PDF</a>
     </p>
   </main>
@@ -72,15 +98,25 @@
   <script src="config.js"></script>
   <script src="api.js"></script>
   <script src="cardapio-dados.js"></script>
+  <script src="catalogo.js"></script>
   <script>
     (function () {
-      const { rpc, esc, vegano, SELO_VEGANO } = window.EP;
+      const { esc, vegano, SELO_VEGANO } = window.EP;
       const C = window.CARDAPIO_CASA;
       // Na degustação (link com ?degustacao) os preços ficam ocultos para não influenciar o "quanto pagaria".
       const semPrecos = new URLSearchParams(location.search).has("degustacao");
-      if (semPrecos) document.getElementById("aviso-precos").classList.remove("escondido");
+      if (semPrecos) {
+        document.getElementById("aviso-precos").classList.remove("escondido");
+        Object.assign(document.getElementById("link-voltar"), { href: "/", textContent: "← Voltar para a degustação" });
+      }
       const preco = (v) => (semPrecos || v == null ? "" : `<span class="menu-preco">${Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>`);
       const linha = (nome, valor, desc) => `<div class="menu-item"><div class="menu-linha"><span class="menu-nome">${esc(nome)}</span><span class="pontos"></span>${preco(valor)}</div>${desc ? `<div class="menu-desc">${esc(desc)}</div>` : ""}</div>`;
+      const leve = (t) => C.leves.find((g) => g.titulo === t);
+      const blocoLeve = (g) => `<div class="menu-bloco"><h3 class="menu-grupo">${esc(g.titulo)}</h3><p class="menu-obs">${esc(g.sub)}</p>
+        ${g.itens.map(([n, v, d]) => linha(n, v, d)).join("")}</div>`;
+
+      // ----- Parte fixa (cardápio impresso da casa) -----
+      document.getElementById("lista-naturais").innerHTML = ["Lanches naturais", "Pães especiais", "Extras"].map((t) => blocoLeve(leve(t))).join("");
 
       document.getElementById("executivos").innerHTML =
         `<div class="menu-nota">🍽️ ${esc(C.executivos.nota)}</div>` +
@@ -97,11 +133,12 @@
         C.chapa.itens.map((p) => `<div class="menu-bloco"><h3 class="menu-grupo">${esc(p.nome)}</h3><p class="menu-desc">${esc(p.texto)}</p>${p.opcoes.map(([n, v]) => linha(n, v)).join("")}</div>`).join("") +
         `<div class="menu-nota">🍟 ${esc(C.chapa.nota)}</div>`;
 
-      document.getElementById("lista-leves").innerHTML = C.leves.map((g) => `
-        <div class="menu-bloco"><h3 class="menu-grupo">${esc(g.titulo)}</h3><p class="menu-obs">${esc(g.sub)}</p>
-        ${g.itens.map(([n, v, d]) => linha(n, v, d)).join("")}</div>`).join("");
+      document.getElementById("lista-omeletes").innerHTML = leve("Omeletes").itens.map(([n, v, d]) => linha(n, v, d)).join("");
 
-      rpc("listar_lanches").then((lanches) => {
+      // ----- Parte que vem do servidor (lanches, bebidas e doces editados no painel) -----
+      const emBreve = '<p class="vazio">Em breve no cardápio.</p>';
+      const blocoGrupo = (g) => `<div class="menu-bloco"><h3 class="menu-grupo">${esc(g.titulo)}</h3>${g.itens.map((i) => linha(i.nome, i.preco, i.desc)).join("")}</div>`;
+      window.EP_CATALOGO.carregar().then(({ lanches, partes }) => {
         document.getElementById("lista").innerHTML = lanches.map((l) => `
           <article class="menu-lanche">
             <div class="menu-num">${l.id}</div>
@@ -111,6 +148,10 @@
               <div class="menu-desc">${esc(l.descricao || "")}</div>
             </div>
           </article>`).join("");
+        for (const id of ["bebidas", "doces"]) {
+          const parte = partes.find((p) => p.id === id);
+          document.getElementById(`lista-${id}`).innerHTML = parte.grupos.length ? parte.grupos.map(blocoGrupo).join("") : emBreve;
+        }
       }).catch((e) => { document.getElementById("lista").innerHTML = `<p class="vazio">${esc(e.message)}</p>`; });
 
       document.getElementById("btn-imprimir").addEventListener("click", (ev) => { ev.preventDefault(); window.print(); });

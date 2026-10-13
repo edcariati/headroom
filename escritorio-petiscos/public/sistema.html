@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Sistema do Salão · Escritório Petiscos &amp; Cia</title>
+  <meta name="robots" content="noindex" />
+  <meta name="theme-color" content="#120b07" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍽</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Oswald:wght@500;600&family=Roboto+Slab:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="painel-bg">
+  <main class="pagina" style="padding-bottom:40px">
+    <header class="marca">
+      <div class="nome" style="font-size:clamp(28px,8vw,44px)">ESCRITÓRIO</div>
+      <div class="cia">PETISCOS &amp; CIA</div>
+      <div class="sub">Sistema do salão</div>
+    </header>
+
+    <nav class="portal" aria-label="Entradas do sistema">
+      <a class="portal-item" href="/garcom">
+        <span class="portal-icone" aria-hidden="true">🧾</span>
+        <span><b>Garçons</b><small>Lançar pedidos nas 30 mesas e pedir a conta</small></span>
+      </a>
+      <a class="portal-item" href="/caixa">
+        <span class="portal-icone" aria-hidden="true">💰</span>
+        <span><b>Caixa</b><small>Receber, dar troco e fechar as contas</small></span>
+      </a>
+      <a class="portal-item" href="/admin">
+        <span class="portal-icone" aria-hidden="true">📊</span>
+        <span><b>Administração</b><small>Dashboard, pedidos, fechamento, equipe, cardápio e cozinha</small></span>
+      </a>
+      <a class="portal-item" href="/cardapio">
+        <span class="portal-icone" aria-hidden="true">📖</span>
+        <span><b>Cardápio</b><small>Lanches, pratos quentes, bebidas e doces com preços</small></span>
+      </a>
+    </nav>
+
+    <p class="aviso-local escondido" id="aviso-banco">
+      <b>Banco de dados ainda não conectado.</b> Garçons funcionam só no próprio aparelho; caixa, login do admin e dashboard precisam do banco.
+      O gerente conecta na Vercel: Storage → Create Database → Supabase.
+    </p>
+  </main>
+
+  <script src="config.js"></script>
+  <script src="api.js"></script>
+  <script>
+    window.EP.rpc("garcom_lista").then((r) => {
+      if (!r.conectado) document.getElementById("aviso-banco").classList.remove("escondido");
+    }).catch(() => {});
+  </script>
+</body>
+</html>
