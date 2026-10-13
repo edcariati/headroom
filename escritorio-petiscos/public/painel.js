@@ -754,7 +754,7 @@
         <h3>Agora no salão</h3>
         ${dash.abertas.length ? `<div class="dash-mesas">${dash.abertas.map((m) => `
           <details class="atend aberto${m.conta_pedida ? " conta" : ""}">
-            <summary><b>Mesa ${m.mesa}</b> · desde ${hhmm(m.aberto_em)} · ${esc(m.aberto_por || "")}${m.conta_pedida ? " · 🧾 conta pedida" : ""}<span class="atend-total">${brl(m.total)}</span></summary>
+            <summary><b>Mesa ${m.mesa}</b> · desde ${hhmm(m.aberto_em)} · ${esc(m.aberto_por || "")}${m.conta_pedida ? " · 📤 pedido enviado ao caixa" : ""}<span class="atend-total">${brl(m.total)}</span></summary>
             <ul class="lista-padrao">${m.itens.map((i) => `<li>${i.qtd}× ${esc(i.nome)} — ${brl(i.qtd * i.preco)}</li>`).join("")}</ul>
             <div class="fechar-painel" data-mesa="${m.mesa}">
               <select data-f="forma" aria-label="Forma de pagamento">${Object.entries(NOME_FORMA).map(([f, n]) => `<option value="${f}">${n}</option>`).join("")}</select>

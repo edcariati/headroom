@@ -150,7 +150,7 @@
     for (let n = 1; n <= TOTAL_MESAS; n++) {
       const p = mesas[n];
       html += `<button type="button" class="mesa${p ? " aberta" : ""}${p && p.conta_pedida ? " conta" : ""}" data-mesa="${n}">
-        <span class="mesa-num">${n}${p && p.conta_pedida ? " 🧾" : ""}</span>
+        <span class="mesa-num">${n}${p && p.conta_pedida ? " 📤" : ""}</span>
         <span class="mesa-info">${p ? `${brl(p.total)}<small>${qtdItens(p)} ${qtdItens(p) === 1 ? "item" : "itens"}${p.aberto_por ? ` · ${esc(p.aberto_por)}` : ""}</small>` : "livre"}</span>
       </button>`;
     }
@@ -191,7 +191,6 @@
     $("titulo").textContent = nome;
     $("comanda-titulo").textContent = nome;
     $("btn-voltar").textContent = login || modoLocal ? "← Mesas" : "← Entrar";
-    $("btn-fechar-mesa").textContent = qual === "rapida" ? "Nova conta" : modoLocal ? "Fechar conta" : "Pedir a conta";
     marcarModo(qual === "rapida" ? "rapida" : "mesas");
     mostrar("pedido");
     $("busca").value = "";
@@ -297,6 +296,9 @@
     const q = qtdItens(p);
     $("barra-qtd").textContent = `${q} ${q === 1 ? "item" : "itens"}`;
     $("barra-valor").textContent = brl(tot);
+    // Garçom envia o pedido; o caixa recebe e libera a mesa. Sem banco (modo local), o garçom fecha a conta.
+    $("btn-fechar-mesa").textContent = atual === "rapida" ? "Nova conta" : modoLocal ? "Fechar conta"
+      : p.conta_pedida ? "✓ Pedido enviado ao caixa" : "📤 Enviar pedido ao caixa";
   }
 
   $("comanda-lista").addEventListener("click", (ev) => {
@@ -341,10 +343,10 @@
     if (!p.itens.length) return irMesas();
     const mesa = atual;
     if (!modoLocal) {
-      // Com o sistema completo, o garçom pede a conta e o caixa recebe e fecha.
+      // Com o sistema completo, o garçom envia o pedido e o caixa recebe e libera a mesa.
       try {
         mesas[mesa] = (await chamar("garcom_pedir_conta", { p_mesa: mesa })) || mesas[mesa];
-        toast(`Conta da mesa ${mesa} pedida ao caixa: ${brl(totalPedido(p))}`);
+        toast(`Pedido da mesa ${mesa} enviado ao caixa: ${brl(totalPedido(p))}`);
         irMesas();
       } catch (e) {}
       return;

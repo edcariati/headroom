@@ -124,7 +124,7 @@
         <span class="cm-num">Mesa ${m.mesa}</span>
         <span class="cm-total">${brl(m.total)}</span>
         <span class="cm-info">${m.itens.reduce((t, i) => t + i.qtd, 0)} itens · desde ${hora(m.aberto_em)} · ${esc(m.aberto_por || "")}</span>
-        ${m.conta_pedida ? '<span class="cm-selo">🧾 Conta pedida</span>' : ""}
+        ${m.conta_pedida ? '<span class="cm-selo">📤 Pedido enviado</span>' : ""}
       </button>`).join("") : '<div class="cartao vazio">Nenhuma mesa aberta agora.</div>';
   }
   $("caixa-mesas").addEventListener("click", (ev) => {
@@ -142,7 +142,7 @@
     if (!m) { selecionada = null; $("conta").innerHTML = '<p class="garcom-dica">Toque numa mesa para ver a conta e receber.</p>'; return; }
     const recebidoAntes = $("recebido") ? $("recebido").value : "";
     $("conta").innerHTML = `
-      <div class="comanda-cab"><div><h2>Mesa ${m.mesa}</h2><p class="comanda-aberta">Aberta às ${hora(m.aberto_em)} por ${esc(m.aberto_por || "?")}${m.conta_pedida ? " · conta pedida" : ""}</p></div></div>
+      <div class="comanda-cab"><div><h2>Mesa ${m.mesa}</h2><p class="comanda-aberta">Aberta às ${hora(m.aberto_em)} por ${esc(m.aberto_por || "?")}${m.conta_pedida ? " · pedido enviado pelo garçom" : ""}</p></div></div>
       <div class="caixa-itens">${m.itens.map((i) => `<div class="comanda-item"><div class="comanda-nome">${i.qtd}× ${esc(i.nome)}<small>${brl(i.preco)} cada</small></div><span></span><b class="comanda-valor">${brl(i.preco * i.qtd)}</b></div>`).join("")}</div>
       <div class="comanda-contas">
         <div class="conta-linha"><span>Subtotal</span><b>${brl(m.subtotal)}</b></div>
