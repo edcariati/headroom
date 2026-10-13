@@ -30,7 +30,8 @@ async function db(falha) {
   if (!sql) {
     const local = /@(localhost|127\.0\.0\.1)|host=\/tmp/.test(url);
     // prepare:false: o pooler do Supabase (porta 6543) não aceita prepared statements.
-    sql = postgres(url, { prepare: false, max: 3, idle_timeout: 20, ssl: local ? false : "require" });
+    // A URL da integração Supabase traz parâmetros extras (sslmode, supa=...) que o Postgres recusa; o SSL vai nas opções.
+    sql = postgres(url.split("?")[0], { prepare: false, max: 3, idle_timeout: 20, ssl: local ? false : "require" });
   }
   if (!migrado) migrado = migrar().catch((e) => { migrado = null; throw e; });
   await migrado;
