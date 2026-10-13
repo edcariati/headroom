@@ -25,15 +25,24 @@
       rpc("listar_cardapio_extra").catch(() => ({ bebidas: [], doces: [] })),
     ]);
     const extras = leve("Extras");
+    const bebidas = extra.bebidas || [];
+    const ehCafe = (b) => slug(b.categoria || "") === "cafes";
     return {
       lanches,
       partes: [
+        // Café e Bom Dia: tudo de café da manhã fica só aqui (não se repete nas outras partes).
+        {
+          id: "cafe", titulo: "Café e Bom Dia", icone: "☕",
+          grupos: [
+            ...porCategoria(bebidas.filter(ehCafe), "bebida"),
+            ...["Omeletes", "Pães especiais", "Lanches naturais"].map((t) => ({ titulo: t, sub: leve(t).sub, itens: leve(t).itens.map(([n, v, d]) => item(n, v, { desc: d })) })),
+            { titulo: "Extras", sub: extras.sub, itens: extras.itens.map(([n, v]) => item(n, v, { id: `extra-${slug(n)}` })) },
+          ],
+        },
         {
           id: "lanches", titulo: "Lanches", icone: "🍔",
           grupos: [
             { titulo: "Vida de Escritório", itens: lanches.map((l) => item(`${l.id}. ${l.codinome || l.nome}`, l.preco ?? null, { id: `lanche-${l.id}`, sub: l.nome, desc: l.descricao || "", lanche: l })) },
-            ...["Lanches naturais", "Pães especiais"].map((t) => ({ titulo: t, sub: leve(t).sub, itens: leve(t).itens.map(([n, v, d]) => item(n, v, { desc: d })) })),
-            { titulo: "Extras", sub: extras.sub, itens: extras.itens.map(([n, v]) => item(n, v, { id: `extra-${slug(n)}` })) },
           ],
         },
         {
@@ -42,10 +51,9 @@
             ...C.executivos.grupos.map((g) => ({ titulo: `Executivo · ${g.titulo}`, icone: g.icone, obs: g.obs, itens: g.itens.map(([n, v]) => item(n, v)) })),
             ...C.especiais.map((d) => ({ titulo: `${d.dia} · ${d.tema}`, dia: d, itens: d.itens.map(([n, v]) => item(n, v)) })),
             ...C.chapa.itens.map((p) => ({ titulo: p.nome, chapa: p, itens: p.opcoes.map(([o, v]) => item(`${p.nome} · ${o}`, v, { opcao: o })) })),
-            { titulo: "Omeletes", sub: leve("Omeletes").sub, itens: leve("Omeletes").itens.map(([n, v, d]) => item(n, v, { desc: d })) },
           ],
         },
-        { id: "bebidas", titulo: "Bebidas", icone: "🥤", grupos: porCategoria(extra.bebidas || [], "bebida") },
+        { id: "bebidas", titulo: "Bebidas", icone: "🥤", grupos: porCategoria(bebidas.filter((b) => !ehCafe(b)), "bebida") },
         { id: "doces", titulo: "Doces", icone: "🍮", grupos: porCategoria(extra.doces || [], "doce") },
       ],
     };

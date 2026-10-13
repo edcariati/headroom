@@ -718,7 +718,7 @@
 
   // ---------- Dashboard (só admin) ----------
   const NOME_FORMA = { dinheiro: "💵 Dinheiro", pix: "⚡ Pix", debito: "💳 Débito", credito: "💳 Crédito" };
-  const NOME_PARTE = { lanches: "Lanches", pratos: "Pratos quentes", bebidas: "Bebidas", doces: "Doces", outros: "Outros" };
+  const NOME_PARTE = { lanches: "Lanches", pratos: "Pratos quentes", bebidas: "Bebidas", doces: "Doces", cafe: "Café e Bom Dia", outros: "Outros" };
   const CORES_DASH = ["#e8761e", "#7a3e1d", "#c9962a", "#3f8a46", "#6b55a3", "#b42318", "#2f6f9f", "#8a5a34"];
   let dash = null, dashDias = 30, dashTimer = null;
 

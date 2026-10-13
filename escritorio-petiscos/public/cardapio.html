@@ -24,9 +24,18 @@
     </header>
 
     <nav class="menu-nav nao-imprimir" aria-label="Partes do cardápio">
-      <a href="#lanches">🍔 Lanches</a><a href="#pratos">🍽 Pratos quentes</a><a href="#bebidas">🥤 Bebidas</a><a href="#doces">🍮 Doces</a>
+      <a href="#cafe">☕ Café e Bom Dia</a><a href="#lanches">🍔 Lanches</a><a href="#pratos">🍽 Pratos quentes</a><a href="#bebidas">🥤 Bebidas</a><a href="#doces">🍮 Doces</a>
     </nav>
     <p class="aviso-precos escondido" id="aviso-precos">Preços ocultos durante a degustação.</p>
+
+    <h2 class="menu-parte" id="cafe"><span>☕</span> Café e Bom Dia</h2>
+
+    <section class="menu-secao" id="bom-dia">
+      <h2 class="menu-titulo">Café e <em>Bom Dia</em></h2>
+      <p class="menu-sub">Para começar o expediente bem.</p>
+      <div id="lista-cafe" class="leves-grade"><p class="vazio">Carregando…</p></div>
+      <p class="manuscrito centro">Mais opções para um dia ainda melhor.</p>
+    </section>
 
     <h2 class="menu-parte" id="lanches"><span>🍔</span> Lanches</h2>
 
@@ -35,12 +44,6 @@
       <p class="menu-sub">Lanches que merecem uma pausa.</p>
       <div class="menu-lanches" id="lista"><p class="vazio">Carregando…</p></div>
       <p class="manuscrito centro">O expediente acaba. A vontade de comer bem, não.</p>
-    </section>
-
-    <section class="menu-secao" id="naturais">
-      <h2 class="menu-titulo">Naturais, pães <em>&amp; extras</em></h2>
-      <p class="menu-sub">Leveza e muito sabor.</p>
-      <div id="lista-naturais" class="leves-grade"></div>
     </section>
 
     <h2 class="menu-parte" id="pratos"><span>🍽</span> Pratos quentes</h2>
@@ -64,13 +67,6 @@
       <p class="menu-sub">Carnes nobres, sabor e boas companhias.</p>
       <div id="lista-chapa"></div>
       <p class="manuscrito centro">Carne boa aproxima pessoas.</p>
-    </section>
-
-    <section class="menu-secao" id="omeletes">
-      <h2 class="menu-titulo"><em>Omeletes</em></h2>
-      <p class="menu-sub">Simples, nutritivos e deliciosos.</p>
-      <div id="lista-omeletes"></div>
-      <p class="manuscrito centro">Mais opções para um dia ainda melhor.</p>
     </section>
 
     <h2 class="menu-parte" id="bebidas"><span>🥤</span> Bebidas</h2>
@@ -111,13 +107,8 @@
       }
       const preco = (v) => (semPrecos || v == null ? "" : `<span class="menu-preco">${Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>`);
       const linha = (nome, valor, desc) => `<div class="menu-item"><div class="menu-linha"><span class="menu-nome">${esc(nome)}</span><span class="pontos"></span>${preco(valor)}</div>${desc ? `<div class="menu-desc">${esc(desc)}</div>` : ""}</div>`;
-      const leve = (t) => C.leves.find((g) => g.titulo === t);
-      const blocoLeve = (g) => `<div class="menu-bloco"><h3 class="menu-grupo">${esc(g.titulo)}</h3><p class="menu-obs">${esc(g.sub)}</p>
-        ${g.itens.map(([n, v, d]) => linha(n, v, d)).join("")}</div>`;
 
       // ----- Parte fixa (cardápio impresso da casa) -----
-      document.getElementById("lista-naturais").innerHTML = ["Lanches naturais", "Pães especiais", "Extras"].map((t) => blocoLeve(leve(t))).join("");
-
       document.getElementById("executivos").innerHTML =
         `<div class="menu-nota">🍽️ ${esc(C.executivos.nota)}</div>` +
         C.executivos.grupos.map((g) => `<div class="menu-bloco"><h3 class="menu-grupo">${g.icone} ${esc(g.titulo)}</h3>${g.itens.map(([n, v]) => linha(n, v)).join("")}${g.obs ? `<p class="menu-obs">${esc(g.obs)}</p>` : ""}</div>`).join("");
@@ -133,11 +124,9 @@
         C.chapa.itens.map((p) => `<div class="menu-bloco"><h3 class="menu-grupo">${esc(p.nome)}</h3><p class="menu-desc">${esc(p.texto)}</p>${p.opcoes.map(([n, v]) => linha(n, v)).join("")}</div>`).join("") +
         `<div class="menu-nota">🍟 ${esc(C.chapa.nota)}</div>`;
 
-      document.getElementById("lista-omeletes").innerHTML = leve("Omeletes").itens.map(([n, v, d]) => linha(n, v, d)).join("");
-
       // ----- Parte que vem do servidor (lanches, bebidas e doces editados no painel) -----
       const emBreve = '<p class="vazio">Em breve no cardápio.</p>';
-      const blocoGrupo = (g) => `<div class="menu-bloco"><h3 class="menu-grupo">${esc(g.titulo)}</h3>${g.itens.map((i) => linha(i.nome, i.preco, i.desc)).join("")}</div>`;
+      const blocoGrupo = (g) => `<div class="menu-bloco"><h3 class="menu-grupo">${esc(g.titulo)}</h3>${g.sub ? `<p class="menu-obs">${esc(g.sub)}</p>` : ""}${g.itens.map((i) => linha(i.nome, i.preco, i.desc)).join("")}</div>`;
       window.EP_CATALOGO.carregar().then(({ lanches, partes }) => {
         document.getElementById("lista").innerHTML = lanches.map((l) => `
           <article class="menu-lanche">
@@ -148,7 +137,7 @@
               <div class="menu-desc">${esc(l.descricao || "")}</div>
             </div>
           </article>`).join("");
-        for (const id of ["bebidas", "doces"]) {
+        for (const id of ["cafe", "bebidas", "doces"]) {
           const parte = partes.find((p) => p.id === id);
           document.getElementById(`lista-${id}`).innerHTML = parte.grupos.length ? parte.grupos.map(blocoGrupo).join("") : emBreve;
         }
