@@ -70,6 +70,7 @@
     $("login").classList.add("escondido");
     $("app").classList.remove("escondido");
     renderTudo();
+    if (dados.avisoBlob) toast(dados.avisoBlob, true);
     if (MODO_SISTEMA) document.querySelector('#abas button[data-aba="dashboard"]').click();
   }
 

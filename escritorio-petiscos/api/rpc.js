@@ -221,14 +221,19 @@ const FUNCOES = {
 
   async admin_dados({ p_senha }) {
     await checarSenha(p_senha);
-    const [lanches, perfis, avBlobs] = await Promise.all([nomesLanches(), listarTudo("p/"), listarTudo("av/")]);
+    // Se o Blob (degustação) falhar, o login no painel continua: só as avaliações ficam vazias.
+    let perfis = [], avBlobs = [], avisoBlob = null;
+    try { [perfis, avBlobs] = await Promise.all([listarTudo("p/"), listarTudo("av/")]); }
+    catch (e) { console.error("blob admin_dados", e && e.message); avisoBlob = "Não foi possível ler as avaliações da degustação agora."; }
+    const lanches = await nomesLanches();
     const [avaliadores, avaliacoes] = await Promise.all([
-      lerVarios(perfis.map((b) => b.pathname)),
-      lerVarios(avBlobs.map((b) => b.pathname)),
+      lerVarios(perfis.map((b) => b.pathname)).catch(() => []),
+      lerVarios(avBlobs.map((b) => b.pathname)).catch(() => []),
     ]);
     const vivos = new Set(avaliadores.map((a) => a.id));
     return {
       lanches,
+      avisoBlob,
       avaliadores: avaliadores
         .map(({ id, nome, idade, criado_em }) => ({ id, nome, idade, criado_em }))
         .sort((a, b) => a.criado_em.localeCompare(b.criado_em)),
