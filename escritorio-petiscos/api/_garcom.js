@@ -38,8 +38,14 @@ async function db(falha) {
   return sql;
 }
 
+// Estrutura do banco. Só roda o DDL quando falta algo (consulta rápida), e uma instância por vez
+// (advisory lock): vários celulares abrindo juntos não travam uns aos outros com ALTER TABLE.
 async function migrar() {
-  await sql.unsafe(`
+  const [{ pronto }] = await sql`select exists (select 1 from information_schema.columns
+    where table_schema = current_schema() and table_name = 'ep_lancamento' and column_name = 'parte') as pronto`;
+  if (!pronto) await sql.begin(async (t) => {
+    await t`select pg_advisory_xact_lock(724501)`;
+    await t.unsafe(`
     create table if not exists ep_garcom (
       id serial primary key,
       nome text not null unique,
@@ -83,6 +89,7 @@ async function migrar() {
     alter table ep_lancamento add column if not exists parte text;
     create index if not exists ep_lancamento_atendimento on ep_lancamento (atendimento_id);
   `);
+  });
   // Equipe inicial (nomes e PINs ficam só no arquivo privado da Vercel, fora do GitHub).
   const [{ n }] = await sql`select count(*)::int as n from ep_garcom`;
   if (!n) {

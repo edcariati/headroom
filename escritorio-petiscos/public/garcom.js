@@ -363,6 +363,11 @@
   // No celular a comanda abre por cima; no computador fica ao lado.
   $("barra-total").addEventListener("click", () => document.body.classList.add("ver-comanda"));
   $("btn-fechar-comanda").addEventListener("click", () => document.body.classList.remove("ver-comanda"));
+  // Volta para os botões do cardápio (no celular a conta cobre a tela).
+  $("btn-adicionar").addEventListener("click", () => {
+    document.body.classList.remove("ver-comanda");
+    $("partes").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 
   // ---------- Início ----------
   window.EP_CATALOGO.carregar().then((c) => {

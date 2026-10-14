@@ -358,6 +358,8 @@ export default async function handler(req, res) {
   } catch (e) {
     if (e instanceof ErroUsuario) return responder(res, 400, { message: e.message });
     console.error(fn, e);
-    responder(res, 500, { message: "Erro no servidor. Tente de novo em instantes." });
+    // No sistema do salão, mostra o motivo (sem dados sensíveis) para facilitar o suporte.
+    const motivo = /^(garcom|caixa|admin)_/.test(fn) && e && e.message ? ` (${String(e.code || "").slice(0, 10)} ${String(e.message).slice(0, 140)})` : "";
+    responder(res, 500, { message: "Erro no servidor. Tente de novo em instantes." + motivo });
   }
 }
