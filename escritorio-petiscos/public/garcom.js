@@ -194,6 +194,7 @@
     marcarModo(qual === "rapida" ? "rapida" : "mesas");
     mostrar("pedido");
     $("busca").value = "";
+    if (!partes.length) carregarCatalogo();
     renderCatalogo();
     renderComanda();
     window.scrollTo(0, 0);
@@ -201,7 +202,7 @@
 
   // ---------- Catálogo (botões) ----------
   let partes = [];
-  let parteAtiva = "lanches";
+  let parteAtiva = "tudo"; // ao abrir a mesa, mostra o cardápio completo
   const todosItens = () => partes.flatMap((p) => p.grupos.flatMap((g) => g.itens.map((i) => ({ ...i, grupo: g.titulo, parte: p.id }))));
 
   function botaoItem(i) {
@@ -216,17 +217,19 @@
 
   function renderCatalogo() {
     if (!partes.length || atual == null) return;
-    $("partes").innerHTML = partes.map((p) => `<button type="button" data-parte="${p.id}" class="${p.id === parteAtiva ? "ativa" : ""}">${p.icone} ${esc(p.titulo)}</button>`).join("");
+    $("partes").innerHTML = [{ id: "tudo", icone: "📋", titulo: "Cardápio completo" }, ...partes].map((p) => `<button type="button" data-parte="${p.id}" class="${p.id === parteAtiva ? "ativa" : ""}">${p.icone} ${esc(p.titulo)}</button>`).join("");
     const busca = $("busca").value.trim().toLowerCase();
     if (busca) {
       const achados = todosItens().filter((i) => `${i.nome} ${i.sub || ""} ${i.grupo}`.toLowerCase().includes(busca));
       $("catalogo").innerHTML = achados.length ? `<div class="itens-grade">${achados.map(botaoItem).join("")}</div>` : '<p class="garcom-dica">Nada encontrado.</p>';
       return;
     }
-    const parte = partes.find((p) => p.id === parteAtiva);
-    $("catalogo").innerHTML = parte.grupos.length
+    const grupos = (parte) => parte.grupos.length
       ? parte.grupos.map((g) => `<h3 class="grupo-titulo">${esc(g.titulo)}</h3><div class="itens-grade">${g.itens.map(botaoItem).join("")}</div>`).join("")
       : `<p class="garcom-dica">Ainda não há ${esc(parte.titulo.toLowerCase())} cadastrados. O dono cadastra no painel, aba Cardápio.</p>`;
+    $("catalogo").innerHTML = parteAtiva === "tudo"
+      ? partes.map((p) => `<h2 class="parte-titulo">${p.icone} ${esc(p.titulo)}</h2>${grupos(p)}`).join("")
+      : grupos(partes.find((p) => p.id === parteAtiva) || partes[0]);
   }
 
   $("partes").addEventListener("click", (ev) => {
@@ -370,9 +373,20 @@
   });
 
   // ---------- Início ----------
-  window.EP_CATALOGO.carregar().then((c) => {
-    partes = c.partes;
-    renderCatalogo();
-  }).catch((e) => { $("catalogo").innerHTML = `<p class="garcom-dica">Não foi possível carregar o cardápio: ${esc(e.message)}</p>`; });
+  // Carrega o cardápio; se falhar (sem internet, servidor ocupado), tenta de novo ao abrir uma mesa.
+  let carregando = null;
+  function carregarCatalogo() {
+    if (partes.length || carregando) return carregando;
+    $("catalogo").innerHTML = '<p class="garcom-dica">Carregando cardápio…</p>';
+    carregando = window.EP_CATALOGO.carregar().then((c) => {
+      partes = c.partes;
+      renderCatalogo();
+    }).catch((e) => {
+      $("catalogo").innerHTML = `<p class="garcom-dica">Não foi possível carregar o cardápio (${esc(e.message)}). <button type="button" class="link" id="btn-recarregar-cardapio">Tentar de novo</button></p>`;
+    }).finally(() => { carregando = null; });
+    return carregando;
+  }
+  $("catalogo").addEventListener("click", (ev) => { if (ev.target.id === "btn-recarregar-cardapio") carregarCatalogo(); });
+  carregarCatalogo();
   irMesas();
 })();

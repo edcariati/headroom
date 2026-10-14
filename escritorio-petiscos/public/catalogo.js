@@ -18,11 +18,15 @@
     return grupos;
   }
 
+  // Até 3 tentativas (rede do salão pode oscilar) antes de usar a reserva.
+  const tentar = (fn, n = 3) => fn().catch((e) => (n > 1 ? new Promise((r) => setTimeout(r, 800)).then(() => tentar(fn, n - 1)) : Promise.reject(e)));
+
   async function carregar() {
     const { rpc } = window.EP;
     const [lanches, extra] = await Promise.all([
-      rpc("listar_lanches"),
-      rpc("listar_cardapio_extra").catch(() => ({ bebidas: [], doces: [] })),
+      // Se a API falhar, usa a reserva do cardapio-dados.js: o garçom nunca fica sem cardápio.
+      tentar(() => rpc("listar_lanches")).catch(() => C.lanches.map(([id, nome, codinome, descricao, preco]) => ({ id, nome, codinome, descricao, preco }))),
+      tentar(() => rpc("listar_cardapio_extra")).catch(() => ({ bebidas: [], doces: [] })),
     ]);
     const extras = leve("Extras");
     const bebidas = extra.bebidas || [];

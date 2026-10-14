@@ -1,6 +1,22 @@
 // Cardápio completo do Escritório Petiscos & Cia (fonte: cardápios impressos da casa).
 // Os lanches "Vida de Escritório" vêm da API (editáveis no painel); o resto está aqui.
 window.CARDAPIO_CASA = {
+  // Reserva dos lanches "Vida de Escritório", usada só se a API não responder (os nomes e preços oficiais vêm do painel).
+  lanches: [
+    [1, "Burger clássico", "CLT", "Pão, carne, queijo muçarela, maionese e catupiry.", 33.9],
+    [2, "Burger salada", "13º", "Pão, carne, queijo muçarela, maionese, catupiry, tomate, cebola e repolho.", 35.9],
+    [3, "Bacon", "PJ", "Pão, carne, queijo muçarela, repolho, maionese, catupiry e tomate.", 39.9],
+    [4, "Onion Burger", "Hora Extra", "Pão, carne, queijo cheddar, barbecue e anéis de cebola empanados.", 37.9],
+    [5, "Bacon MK", "Bônus do Mês", "Pão, carne, queijo provolone, bacon e doce de leite.", 36.9],
+    [6, "Burgueritos", "Negócio Fechado", "Pão, carne, queijo cheddar Polenghi, maionese e Doritos.", 35.9],
+    [7, "Toscana", "Sextou na Chapa", "Pão, carne, linguiça toscana, queijo provolone, maionese, rúcula e abacaxi chapeado.", 41.9],
+    [8, "Gorgon Burger", "Ideia Genial", "Pão, carne, queijo gorgonzola, cebola caramelizada no barbecue com mel e rúcula.", 38.9],
+    [9, "Frango", "Férias", "Pão, frango empanado ou filé, repolho, queijo provolone, maionese e catupiry.", 32.9],
+    [10, "Kids", "Meio Período", "Pão, carne e queijo muçarela.", 29.9],
+    [11, "Vegano", "Expediente Verde", "Pão, carne e queijo veganos, tomate, rúcula e cebola.", 34.9],
+    [12, "Double", "Expediente Duplo", "Pão, 2 carnes, 2 queijos cheddar, maionese, catupiry e tomate.", 59.9],
+    [13, "Alma Gêmea", "Direitos Iguais", "Pão, carne, queijo muçarela e goiabada.", 34.9],
+  ],
   executivos: {
     nota: "Todos os pratos acompanham arroz, feijão, farofa e salada, conforme a composição de cada prato.",
     grupos: [

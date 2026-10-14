@@ -676,3 +676,5 @@ td.tirou { color: var(--erro); font-weight: 700; }
 .portal-item small { display: block; font-size: 14px; color: var(--texto-2); margin-top: 2px; }
 .modo-sistema [data-degustacao] { display: none !important; }
 #btn-adicionar { width: 100%; margin: 12px 0 0; }
+.parte-titulo { font-family: "Oswald", sans-serif; font-size: 20px; color: var(--cafe-800); margin: 22px 0 4px; padding: 6px 10px; background: #fff1e0; border-left: 4px solid var(--laranja); border-radius: 6px; }
+.parte-titulo:first-child { margin-top: 4px; }
