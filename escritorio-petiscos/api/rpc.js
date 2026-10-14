@@ -42,7 +42,7 @@ const EXTRA_INICIAL = {
     extra("Sucos", "Suco natural de laranja", 10), extra("Sucos", "Suco natural de limão", 8),
     extra("Sucos", "Suco de polpa", 9, "Pergunte os sabores do dia."),
     extra("Águas", "Água mineral sem gás 500 ml", 4), extra("Águas", "Água mineral com gás 500 ml", 5), extra("Águas", "Água de coco", 7),
-    extra("Cafés", "Café coado", 4), extra("Cafés", "Café expresso", 6), extra("Cafés", "Café com leite", 6),
+    // Os cafés ficam no Café & Bom Dia (valores do cardápio oficial, em cardapio-dados.js).
     extra("Cervejas", "Cerveja lata 350 ml", 8), extra("Cervejas", "Cerveja long neck", 10),
   ],
   doces: [
@@ -110,8 +110,11 @@ const iguais = (a, b) => {
 const idValido = (id) => typeof id === "string" && /^[0-9a-f-]{36}$/.test(id);
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Cardápio público: se o Blob falhar, usa os valores padrão em vez de deixar o cardápio vazio.
+const lerOuVazio = (pathname) => lerJson(pathname).catch((e) => { console.error("blob", pathname, e && e.message); return null; });
+
 async function nomesLanches() {
-  const cfg = (await lerJson(CFG_CARDAPIO)) || {};
+  const cfg = (await lerOuVazio(CFG_CARDAPIO)) || {};
   return CARDAPIO.map(([nome, codinome, descricao, preco], i) => ({
     id: i + 1,
     nome: cfg[i + 1]?.nome || nome,
@@ -237,8 +240,9 @@ const FUNCOES = {
 
   // Bebidas e doces do cardápio: lista inicial (preços estimados) até o dono salvar a dele no painel.
   async listar_cardapio_extra() {
-    const cfg = (await lerJson(CFG_EXTRA)) || {};
-    return { bebidas: cfg.bebidas || EXTRA_INICIAL.bebidas, doces: cfg.doces || EXTRA_INICIAL.doces };
+    const cfg = (await lerOuVazio(CFG_EXTRA)) || {};
+    const ou = (lista, padrao) => (Array.isArray(lista) && lista.length ? lista : padrao);
+    return { bebidas: ou(cfg.bebidas, EXTRA_INICIAL.bebidas), doces: ou(cfg.doces, EXTRA_INICIAL.doces) };
   },
 
   async admin_cardapio_extra_salvar({ p_senha, p_secao, p_itens }) {

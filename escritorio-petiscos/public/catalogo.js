@@ -26,11 +26,24 @@
     const [lanches, extra] = await Promise.all([
       // Se a API falhar, usa a reserva do cardapio-dados.js: o garçom nunca fica sem cardápio.
       tentar(() => rpc("listar_lanches")).catch(() => C.lanches.map(([id, nome, codinome, descricao, preco]) => ({ id, nome, codinome, descricao, preco }))),
-      tentar(() => rpc("listar_cardapio_extra")).catch(() => ({ bebidas: [], doces: [] })),
+      tentar(() => rpc("listar_cardapio_extra")).catch(() => ({})),
     ]);
     const extras = leve("Extras");
-    const bebidas = extra.bebidas || [];
+    // Sem resposta da API (ou lista vazia), usa a lista de valores guardada no site.
+    const reserva = (lista) => lista.map(([categoria, nome, preco, descricao = ""]) => ({ categoria, nome, preco, descricao }));
+    const bebidas = extra.bebidas && extra.bebidas.length ? extra.bebidas : reserva(C.extrasIniciais.bebidas);
+    const doces = extra.doces && extra.doces.length ? extra.doces : reserva(C.extrasIniciais.doces);
     const ehCafe = (b) => slug(b.categoria || "") === "cafes";
+    // Um grupo "Cafés" só: os fixos da casa (Café normal) + os editados no painel, sem repetir nome.
+    const cafes = () => {
+      const fixos = leve("Cafés");
+      const doPainel = porCategoria(bebidas.filter(ehCafe), "bebida").flatMap((g) => g.itens);
+      const itens = fixos.itens.map(([n, v, d]) => item(n, v, { desc: d }));
+      // Os cafés coado e com leite já vêm do cardápio oficial; não repetir os antigos do painel.
+      const jaTem = new Set(["cafe-coado", "cafe-normal", "cafe-com-leite", ...itens.map((x) => slug(x.nome))]);
+      for (const i of doPainel) if (!jaTem.has(slug(i.nome))) itens.push(i);
+      return { titulo: "Cafés", sub: fixos.sub, itens };
+    };
     return {
       lanches,
       partes: [
@@ -38,8 +51,8 @@
         {
           id: "cafe", titulo: "Café e Bom Dia", icone: "☕",
           grupos: [
-            ...porCategoria(bebidas.filter(ehCafe), "bebida"),
-            ...["Omeletes", "Pães especiais", "Lanches naturais"].map((t) => ({ titulo: t, sub: leve(t).sub, itens: leve(t).itens.map(([n, v, d]) => item(n, v, { desc: d })) })),
+            cafes(),
+            ...["Pães especiais", "Omeletes", "Lanches naturais"].map((t) => ({ titulo: t, sub: leve(t).sub, itens: leve(t).itens.map(([n, v, d]) => item(n, v, { desc: d })) })),
             { titulo: "Extras", sub: extras.sub, itens: extras.itens.map(([n, v]) => item(n, v, { id: `extra-${slug(n)}` })) },
           ],
         },
@@ -58,7 +71,7 @@
           ],
         },
         { id: "bebidas", titulo: "Bebidas", icone: "🥤", grupos: porCategoria(bebidas.filter((b) => !ehCafe(b)), "bebida") },
-        { id: "doces", titulo: "Doces", icone: "🍮", grupos: porCategoria(extra.doces || [], "doce") },
+        { id: "doces", titulo: "Doces", icone: "🍮", grupos: porCategoria(doces, "doce") },
       ],
     };
   }

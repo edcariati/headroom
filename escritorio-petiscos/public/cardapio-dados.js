@@ -1,6 +1,20 @@
 // Cardápio completo do Escritório Petiscos & Cia (fonte: cardápios impressos da casa).
 // Os lanches "Vida de Escritório" vêm da API (editáveis no painel); o resto está aqui.
 window.CARDAPIO_CASA = {
+  // Reserva de bebidas e doces (mesma lista de valores da API), usada só se a API não responder.
+  extrasIniciais: {
+    bebidas: [
+      ["Refrigerantes", "Coca-Cola lata 350 ml", 6], ["Refrigerantes", "Guaraná lata 350 ml", 6],
+      ["Refrigerantes", "Refrigerante 600 ml", 9], ["Refrigerantes", "Refrigerante 2 litros", 14],
+      ["Sucos", "Suco natural de laranja", 10], ["Sucos", "Suco natural de limão", 8], ["Sucos", "Suco de polpa", 9, "Pergunte os sabores do dia."],
+      ["Águas", "Água mineral sem gás 500 ml", 4], ["Águas", "Água mineral com gás 500 ml", 5], ["Águas", "Água de coco", 7],
+      ["Cervejas", "Cerveja lata 350 ml", 8], ["Cervejas", "Cerveja long neck", 10],
+    ],
+    doces: [
+      ["Sobremesas", "Pudim de leite", 9], ["Sobremesas", "Mousse de maracujá", 10], ["Sobremesas", "Pavê", 10],
+      ["Doces", "Brigadeiro", 3], ["Doces", "Bolo do dia", 8, "Pergunte o sabor."], ["Sorvetes", "Sorvete (1 bola)", 7],
+    ],
+  },
   // Reserva dos lanches "Vida de Escritório", usada só se a API não responder (os nomes e preços oficiais vêm do painel).
   lanches: [
     [1, "Burger clássico", "CLT", "Pão, carne, queijo muçarela, maionese e catupiry.", 33.9],
@@ -42,7 +56,9 @@ window.CARDAPIO_CASA = {
   leves: [
     { titulo: "Omeletes", sub: "Simples, nutritivos e deliciosos.", itens: [["Ovo mexido", 8.9, "Ovos mexidos, preparados com todo o sabor da casa."], ["Omelete de queijo", 9.9, "Ovos, queijo e temperos especiais."], ["Omelete de queijo e presunto", 11.9, "Ovos, queijo, presunto e temperos especiais."], ["Omelete especial", 13.9, "Ovos, queijo, presunto, tomate, cebola e temperos especiais."]] },
     { titulo: "Lanches naturais", sub: "Leveza e muito sabor.", itens: [["Lanche natural de queijo e presunto", 9.9, "Alface, tomate, queijo e presunto."], ["Lanche natural de queijo e salame", 13.9, "Alface, tomate, queijo e salame."]] },
-    { titulo: "Pães especiais", sub: "Clássicos que sempre combinam.", itens: [["Pão com ovo", 8.5, "Pão na chapa com ovos mexidos."], ["Pão com ovo, queijo e rúcula", 14.9, "Pão na chapa com ovos mexidos, queijo e rúcula fresca."]] },
+    { titulo: "Pães especiais", sub: "Clássicos que sempre combinam.", itens: [["Pão na chapa", 5.5, "Pão tostado na chapa com manteiga."], ["Pão com ovo", 8.5, "Pão na chapa com ovos mexidos."], ["Misto quente", 12.9, "Pão na chapa com presunto e queijo derretido."], ["Pão, ovo, queijo e rúcula", 14.9, "Pão na chapa com ovos mexidos, queijo e rúcula fresca."]] },
+    // Cafés fixos do Café e Bom Dia (os outros cafés vêm da aba Cardápio do painel, categoria "Cafés").
+    { titulo: "Cafés", sub: "Passado na hora.", itens: [["Cafézinho coado (80 ml)", 4.5, "Passado na hora."], ["Café com leite coado (190 ml)", 6.5]] },
     { titulo: "Extras", sub: "Adicione mais sabor ao seu pedido.", itens: [["Ovo", 3.0], ["Bacon", 5.9], ["Cheddar", 4.9], ["Catupiry", 4.9], ["Muçarela", 4.9]] },
   ],
 };
