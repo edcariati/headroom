@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "installedAt": "2026-10-19T02:13:17.684Z",
+  "files": {
+    "/home/user/headroom/.claude/settings.json": {
+      "plugins": [
+        "ruflo-mods@ruflo",
+        "ruflo-swarm@ruflo",
+        "ruflo-console@ruflo"
+      ],
+      "marketplace": true,
+      "env": true,
+      "claudeInstalled": []
+    }
+  }
+}

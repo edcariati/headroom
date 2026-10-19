@@ -252,3 +252,10 @@ uv.lock
 # package shadows the maturin overlay on sys.path.
 /headroom/_core.*.so
 /headroom/_core.so
+
+# Ruflo local secrets and runtime data
+.env.local
+.env.*.local
+.claude-flow/data/
+.claude-flow/logs/
+.claude-flow/sessions/
