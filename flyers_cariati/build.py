@@ -27,9 +27,8 @@ h1 em{font-style:normal;color:#5fc1e3}
 .stat b{font-size:var(--big);font-weight:800;line-height:1}
 .stat b i{font-style:normal;color:#5fc1e3}
 .stat span{font-weight:800;letter-spacing:.3em;font-size:calc(var(--big)*.18)}
-.chips{display:flex;flex-wrap:wrap;justify-content:center;gap:var(--chg)}
-.chip{border:2px solid rgba(95,193,227,.6);color:#fff;font-weight:700;font-size:var(--chf);padding:var(--chp);letter-spacing:.02em;background:rgba(95,193,227,.08)}
-.chips.l{justify-content:flex-start}
+.chips{display:grid;grid-template-columns:1fr 1fr;gap:var(--chg)}
+.chip{border:2px solid rgba(95,193,227,.6);color:#fff;font-weight:700;font-size:var(--chf);padding:var(--chp);letter-spacing:.02em;text-align:center;background:rgba(95,193,227,.08)}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--g3)}
 .card{background:rgba(255,255,255,.05);border-top:4px solid #5fc1e3;padding:var(--cd)}
 .card .l{font-size:var(--cl);font-weight:800;color:#5fc1e3}
@@ -65,13 +64,13 @@ PH=mkph('(15) 99841-9295')
 PH2=mkph('(15) 99841-9295')
 FOOT='<div class="foot z">CARIATI ARQUITETURA LTDA · RESP. TÉCNICO ARQUITETO CAU/SP A120704-0</div>'
 V=dict(w=1080,h=1920)
-VV=dict(p="90px",lh="190px",e="26px",h1="74px",s="36px",g="36px",c="34px",cp="30px 60px",t="44px",fs="19px",ls="42px",lg="30px",big="260px",chg="14px",chf="29px",chp="14px 24px",g3="22px",cd="26px",cl="30px",ch="38px",cp2="27px")
-SQ=dict(p="64px",lh="140px",e="21px",h1="64px",s="28px",g="26px",c="27px",cp="22px 46px",t="34px",fs="15px",ls="35px",lg="24px",big="150px",chg="8px",chf="19px",chp="8px 14px",g3="16px",cd="22px",cl="26px",ch="32px",cp2="23px")
+VV=dict(p="90px",lh="190px",e="26px",h1="74px",s="36px",g="36px",c="34px",cp="30px 60px",t="44px",fs="19px",ls="42px",lg="30px",big="260px",chg="18px",chf="40px",chp="20px 20px",g3="22px",cd="26px",cl="30px",ch="38px",cp2="27px")
+SQ=dict(p="64px",lh="140px",e="21px",h1="64px",s="28px",g="26px",c="27px",cp="22px 46px",t="34px",fs="15px",ls="35px",lg="24px",big="150px",chg="10px",chf="25px",chp="11px 10px",g3="16px",cd="22px",cl="26px",ch="32px",cp2="23px")
 def photo(img,h,pos="center"):
     return f"<div class='photo z' style=\"flex:none;height:{h}px;background-image:url('assets/{img}');background-position:{pos}\"></div>"
 def sp(n): return f"<div style='height:{n}px;flex:none'></div>"
 def flex(): return "<div style='flex:1'></div>"
-SERV=["Projeto arquitetônico","Projetos complementares","Projeto de interiores","Regularização de obras","Gestão e execução de obras","Financiamento Caixa"]
+SERV=["Projetos","Obras","Regularização","Financiamento"]
 def chips(extra=''): return f'<div class="chips z {extra}">'+''.join(f'<span class=chip>{x}</span>' for x in SERV)+'</div>'
 F={}
 # 1 tudo em um só lugar
