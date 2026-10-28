@@ -29,6 +29,9 @@ h1 em{font-style:normal;color:#5fc1e3}
 .stat span{font-weight:800;letter-spacing:.3em;font-size:calc(var(--big)*.18)}
 .chips{display:grid;grid-template-columns:1fr 1fr;gap:var(--chg)}
 .chip{border:2px solid rgba(95,193,227,.6);color:#fff;font-weight:700;font-size:var(--chf);padding:var(--chp);letter-spacing:.02em;text-align:center;background:rgba(95,193,227,.08)}
+.statrow{display:flex;justify-content:space-around;gap:20px}
+.sn{font-weight:800;font-size:var(--sn);color:#5fc1e3;line-height:1}
+.sl{font-size:var(--sl);color:#c5d3db;margin-top:8px;letter-spacing:.03em}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--g3)}
 .card{background:rgba(255,255,255,.05);border-top:4px solid #5fc1e3;padding:var(--cd)}
 .card .l{font-size:var(--cl);font-weight:800;color:#5fc1e3}
@@ -51,6 +54,7 @@ LIGHT="""
 .light .card{background:#fff;border-top-color:#2a7c99;box-shadow:0 6px 22px rgba(11,31,43,.08)}
 .light .card .l{color:#2a7c99}.light .card p{color:#4a5b66}
 .light .chip{border-color:#2a7c99;color:#0b1f2b;background:rgba(42,124,153,.08)}
+.light .sn{color:#2a7c99}.light .sl{color:#4a5b66}
 .light .stat b i{color:#2a7c99}
 """
 def page(w,h,body,vars_,light=False):
@@ -64,8 +68,8 @@ PH=mkph('(15) 99841-9295')
 PH2=mkph('(15) 99841-9295')
 FOOT='<div class="foot z">CARIATI ARQUITETURA LTDA · RESP. TÉCNICO ARQUITETO CAU/SP A120704-0</div>'
 V=dict(w=1080,h=1920)
-VV=dict(p="90px",lh="190px",e="26px",h1="74px",s="36px",g="36px",c="34px",cp="30px 60px",t="44px",fs="19px",ls="42px",lg="30px",big="260px",chg="18px",chf="40px",chp="20px 20px",g3="22px",cd="26px",cl="30px",ch="38px",cp2="27px")
-SQ=dict(p="64px",lh="140px",e="21px",h1="64px",s="28px",g="26px",c="27px",cp="22px 46px",t="34px",fs="15px",ls="35px",lg="24px",big="150px",chg="10px",chf="25px",chp="11px 10px",g3="16px",cd="22px",cl="26px",ch="32px",cp2="23px")
+VV=dict(p="90px",lh="190px",e="26px",h1="74px",s="36px",g="36px",c="34px",cp="30px 60px",t="44px",fs="19px",ls="42px",lg="30px",big="260px",sn="74px",sl="26px",chg="18px",chf="40px",chp="20px 20px",g3="22px",cd="26px",cl="30px",ch="38px",cp2="27px")
+SQ=dict(p="64px",lh="140px",e="21px",h1="64px",s="28px",g="26px",c="27px",cp="22px 46px",t="34px",fs="15px",ls="35px",lg="24px",big="150px",sn="42px",sl="19px",chg="10px",chf="25px",chp="11px 10px",g3="16px",cd="22px",cl="26px",ch="32px",cp2="23px")
 def photo(img,h,pos="center"):
     return f"<div class='photo z' style=\"flex:none;height:{h}px;background-image:url('assets/{img}');background-position:{pos}\"></div>"
 def sp(n): return f"<div style='height:{n}px;flex:none'></div>"
@@ -106,7 +110,15 @@ def f5(vert):
     if vert:
         return L+sp(40)+'<div class="eyebrow z">Financiamento Caixa</div>'+sp(20)+'<h1 class=z>Construa a sua casa<br><em>com financiamento</em></h1>'+sp(44)+photo("casa_piscina.jpg",440,"center")+sp(40)+f'<ul class="list z" style="margin:0 auto;width:840px;--ls:38px">{items}</ul>'+flex()+'<div class="cta z">Quero simular</div>'+sp(40)+PH+sp(30)+FOOT
     return L+sp(26)+'<div class="eyebrow z">Financiamento Caixa</div>'+sp(14)+'<h1 class=z>Construa a sua casa<br><em>com financiamento</em></h1>'+sp(22)+f"<div class='z' style='display:flex;gap:30px;align-items:center'>"+f"<div class='photo' style=\"width:430px;height:300px;flex:none;background-image:url('assets/casa_piscina.jpg')\"></div>"+f'<ul class="list" style="flex:1;--ls:31px">{items}</ul></div>'+flex()+sp(20)+'<div class="cta z">Quero simular</div>'+sp(18)+PH+sp(14)+FOOT
-FL=[("01_tudo_em_um_so_lugar",f1),("02_400_obras",f2),("03_metodo_ppg",f3),("04_vamos_conversar",f4),("05_financiamento_caixa",f5)]
+# 6 equipe
+def f6(vert):
+    st=lambda a,b:f"<div style='text-align:center'><div class=sn>{a}</div><div class=sl>{b}</div></div>"
+    stats=st("14","anos em Tatuí")+st("+400","obras entregues")+st("CAU/SP","responsável técnico")
+    row=f'<div class="statrow z">{stats}</div>'
+    if vert:
+        return L+sp(40)+'<div class="eyebrow z">Quem faz a Cariati</div>'+sp(20)+'<h1 class=z>Uma equipe completa<br><em>do projeto à entrega</em></h1>'+sp(50)+photo("equipe.jpg",330,"center top")+sp(80)+row+sp(70)+'<p class="sub z"><b>Mesma equipe</b> em cada etapa: projeto, aprovação, gestão e obra.</p>'+flex()+'<div class="cta z">Fale com a nossa equipe</div>'+sp(40)+PH+sp(30)+FOOT
+    return L+sp(26)+'<div class="eyebrow z">Quem faz a Cariati</div>'+sp(14)+'<h1 class=z>Uma equipe completa<br><em>do projeto à entrega</em></h1>'+sp(24)+photo("equipe.jpg",262,"center top")+sp(22)+row+flex()+sp(22)+'<div class="cta z">Fale com a nossa equipe</div>'+sp(18)+PH+sp(14)+FOOT
+FL=[("01_tudo_em_um_so_lugar",f1),("02_400_obras",f2),("03_metodo_ppg",f3),("04_vamos_conversar",f4),("05_financiamento_caixa",f5),("06_equipe",f6)]
 import json
 jobs=[]
 (root/"html").mkdir(exist_ok=True)
