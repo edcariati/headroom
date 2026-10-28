@@ -98,8 +98,15 @@ def f3(vert):
 def f4(vert):
     if vert:
         return photo("fachada.jpg",700,"center 0%")+sp(40)+'<div class="eyebrow z">Peça o seu projeto</div>'+sp(18)+'<h1 class=z>Vamos começar<br><em>pela conversa.</em></h1>'+sp(20)+'<p class="sub z">Leva menos de 1 minuto. Fale com a nossa equipe pelo WhatsApp.</p>'+sp(34)+'<div class="eyebrow z" style="font-size:24px">Como podemos ajudar</div>'+sp(18)+chips()+flex()+sp(30)+'<div class="cta z">Chamar no WhatsApp</div>'+sp(34)+PH+sp(26)+FOOT
-    return f"<div class='z' style='display:flex;gap:34px;flex:1'><div class='photo' style=\"width:370px;background-image:url('assets/fachada.jpg');background-position:center top\"></div><div style='flex:1;display:flex;flex-direction:column;justify-content:center;gap:16px'><div class='eyebrow' style='text-align:left'>Peça o seu projeto</div><h1 style='text-align:left'>Vamos começar <em>pela conversa.</em></h1><p class='sub' style='text-align:left'>Leva menos de 1 minuto.</p>{chips('l')}<div class='cta' style='align-self:flex-start'>Chamar no WhatsApp</div>{PH.replace('contact z','contact z\" style=\"text-align:left').replace(' &nbsp;·&nbsp; ','<br>')}</div></div>"+sp(14)+FOOT
-FL=[("01_tudo_em_um_so_lugar",f1),("02_400_obras",f2),("03_metodo_ppg",f3),("04_vamos_conversar",f4)]
+    return f"<div class='z' style='display:flex;gap:34px;flex:1'><div class='photo' style=\"width:370px;background-image:url('assets/fachada.jpg');background-position:center top\"></div><div style='flex:1;display:flex;flex-direction:column;justify-content:center;gap:16px'><div class='eyebrow' style='text-align:left'>Peça o seu projeto</div><h1 style='text-align:left'>Vamos começar <em>pela conversa.</em></h1><p class='sub' style='text-align:left'>Leva menos de 1 minuto.</p>{chips('l')}<div class='cta' style='align-self:flex-start'>Chamar no WhatsApp</div>{PH.replace('contact z','contact z\" style=\"text-align:center').replace(' &nbsp;·&nbsp; ','<br>')}</div></div>"+sp(14)+FOOT
+# 5 financiamento Caixa
+def f5(vert):
+    li=lambda t:f"<li>{t}</li>"
+    items=li("Projeto e documentação organizados")+li("Obra acompanhada etapa por etapa")+li("Uma única equipe, do início à entrega")
+    if vert:
+        return L+sp(40)+'<div class="eyebrow z">Financiamento Caixa</div>'+sp(20)+'<h1 class=z>Construa a sua casa<br><em>com financiamento</em></h1>'+sp(44)+photo("casa_piscina.jpg",440,"center")+sp(40)+f'<ul class="list z" style="margin:0 auto;width:840px;--ls:38px">{items}</ul>'+flex()+'<div class="cta z">Quero simular</div>'+sp(40)+PH+sp(30)+FOOT
+    return L+sp(26)+'<div class="eyebrow z">Financiamento Caixa</div>'+sp(14)+'<h1 class=z>Construa a sua casa<br><em>com financiamento</em></h1>'+sp(22)+f"<div class='z' style='display:flex;gap:30px;align-items:center'>"+f"<div class='photo' style=\"width:430px;height:300px;flex:none;background-image:url('assets/casa_piscina.jpg')\"></div>"+f'<ul class="list" style="flex:1;--ls:31px">{items}</ul></div>'+flex()+sp(20)+'<div class="cta z">Quero simular</div>'+sp(18)+PH+sp(14)+FOOT
+FL=[("01_tudo_em_um_so_lugar",f1),("02_400_obras",f2),("03_metodo_ppg",f3),("04_vamos_conversar",f4),("05_financiamento_caixa",f5)]
 import json
 jobs=[]
 (root/"html").mkdir(exist_ok=True)
