@@ -57,7 +57,7 @@ def page(w,h,body,vars_,light=False):
 L='<img class="logo z" src="assets/logo.png">'
 def mkph(n2):
     return '<div class="contact z"><span class=wa style="font-size:.7em;letter-spacing:.2em;text-transform:uppercase">WhatsApp</span><br>(15) 99680-5291 &nbsp;·&nbsp; '+n2+'<small>cariati.com.br · Tatuí e região</small></div>'
-PH=mkph('(15) 99814-6455')
+PH=mkph('(15) 99841-9295')
 PH2=mkph('(15) 99841-9295')
 FOOT='<div class="foot z">CARIATI ARQUITETURA LTDA · RESP. TÉCNICO ARQUITETO CAU/SP A120704-0</div>'
 V=dict(w=1080,h=1920)
