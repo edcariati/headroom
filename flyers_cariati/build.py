@@ -146,6 +146,7 @@ DICAS=[
 ("04","Reserve uma margem <em>para imprevistos da obra.</em>","Mesmo com bom planejamento, podem surgir ajustes. Uma reserva no orçamento evita que a obra pare por falta de caixa.","Converse com o seu arquiteto sobre qual margem faz sentido para o seu caso."),
 ("05","Quem desenhou a casa <em>deve acompanhar a obra.</em>","Quando projeto e execução andam juntos, as dúvidas se resolvem na hora, sem ruído entre o papel e o canteiro.","Pergunte sempre quem vai acompanhar a execução."),
 ("06","Pense na rotina da família <em>antes de pensar na fachada.</em>","Onde ficam as compras, por onde a luz entra de manhã, quantas pessoas usam o banheiro ao mesmo tempo: esses detalhes decidem se a casa funciona.","Anote como a sua família vive hoje e leve para a primeira conversa."),
+("07","Quebrar parede depois de pronta custa mais <em>do que decidir no papel.</em>","Pontos de tomada, de água e de ar-condicionado definidos no projeto elétrico e hidráulico evitam o quebra-quebra no meio da obra.","Liste onde vão ficar móveis e eletrodomésticos antes de fechar os projetos complementares."),
 ]
 def dica(n,hook,corpo,pratica):
     def fn(vert):
