@@ -55,7 +55,10 @@ def page(w,h,body,vars_,light=False):
     cls=' light' if light else ''
     return f"<html><head><meta charset=utf-8><style>{CSS}{LIGHT}</style></head><body><div class='f{cls}' style='--w:{w}px;--h:{h}px;{v}'>{body}</div></body></html>"
 L='<img class="logo z" src="assets/logo.png">'
-PH='<div class="contact z"><span class=wa style="font-size:.7em;letter-spacing:.2em;text-transform:uppercase">WhatsApp</span><br>(15) 99680-5291 &nbsp;·&nbsp; (15) 99814-6455<small>cariati.com.br · Tatuí e região</small></div>'
+def mkph(n2):
+    return '<div class="contact z"><span class=wa style="font-size:.7em;letter-spacing:.2em;text-transform:uppercase">WhatsApp</span><br>(15) 99680-5291 &nbsp;·&nbsp; '+n2+'<small>cariati.com.br · Tatuí e região</small></div>'
+PH=mkph('(15) 99814-6455')
+PH2=mkph('(15) 99841-9295')
 FOOT='<div class="foot z">CARIATI ARQUITETURA LTDA · RESP. TÉCNICO ARQUITETO CAU/SP A120704-0</div>'
 V=dict(w=1080,h=1920)
 VV=dict(p="90px",lh="190px",e="26px",h1="74px",s="36px",g="36px",c="34px",cp="30px 60px",t="44px",fs="19px",ls="42px",lg="30px",big="260px",g3="22px",cd="26px",cl="30px",ch="38px",cp2="27px")
@@ -70,12 +73,12 @@ def f1(vert):
     li=lambda t,s='':f"<li>{t}<span>{s}</span></li>"
     items=li("Projeto arquitetônico","Planta, fachada e imagens 3D")+li("Projetos complementares","Estrutural, elétrico e hidrossanitário")+li("Projeto de interiores","Layout, acabamentos e mobiliário")+li("Regularização de obras","Aprovação na prefeitura")+li("Gestão e execução de obras","Cronograma e controle de cada etapa")+li("Financiamento Caixa","Financie a sua obra")
     if vert:
-        return L+sp(40)+'<div class="eyebrow z">Tudo em um só lugar</div>'+sp(20)+'<h1 class=z style="white-space:nowrap;font-size:70px">Do projeto <em>à chave na mão</em></h1>'+sp(60)+f'<ul class="list z">{items}</ul>'+flex()+'<div class="cta z">Quero meu projeto</div>'+sp(40)+PH+sp(30)+FOOT
-    return L+sp(26)+'<div class="eyebrow z">Tudo em um só lugar</div>'+sp(14)+'<h1 class=z>Do projeto <em>à chave na mão</em></h1>'+sp(24)+f'<ul class="list z" style="columns:2;display:block;column-gap:40px">{items.replace("<li>","<li style=\"margin-bottom:18px;break-inside:avoid\">")}</ul>'+flex()+'<div class="cta z">Quero meu projeto</div>'+sp(18)+PH+sp(14)+FOOT
+        return L+sp(40)+'<div class="eyebrow z">Tudo em um só lugar</div>'+sp(20)+'<h1 class=z style="white-space:nowrap;font-size:70px">Do projeto <em>à chave na mão</em></h1>'+sp(60)+f'<ul class="list z">{items}</ul>'+flex()+'<div class="cta z">Quero meu projeto</div>'+sp(40)+PH2+sp(30)+FOOT
+    return L+sp(26)+'<div class="eyebrow z">Tudo em um só lugar</div>'+sp(14)+'<h1 class=z>Do projeto <em>à chave na mão</em></h1>'+sp(24)+f'<ul class="list z" style="columns:2;display:block;column-gap:40px">{items.replace("<li>","<li style=\"margin-bottom:18px;break-inside:avoid\">")}</ul>'+flex()+'<div class="cta z">Quero meu projeto</div>'+sp(18)+PH2+sp(14)+FOOT
 # 2 prova social
 def f2(vert):
     ph=photo("casa_dia.jpg",560 if vert else 236)
-    return L+sp(30 if vert else 26)+'<div class="eyebrow z">14 anos em Tatuí e região</div>'+sp(10)+f'<div class="stat z"><b><i>+</i>400</b><span>OBRAS</span></div>'+sp(20)+'<p class="sub z"><b>entregues</b> e mais de <b>100 mil m²</b> construídos.<br>Experiência que entra no desenho do seu projeto.</p>'+sp(30 if vert else 14)+ph+flex()+sp(18)+'<div class="cta z">Fale com um arquiteto</div>'+sp(30 if vert else 14)+PH+sp(24 if vert else 10)+FOOT
+    return L+sp(30 if vert else 26)+'<div class="eyebrow z">14 anos em Tatuí e região</div>'+sp(10)+f'<div class="stat z"><b><i>+</i>400</b><span>OBRAS</span></div>'+sp(20)+'<p class="sub z"><b>entregues</b> e mais de <b>100 mil m²</b> construídos.<br>Experiência que entra no desenho do seu projeto.</p>'+sp(30 if vert else 14)+ph+flex()+sp(18)+'<div class="cta z">Fale com um arquiteto</div>'+sp(30 if vert else 14)+PH2+sp(24 if vert else 10)+FOOT
 # 3 método PPG
 def f3(vert):
     cards=[("P","Projetos detalhados","Cada decisão alinhada antes da obra. Sem retrabalho no canteiro."),("P","Processo planejado","Cronograma definido e entrega dentro do prazo previsto."),("G","Gestão integrada","Controle físico e financeiro, com acompanhamento de perto até a entrega.")]
