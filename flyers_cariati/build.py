@@ -32,6 +32,7 @@ h1 em{font-style:normal;color:#5fc1e3}
 .statrow{display:flex;justify-content:space-around;gap:20px}
 .sn{font-weight:800;font-size:var(--sn);color:#5fc1e3;line-height:1}
 .sl{font-size:var(--sl);color:#c5d3db;margin-top:8px;letter-spacing:.03em}
+.gestao .card{padding:14px 20px}.gestao .card h3{margin:4px 0;font-size:28px}.gestao .card p{font-size:20px}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--g3)}
 .card{background:rgba(255,255,255,.05);border-top:4px solid #5fc1e3;padding:var(--cd)}
 .card .l{font-size:var(--cl);font-weight:800;color:#5fc1e3}
@@ -118,7 +119,14 @@ def f6(vert):
     if vert:
         return L+sp(40)+'<div class="eyebrow z">Quem faz a Cariati</div>'+sp(20)+'<h1 class=z>Uma equipe completa<br><em>do projeto à entrega</em></h1>'+sp(50)+photo("equipe.jpg",330,"center top")+sp(80)+row+sp(70)+'<p class="sub z"><b>Mesma equipe</b> em cada etapa: projeto, aprovação, gestão e obra.</p>'+flex()+'<div class="cta z">Fale com a nossa equipe</div>'+sp(40)+PH+sp(30)+FOOT
     return L+sp(26)+'<div class="eyebrow z">Quem faz a Cariati</div>'+sp(14)+'<h1 class=z>Uma equipe completa<br><em>do projeto à entrega</em></h1>'+sp(24)+photo("equipe.jpg",262,"center top")+sp(22)+row+flex()+sp(22)+'<div class="cta z">Fale com a nossa equipe</div>'+sp(18)+PH+sp(14)+FOOT
-FL=[("01_tudo_em_um_so_lugar",f1),("02_400_obras",f2),("03_metodo_ppg",f3),("04_vamos_conversar",f4),("05_financiamento_caixa",f5),("06_equipe",f6)]
+# 7 gestão e administração de obras
+def f7(vert):
+    items=[("01","Planejamento","Cronograma e planejamento financeiro prontos antes de construir."),("02","Controle físico","Andamento da obra acompanhado etapa por etapa."),("03","Controle financeiro","Custos acompanhados com transparência, do início ao fim."),("04","Entrega no prazo","Responsabilidade técnica de arquiteto CAU/SP até a entrega.")]
+    cards="".join(f'<div class="card z" style="position:relative"><div class=l>{n}</div><h3>{t}</h3><p>{d}</p></div>' for n,t,d in items)
+    if vert:
+        return L+sp(40)+'<div class="eyebrow z">Gestão e administração de obras</div>'+sp(20)+'<h1 class=z>Sua obra com <em>controle de cada etapa</em></h1>'+sp(24)+'<p class="sub z">Quem desenhou o projeto acompanha a execução.</p>'+sp(34)+f'<div class="z" style="display:flex;flex-direction:column;gap:20px">{cards}</div>'+flex()+sp(40)+'<div class="cta z">Quero gestão da minha obra</div>'+sp(36)+PH+sp(30)+FOOT
+    return L+sp(26)+'<div class="eyebrow z">Gestão e administração de obras</div>'+sp(14)+'<h1 class=z style="font-size:50px;white-space:nowrap">Sua obra com <em>controle de cada etapa</em></h1>'+sp(18)+f'<div class="z gestao" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">{cards}</div>'+flex()+sp(20)+'<div class="cta z">Quero gestão da minha obra</div>'+sp(16)+PH+sp(12)+FOOT
+FL=[("01_tudo_em_um_so_lugar",f1),("02_400_obras",f2),("03_metodo_ppg",f3),("04_vamos_conversar",f4),("05_financiamento_caixa",f5),("06_equipe",f6),("07_gestao_de_obras",f7)]
 import json
 jobs=[]
 (root/"html").mkdir(exist_ok=True)
