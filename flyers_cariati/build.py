@@ -50,7 +50,7 @@ F={}
 # 1 tudo em um só lugar
 def f1(vert):
     li=lambda t,s='':f"<li>{t}<span>{s}</span></li>"
-    items=li("Financiamento Caixa","Financie a sua obra")+li("Projeto arquitetônico","Planta, fachada e imagens 3D")+li("Projetos complementares","Estrutural, elétrico e hidrossanitário")+li("Projeto de interiores","Layout, acabamentos e mobiliário")+li("Regularização de obras","Aprovação na prefeitura")+li("Gestão e execução de obras","Cronograma e controle de cada etapa")
+    items=li("Projeto arquitetônico","Planta, fachada e imagens 3D")+li("Projetos complementares","Estrutural, elétrico e hidrossanitário")+li("Projeto de interiores","Layout, acabamentos e mobiliário")+li("Regularização de obras","Aprovação na prefeitura")+li("Gestão e execução de obras","Cronograma e controle de cada etapa")+li("Financiamento Caixa","Financie a sua obra")
     if vert:
         return L+sp(40)+'<div class="eyebrow z">Tudo em um só lugar</div>'+sp(20)+'<h1 class=z style="white-space:nowrap;font-size:70px">Do projeto <em>à chave na mão</em></h1>'+sp(60)+f'<ul class="list z">{items}</ul>'+flex()+'<div class="cta z">Quero meu projeto</div>'+sp(40)+PH+sp(30)+FOOT
     return L+sp(26)+'<div class="eyebrow z">Tudo em um só lugar</div>'+sp(14)+'<h1 class=z>Do projeto <em>à chave na mão</em></h1>'+sp(24)+f'<ul class="list z" style="columns:2;display:block;column-gap:40px">{items.replace("<li>","<li style=\"margin-bottom:18px;break-inside:avoid\">")}</ul>'+flex()+'<div class="cta z">Quero meu projeto</div>'+sp(18)+PH+sp(14)+FOOT
