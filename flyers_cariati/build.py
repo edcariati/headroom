@@ -27,6 +27,9 @@ h1 em{font-style:normal;color:#5fc1e3}
 .stat b{font-size:var(--big);font-weight:800;line-height:1}
 .stat b i{font-style:normal;color:#5fc1e3}
 .stat span{font-weight:800;letter-spacing:.3em;font-size:calc(var(--big)*.18)}
+.chips{display:flex;flex-wrap:wrap;justify-content:center;gap:var(--chg)}
+.chip{border:2px solid rgba(95,193,227,.6);color:#fff;font-weight:700;font-size:var(--chf);padding:var(--chp);letter-spacing:.02em;background:rgba(95,193,227,.08)}
+.chips.l{justify-content:flex-start}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--g3)}
 .card{background:rgba(255,255,255,.05);border-top:4px solid #5fc1e3;padding:var(--cd)}
 .card .l{font-size:var(--cl);font-weight:800;color:#5fc1e3}
@@ -48,6 +51,7 @@ LIGHT="""
 .light .list li:before{background:#2a7c99}.light .list li span{color:#5b6c77}
 .light .card{background:#fff;border-top-color:#2a7c99;box-shadow:0 6px 22px rgba(11,31,43,.08)}
 .light .card .l{color:#2a7c99}.light .card p{color:#4a5b66}
+.light .chip{border-color:#2a7c99;color:#0b1f2b;background:rgba(42,124,153,.08)}
 .light .stat b i{color:#2a7c99}
 """
 def page(w,h,body,vars_,light=False):
@@ -61,12 +65,14 @@ PH=mkph('(15) 99841-9295')
 PH2=mkph('(15) 99841-9295')
 FOOT='<div class="foot z">CARIATI ARQUITETURA LTDA · RESP. TÉCNICO ARQUITETO CAU/SP A120704-0</div>'
 V=dict(w=1080,h=1920)
-VV=dict(p="90px",lh="190px",e="26px",h1="74px",s="36px",g="36px",c="34px",cp="30px 60px",t="44px",fs="19px",ls="42px",lg="30px",big="260px",g3="22px",cd="26px",cl="30px",ch="38px",cp2="27px")
-SQ=dict(p="64px",lh="140px",e="21px",h1="64px",s="28px",g="26px",c="27px",cp="22px 46px",t="34px",fs="15px",ls="35px",lg="24px",big="150px",g3="16px",cd="22px",cl="26px",ch="32px",cp2="23px")
+VV=dict(p="90px",lh="190px",e="26px",h1="74px",s="36px",g="36px",c="34px",cp="30px 60px",t="44px",fs="19px",ls="42px",lg="30px",big="260px",chg="14px",chf="29px",chp="14px 24px",g3="22px",cd="26px",cl="30px",ch="38px",cp2="27px")
+SQ=dict(p="64px",lh="140px",e="21px",h1="64px",s="28px",g="26px",c="27px",cp="22px 46px",t="34px",fs="15px",ls="35px",lg="24px",big="150px",chg="8px",chf="19px",chp="8px 14px",g3="16px",cd="22px",cl="26px",ch="32px",cp2="23px")
 def photo(img,h,pos="center"):
     return f"<div class='photo z' style=\"flex:none;height:{h}px;background-image:url('assets/{img}');background-position:{pos}\"></div>"
 def sp(n): return f"<div style='height:{n}px;flex:none'></div>"
 def flex(): return "<div style='flex:1'></div>"
+SERV=["Projeto arquitetônico","Projetos complementares","Projeto de interiores","Regularização de obras","Gestão e execução de obras","Financiamento Caixa"]
+def chips(extra=''): return f'<div class="chips z {extra}">'+''.join(f'<span class=chip>{x}</span>' for x in SERV)+'</div>'
 F={}
 # 1 tudo em um só lugar
 def f1(vert):
@@ -92,8 +98,8 @@ def f3(vert):
 # 4 chamada orçamento com foto real
 def f4(vert):
     if vert:
-        return photo("fachada.jpg",760,"center top")+sp(40)+'<div class="eyebrow z">Peça o seu projeto</div>'+sp(18)+'<h1 class=z>Vamos começar<br><em>pela conversa.</em></h1>'+sp(20)+'<p class="sub z">Leva menos de 1 minuto. Fale com a nossa equipe pelo WhatsApp.</p>'+flex()+'<div class="cta z">Chamar no WhatsApp</div>'+sp(34)+PH+sp(26)+FOOT
-    return f"<div class='z' style='display:flex;gap:34px;flex:1'><div class='photo' style=\"width:370px;background-image:url('assets/fachada.jpg');background-position:center top\"></div><div style='flex:1;display:flex;flex-direction:column;justify-content:center;gap:16px'><div class='eyebrow' style='text-align:left'>Peça o seu projeto</div><h1 style='text-align:left'>Vamos começar <em>pela conversa.</em></h1><p class='sub' style='text-align:left'>Leva menos de 1 minuto.</p><div class='cta' style='align-self:flex-start'>Chamar no WhatsApp</div>{PH.replace('contact z','contact z\" style=\"text-align:left').replace(' &nbsp;·&nbsp; ','<br>')}</div></div>"+sp(14)+FOOT
+        return photo("fachada.jpg",700,"center 0%")+sp(40)+'<div class="eyebrow z">Peça o seu projeto</div>'+sp(18)+'<h1 class=z>Vamos começar<br><em>pela conversa.</em></h1>'+sp(20)+'<p class="sub z">Leva menos de 1 minuto. Fale com a nossa equipe pelo WhatsApp.</p>'+sp(34)+'<div class="eyebrow z" style="font-size:24px">Como podemos ajudar</div>'+sp(18)+chips()+flex()+sp(30)+'<div class="cta z">Chamar no WhatsApp</div>'+sp(34)+PH+sp(26)+FOOT
+    return f"<div class='z' style='display:flex;gap:34px;flex:1'><div class='photo' style=\"width:370px;background-image:url('assets/fachada.jpg');background-position:center top\"></div><div style='flex:1;display:flex;flex-direction:column;justify-content:center;gap:16px'><div class='eyebrow' style='text-align:left'>Peça o seu projeto</div><h1 style='text-align:left'>Vamos começar <em>pela conversa.</em></h1><p class='sub' style='text-align:left'>Leva menos de 1 minuto.</p>{chips('l')}<div class='cta' style='align-self:flex-start'>Chamar no WhatsApp</div>{PH.replace('contact z','contact z\" style=\"text-align:left').replace(' &nbsp;·&nbsp; ','<br>')}</div></div>"+sp(14)+FOOT
 FL=[("01_tudo_em_um_so_lugar",f1),("02_400_obras",f2),("03_metodo_ppg",f3),("04_vamos_conversar",f4)]
 import json
 jobs=[]
