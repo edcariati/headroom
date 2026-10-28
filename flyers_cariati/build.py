@@ -33,7 +33,7 @@ h1 em{font-style:normal;color:#5fc1e3}
 .sn{font-weight:800;font-size:var(--sn);color:#5fc1e3;line-height:1}
 .sl{font-size:var(--sl);color:#c5d3db;margin-top:8px;letter-spacing:.03em}
 .gestao .card{padding:14px 20px}.gestao .card h3{margin:4px 0;font-size:28px}.gestao .card p{font-size:20px}
-.bg{position:absolute;inset:0;background-size:cover;background-position:center}
+.bg{position:absolute;inset:0;background-size:cover;background-position:center;filter:blur(3px);transform:scale(1.05)}
 .bg:after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(3,10,16,.50),rgba(3,10,16,.62) 45%,rgba(3,10,16,.92))}
 .light .bg:after{background:linear-gradient(180deg,rgba(247,245,240,.68),rgba(247,245,240,.78) 45%,rgba(240,237,230,.96))}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--g3)}
@@ -133,11 +133,9 @@ def f7(vert):
 def f8(vert):
     bgimg="casa_noite_v.jpg" if vert else "casa_piscina.jpg"
     bg=f"<div class='bg' style=\"background-image:url('assets/{bgimg}')\"></div>"
-    chips_="".join(f"<span class=chip>{x}</span>" for x in ["Arquitetônico","Complementares","Interiores","Aprovação na prefeitura"])
-    ch=f'<div class="chips z">{chips_}</div>'
     if vert:
-        return bg+L+sp(40)+'<div class="eyebrow z">Projetos</div>'+sp(20)+'<h1 class=z>Projetos pensados <em>para a sua rotina</em></h1>'+sp(24)+'<p class="sub z">Do primeiro traço à aprovação, com a mesma equipe.</p>'+sp(40)+ch+flex()+photo("equipe.jpg",300,"center top")+sp(14)+'<p class="sub z" style="font-size:26px">Arquitetos CAU/SP · +400 obras · 14 anos em Tatuí</p>'+sp(34)+'<div class="cta z">Quero meu projeto</div>'+sp(34)+PH+sp(28)+FOOT
-    return bg+L+sp(20)+'<div class="eyebrow z">Projetos</div>'+sp(10)+'<h1 class=z style="font-size:50px;white-space:nowrap">Projetos pensados <em>para a sua rotina</em></h1>'+sp(16)+ch+flex()+photo("equipe.jpg",200,"center top")+sp(18)+'<div class="cta z">Quero meu projeto</div>'+sp(14)+PH+sp(10)+FOOT
+        return bg+L+sp(40)+'<div class="eyebrow z">Projetos</div>'+sp(20)+'<h1 class=z>Projetos pensados <em>para a sua rotina</em></h1>'+sp(24)+'<p class="sub z">Do primeiro traço à aprovação, com a mesma equipe.</p>'+flex()+photo("equipe.jpg",320,"center top")+flex()+'<div class="cta z">Quero meu projeto</div>'+sp(40)+PH+sp(30)
+    return bg+L+sp(26)+'<div class="eyebrow z">Projetos</div>'+sp(12)+'<h1 class=z style="font-size:52px;white-space:nowrap">Projetos pensados <em>para a sua rotina</em></h1>'+flex()+photo("equipe.jpg",250,"center top")+flex()+'<div class="cta z">Quero meu projeto</div>'+sp(18)+PH+sp(8)
 FL=[("01_tudo_em_um_so_lugar",f1),("02_400_obras",f2),("03_metodo_ppg",f3),("04_vamos_conversar",f4),("05_financiamento_caixa",f5),("06_equipe",f6),("07_gestao_de_obras",f7),("08_projetos_e_equipe",f8)]
 import json
 jobs=[]
