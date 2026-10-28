@@ -33,9 +33,27 @@ h1 em{font-style:normal;color:#5fc1e3}
 .card h3{font-size:var(--ch);margin:8px 0}
 .card p{font-size:var(--cp2);color:#c5d3db;line-height:1.35}
 """
-def page(w,h,body,vars_):
+
+LIGHT="""
+.f.light{background:radial-gradient(120% 80% at 50% 0%,#ffffff 0%,#f3f1ec 60%,#e9e6df 100%);color:#0b1f2b}
+.light:before{background:repeating-linear-gradient(90deg,rgba(11,31,43,.045) 0 2px,transparent 2px 120px)}
+.light .eyebrow{color:#2a7c99}
+.light h1 em{color:#2a7c99}
+.light .sub{color:#4a5b66}.light .sub b{color:#0b1f2b}
+.light .cta{background:#0b1f2b;color:#fff}
+.light .wa{color:#128c4a}
+.light .contact small{color:#5b6c77}
+.light .foot{color:#6b7b85}
+.light .photo{border:2px solid rgba(11,31,43,.15)}
+.light .list li:before{background:#2a7c99}.light .list li span{color:#5b6c77}
+.light .card{background:#fff;border-top-color:#2a7c99;box-shadow:0 6px 22px rgba(11,31,43,.08)}
+.light .card .l{color:#2a7c99}.light .card p{color:#4a5b66}
+.light .stat b i{color:#2a7c99}
+"""
+def page(w,h,body,vars_,light=False):
     v=";".join(f"--{k}:{x}" for k,x in vars_.items())
-    return f"<html><head><meta charset=utf-8><style>{CSS}</style></head><body><div class=f style='--w:{w}px;--h:{h}px;{v}'>{body}</div></body></html>"
+    cls=' light' if light else ''
+    return f"<html><head><meta charset=utf-8><style>{CSS}{LIGHT}</style></head><body><div class='f{cls}' style='--w:{w}px;--h:{h}px;{v}'>{body}</div></body></html>"
 L='<img class="logo z" src="assets/logo.png">'
 PH='<div class="contact z"><span class=wa style="font-size:.7em;letter-spacing:.2em;text-transform:uppercase">WhatsApp</span><br>(15) 99680-5291 &nbsp;·&nbsp; (15) 99814-6455<small>cariati.com.br · Tatuí e região</small></div>'
 FOOT='<div class="foot z">CARIATI ARQUITETURA LTDA · RESP. TÉCNICO ARQUITETO CAU/SP A120704-0</div>'
@@ -79,8 +97,10 @@ jobs=[]
 (root/"html").mkdir(exist_ok=True)
 for name,fn in FL:
     for tag,(w,h,vars_,vert) in {"vertical_1080x1920":(1080,1920,VV,True),"quadrado_1080x1080":(1080,1080,SQ,False)}.items():
-        html=page(w,h,fn(vert),vars_).replace('assets/','../assets/')
-        fn_=f"{name}_{tag}"
-        (root/"html"/f"{fn_}.html").write_text(html)
-        jobs.append(dict(f=fn_,w=w,h=h))
+        for light in (False,True):
+            html=page(w,h,fn(vert),vars_,light).replace('assets/','../assets/')
+            if light: html=html.replace('../assets/logo.png','../assets/logo_escuro.png')
+            fn_=f"{name}_{tag}"+("_claro" if light else "")
+            (root/"html"/f"{fn_}.html").write_text(html)
+            jobs.append(dict(f=fn_,w=w,h=h,d="png_claro" if light else "png"))
 (root/"jobs.json").write_text(json.dumps(jobs))
