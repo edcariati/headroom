@@ -36,6 +36,8 @@ h1 em{font-style:normal;color:#5fc1e3}
 .bg{position:absolute;inset:0;background-size:cover;background-position:center;filter:blur(3px);transform:scale(1.05)}
 .bg:after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(3,10,16,.50),rgba(3,10,16,.62) 45%,rgba(3,10,16,.92))}
 .light .bg:after{background:linear-gradient(180deg,rgba(247,245,240,.68),rgba(247,245,240,.78) 45%,rgba(240,237,230,.96))}
+.dh{font-size:var(--dh)}
+.light .card p{color:#0b1f2b}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--g3)}
 .card{background:rgba(255,255,255,.05);border-top:4px solid #5fc1e3;padding:var(--cd)}
 .card .l{font-size:var(--cl);font-weight:800;color:#5fc1e3}
@@ -72,8 +74,8 @@ PH=mkph('(15) 99841-9295')
 PH2=mkph('(15) 99841-9295')
 FOOT='<div class="foot z">CARIATI ARQUITETURA LTDA · RESP. TÉCNICO ARQUITETO CAU/SP A120704-0</div>'
 V=dict(w=1080,h=1920)
-VV=dict(p="90px",lh="190px",e="26px",h1="74px",s="36px",g="36px",c="34px",cp="30px 60px",t="44px",fs="19px",ls="42px",lg="30px",big="260px",sn="74px",sl="26px",chg="18px",chf="40px",chp="20px 20px",g3="22px",cd="26px",cl="30px",ch="38px",cp2="27px")
-SQ=dict(p="64px",lh="140px",e="21px",h1="64px",s="28px",g="26px",c="27px",cp="22px 46px",t="34px",fs="15px",ls="35px",lg="24px",big="150px",sn="42px",sl="19px",chg="10px",chf="25px",chp="11px 10px",g3="16px",cd="22px",cl="26px",ch="32px",cp2="23px")
+VV=dict(p="90px",lh="190px",e="26px",h1="74px",s="36px",g="36px",c="34px",cp="30px 60px",t="44px",fs="19px",ls="42px",lg="30px",big="260px",dh="76px",sn="74px",sl="26px",chg="18px",chf="40px",chp="20px 20px",g3="22px",cd="26px",cl="30px",ch="38px",cp2="27px")
+SQ=dict(p="64px",lh="140px",e="21px",h1="64px",s="28px",g="26px",c="27px",cp="22px 46px",t="34px",fs="15px",ls="35px",lg="24px",big="150px",dh="52px",sn="42px",sl="19px",chg="10px",chf="25px",chp="11px 10px",g3="16px",cd="22px",cl="26px",ch="32px",cp2="23px")
 def photo(img,h,pos="center"):
     return f"<div class='photo z' style=\"flex:none;height:{h}px;background-image:url('assets/{img}');background-position:{pos}\"></div>"
 def sp(n): return f"<div style='height:{n}px;flex:none'></div>"
@@ -136,7 +138,28 @@ def f8(vert):
     if vert:
         return bg+L+sp(40)+'<div class="eyebrow z">Projetos</div>'+sp(20)+'<h1 class=z>Projetos pensados <em>para a sua rotina</em></h1>'+sp(24)+'<p class="sub z">Do primeiro traço à aprovação, com a mesma equipe.</p>'+flex()+photo("equipe.jpg",320,"center top")+flex()+'<div class="cta z">Quero meu projeto</div>'+sp(40)+PH+sp(30)
     return bg+L+sp(26)+'<div class="eyebrow z">Projetos</div>'+sp(12)+'<h1 class=z style="font-size:52px;white-space:nowrap">Projetos pensados <em>para a sua rotina</em></h1>'+flex()+photo("equipe.jpg",250,"center top")+flex()+'<div class="cta z">Quero meu projeto</div>'+sp(18)+PH+sp(8)
-FL=[("01_tudo_em_um_so_lugar",f1),("02_400_obras",f2),("03_metodo_ppg",f3),("04_vamos_conversar",f4),("05_financiamento_caixa",f5),("06_equipe",f6),("07_gestao_de_obras",f7),("08_projetos_e_equipe",f8)]
+# dicas (follow-up comercial)
+DICAS=[
+("01","Antes de comprar o terreno, descubra <em>o que você pode construir nele.</em>","Cada terreno tem regras da prefeitura: recuos, taxa de ocupação e altura máxima. São elas que definem o tamanho e o formato da sua casa.","Consulte as diretrizes do município antes de fechar negócio."),
+("02","Orçamento sem projeto completo é <em>estimativa, não preço.</em>","Quando o projeto ainda está incompleto, cada detalhe indefinido pode virar custo extra no meio da obra.","Projeto detalhado antes de começar ajuda a evitar surpresas no valor final."),
+("03","Obra com financiamento <em>começa pela papelada, não pela pá.</em>","Para financiar uma construção, em geral o banco pede projeto aprovado na prefeitura e a documentação do terreno em dia.","Organize isso antes e o processo anda bem mais rápido."),
+("04","Reserve uma margem <em>para imprevistos da obra.</em>","Mesmo com bom planejamento, podem surgir ajustes. Uma reserva no orçamento evita que a obra pare por falta de caixa.","Converse com o seu arquiteto sobre qual margem faz sentido para o seu caso."),
+("05","Quem desenhou a casa <em>deve acompanhar a obra.</em>","Quando projeto e execução andam juntos, as dúvidas se resolvem na hora, sem ruído entre o papel e o canteiro.","Pergunte sempre quem vai acompanhar a execução."),
+("06","Pense na rotina da família <em>antes de pensar na fachada.</em>","Onde ficam as compras, por onde a luz entra de manhã, quantas pessoas usam o banheiro ao mesmo tempo: esses detalhes decidem se a casa funciona.","Anote como a sua família vive hoje e leve para a primeira conversa."),
+]
+def dica(n,hook,corpo,pratica):
+    def fn(vert):
+        sig='<div class="sub z" style="font-size:var(--s)"><b>Ficou com dúvida?</b> É só responder por aqui.</div>'
+        small='<div class="foot z" style="font-size:calc(var(--fs)*1.25);margin-top:14px">Cariati Arquitetura &amp; Gestão · (15) 99680-5291 · (15) 99841-9295</div>'
+        box=f'<div class="card z" style="text-align:left"><div class=l style="font-size:calc(var(--cl)*.8);letter-spacing:.2em">NA PRÁTICA</div><p style="font-size:calc(var(--cp2)*1.15);color:inherit;margin-top:8px;font-weight:600">{pratica}</p></div>'
+        h=f'<h1 class="z dh" style="text-align:left">{hook}</h1>'
+        body=f'<p class="sub z" style="text-align:left">{corpo}</p>'
+        tag=f'<div class="eyebrow z" style="text-align:left">Dica Cariati · Nº {n}</div>'
+        if vert:
+            return '<img class="logo z" src="assets/logo.png" style="height:130px;align-self:flex-start">'+flex()+tag+sp(30)+h+sp(40)+'<div class="rule" style="margin:0"></div>'+sp(40)+body+sp(46)+box+flex()+sig+small+sp(10)
+        return '<img class="logo z" src="assets/logo.png" style="height:100px;align-self:flex-start">'+flex()+tag+sp(18)+h+sp(26)+body+sp(34)+box+flex()+sig+small
+    return fn
+FL=[("01_tudo_em_um_so_lugar",f1),("02_400_obras",f2),("03_metodo_ppg",f3),("04_vamos_conversar",f4),("05_financiamento_caixa",f5),("06_equipe",f6),("07_gestao_de_obras",f7),("08_projetos_e_equipe",f8)]+[(f"dica_{d[0]}",dica(*d)) for d in DICAS]
 import json
 jobs=[]
 (root/"html").mkdir(exist_ok=True)
@@ -147,5 +170,5 @@ for name,fn in FL:
             if light: html=html.replace('../assets/logo.png','../assets/logo_escuro.png')
             fn_=f"{name}_{tag}"+("_claro" if light else "")
             (root/"html"/f"{fn_}.html").write_text(html)
-            jobs.append(dict(f=fn_,w=w,h=h,d="png_claro" if light else "png"))
+            jobs.append(dict(f=fn_,w=w,h=h,d=("png_dicas" if name.startswith("dica") else "png")+("_claro" if light else "")))
 (root/"jobs.json").write_text(json.dumps(jobs))
