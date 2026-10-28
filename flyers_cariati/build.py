@@ -33,6 +33,9 @@ h1 em{font-style:normal;color:#5fc1e3}
 .sn{font-weight:800;font-size:var(--sn);color:#5fc1e3;line-height:1}
 .sl{font-size:var(--sl);color:#c5d3db;margin-top:8px;letter-spacing:.03em}
 .gestao .card{padding:14px 20px}.gestao .card h3{margin:4px 0;font-size:28px}.gestao .card p{font-size:20px}
+.bg{position:absolute;inset:0;background-size:cover;background-position:center}
+.bg:after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(3,10,16,.50),rgba(3,10,16,.62) 45%,rgba(3,10,16,.92))}
+.light .bg:after{background:linear-gradient(180deg,rgba(247,245,240,.68),rgba(247,245,240,.78) 45%,rgba(240,237,230,.96))}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--g3)}
 .card{background:rgba(255,255,255,.05);border-top:4px solid #5fc1e3;padding:var(--cd)}
 .card .l{font-size:var(--cl);font-weight:800;color:#5fc1e3}
@@ -126,7 +129,16 @@ def f7(vert):
     if vert:
         return L+sp(40)+'<div class="eyebrow z">Gestão e administração de obras</div>'+sp(20)+'<h1 class=z>Sua obra com <em>controle de cada etapa</em></h1>'+sp(24)+'<p class="sub z">Quem desenhou o projeto acompanha a execução.</p>'+sp(34)+f'<div class="z" style="display:flex;flex-direction:column;gap:20px">{cards}</div>'+flex()+sp(40)+'<div class="cta z">Quero gestão da minha obra</div>'+sp(36)+PH+sp(30)+FOOT
     return L+sp(26)+'<div class="eyebrow z">Gestão e administração de obras</div>'+sp(14)+'<h1 class=z style="font-size:50px;white-space:nowrap">Sua obra com <em>controle de cada etapa</em></h1>'+sp(18)+f'<div class="z gestao" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">{cards}</div>'+flex()+sp(20)+'<div class="cta z">Quero gestão da minha obra</div>'+sp(16)+PH+sp(12)+FOOT
-FL=[("01_tudo_em_um_so_lugar",f1),("02_400_obras",f2),("03_metodo_ppg",f3),("04_vamos_conversar",f4),("05_financiamento_caixa",f5),("06_equipe",f6),("07_gestao_de_obras",f7)]
+# 8 projetos com fundo + equipe
+def f8(vert):
+    bgimg="casa_noite_v.jpg" if vert else "casa_piscina.jpg"
+    bg=f"<div class='bg' style=\"background-image:url('assets/{bgimg}')\"></div>"
+    chips_="".join(f"<span class=chip>{x}</span>" for x in ["Arquitetônico","Complementares","Interiores","Aprovação na prefeitura"])
+    ch=f'<div class="chips z">{chips_}</div>'
+    if vert:
+        return bg+L+sp(40)+'<div class="eyebrow z">Projetos</div>'+sp(20)+'<h1 class=z>Projetos pensados <em>para a sua rotina</em></h1>'+sp(24)+'<p class="sub z">Do primeiro traço à aprovação, com a mesma equipe.</p>'+sp(40)+ch+flex()+photo("equipe.jpg",300,"center top")+sp(14)+'<p class="sub z" style="font-size:26px">Arquitetos CAU/SP · +400 obras · 14 anos em Tatuí</p>'+sp(34)+'<div class="cta z">Quero meu projeto</div>'+sp(34)+PH+sp(28)+FOOT
+    return bg+L+sp(20)+'<div class="eyebrow z">Projetos</div>'+sp(10)+'<h1 class=z style="font-size:50px;white-space:nowrap">Projetos pensados <em>para a sua rotina</em></h1>'+sp(16)+ch+flex()+photo("equipe.jpg",200,"center top")+sp(18)+'<div class="cta z">Quero meu projeto</div>'+sp(14)+PH+sp(10)+FOOT
+FL=[("01_tudo_em_um_so_lugar",f1),("02_400_obras",f2),("03_metodo_ppg",f3),("04_vamos_conversar",f4),("05_financiamento_caixa",f5),("06_equipe",f6),("07_gestao_de_obras",f7),("08_projetos_e_equipe",f8)]
 import json
 jobs=[]
 (root/"html").mkdir(exist_ok=True)
