@@ -37,11 +37,11 @@ def page(w,h,body,vars_):
     v=";".join(f"--{k}:{x}" for k,x in vars_.items())
     return f"<html><head><meta charset=utf-8><style>{CSS}</style></head><body><div class=f style='--w:{w}px;--h:{h}px;{v}'>{body}</div></body></html>"
 L='<img class="logo z" src="assets/logo.png">'
-PH='<div class="contact z"><span class=wa>WhatsApp</span> (15) 99680-5291<br>(15) 99814-6455<small>cariati.com.br · Tatuí e região</small></div>'
+PH='<div class="contact z"><span class=wa style="font-size:.7em;letter-spacing:.2em;text-transform:uppercase">WhatsApp</span><br>(15) 99680-5291 &nbsp;·&nbsp; (15) 99814-6455<small>cariati.com.br · Tatuí e região</small></div>'
 FOOT='<div class="foot z">CARIATI ARQUITETURA LTDA · RESP. TÉCNICO ARQUITETO CAU/SP A120704-0</div>'
 V=dict(w=1080,h=1920)
-VV=dict(p="90px",lh="190px",e="26px",h1="74px",s="36px",g="36px",c="34px",cp="30px 60px",t="48px",fs="19px",ls="42px",lg="30px",big="260px",g3="22px",cd="26px",cl="30px",ch="38px",cp2="27px")
-SQ=dict(p="64px",lh="140px",e="21px",h1="64px",s="28px",g="26px",c="27px",cp="22px 46px",t="38px",fs="15px",ls="35px",lg="24px",big="150px",g3="16px",cd="22px",cl="26px",ch="32px",cp2="23px")
+VV=dict(p="90px",lh="190px",e="26px",h1="74px",s="36px",g="36px",c="34px",cp="30px 60px",t="44px",fs="19px",ls="42px",lg="30px",big="260px",g3="22px",cd="26px",cl="30px",ch="38px",cp2="27px")
+SQ=dict(p="64px",lh="140px",e="21px",h1="64px",s="28px",g="26px",c="27px",cp="22px 46px",t="34px",fs="15px",ls="35px",lg="24px",big="150px",g3="16px",cd="22px",cl="26px",ch="32px",cp2="23px")
 def photo(img,h,pos="center"):
     return f"<div class='photo z' style=\"flex:none;height:{h}px;background-image:url('assets/{img}');background-position:{pos}\"></div>"
 def sp(n): return f"<div style='height:{n}px;flex:none'></div>"
