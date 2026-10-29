@@ -40,20 +40,34 @@ def img(f,h,pos="center",extra="",inner="",w=""):
     return f"<div class='im' style=\"height:{h}px;{w}background-image:url('../assets/{f}');background-position:{pos};{extra}\">{inner}</div>"
 def tag(t): return f"<div class=tg>{t}</div>"
 BADGE='<div class=pb><small>VALOR DO LOTE</small><b>R$ 67.000</b></div>'
+LCSS="""
+.f{background:linear-gradient(160deg,#ffffff 0%,#f6f4ef 60%,#ece8e0 100%);color:#0b1f2b}
+.eb{color:#2a7c99}h1 em{color:#2a7c99}
+.hr{color:#4a5b66}.hr span{color:#2a7c99}
+.im{border:2px solid rgba(11,31,43,.12);box-shadow:0 6px 20px rgba(11,31,43,.10)}
+.mt{background:rgba(255,255,255,.94);color:#2a7c99}
+.pb{background:#0b1f2b;color:#fff}.pb small{color:#8fd3ea}
+.chip{background:#fff;border:2px solid #2a7c99;color:#0b1f2b}.chip span{color:#5b6c77}
+.cta{background:#0b1f2b;color:#fff}
+.ph .wa{color:#128c4a}.ph{color:#0b1f2b}
+"""
+def th(f,h,pos): return img(f,h,pos,'flex:1')
 def build(w,h,v,vert):
     vs=";".join(f"--{k}:{x}" for k,x in v.items())
-    top=f'<div class="hd z"><img class="logo" src="../assets/logo.png"><div class=hr><span>OPORTUNIDADE</span>Riviera de Santa Cristina XIII</div></div>'
+    top='<div class="hd z"><img class="logo" src="../assets/logo_escuro.png"><div class=hr><span>OPORTUNIDADE</span>Riviera de Santa Cristina XIII</div></div>'
     title='<div class="eb z">Setor Marina</div>'+sp(8)+'<h1 class=z>Lote de 450&nbsp;m² <em>com fachada leste</em></h1>'
+    ths=lambda hh:f"<div class='z' style='display:flex;gap:12px;flex:none'>{th('foto3.jpg',hh,'center 60%')}{th('foto4.jpg',hh,'center 50%')}{th('foto2.jpg',hh,'center 62%')}{img('foto5.jpg',hh,'left 58%','flex:1;background-size:auto 150%;background-repeat:no-repeat')}</div>"
     if vert:
-        body=(top+sp(34)+title+sp(30)+img("foto1.jpg",560,"center 42%","","",'')+f"<div class=z style='margin-top:-560px;height:560px;position:relative'>{BADGE}</div>"
-          +sp(16)+f"<div class='z' style='display:flex;gap:16px;flex:none'>{img('foto3.jpg',220,'center 55%','flex:1')}{img('foto2.jpg',220,'center 60%','flex:1')}</div>"
-          +sp(14)+f"<div class='z mp'>{img('mapa.jpg',350,'center 78%','','<div class=mt>LOCALIZAÇÃO DO TERRENO</div>')}</div>"
-          +sp(18)+chips(4)+"<div style='flex:1'></div>"+sp(14)+'<div class="cta z">Agende uma visita</div>'+sp(24)+PH)
+        body=(top+sp(26)+title+sp(26)
+          +f"<div class=z style='position:relative;flex:none'>{img('foto1.jpg',480,'center 42%')}{BADGE}</div>"
+          +sp(12)+ths(235)+sp(12)
+          +f"<div class='z mp'>{img('mapa.jpg',330,'center 78%','','<div class=mt>LOCALIZAÇÃO DO TERRENO</div>')}</div>"
+          +sp(16)+chips(4)+"<div style='flex:1'></div>"+sp(10)+'<div class="cta z">Agende uma visita</div>'+sp(16)+PH)
     else:
-        body=(top+sp(18)+title+sp(20)
-          +f"<div class='z' style='display:flex;gap:16px;flex:none'><div style='flex:1.25;position:relative'>{img('foto1.jpg',470,'center 42%')}{BADGE}</div><div style='flex:1;position:relative'>{img('mapa.jpg',470,'center 80%','','<div class=mt>LOCALIZAÇÃO DO TERRENO</div>')}</div></div>"
-          +sp(14)+chips(4)+"<div style='flex:1'></div>"+sp(10)+'<div class="cta z">Agende uma visita</div>'+sp(14)+PH)
-    return f"<html><head><meta charset=utf-8><style>{CSS}</style></head><body><div class=f style='--w:{w}px;--h:{h}px;{vs}'>{body}</div></body></html>"
+        body=(top+sp(16)+title+sp(18)
+          +f"<div class='z' style='display:flex;gap:14px;flex:none'><div style='flex:1.25;position:relative'>{img('foto1.jpg',330,'center 42%')}{BADGE}</div><div style='flex:1;position:relative'>{img('mapa.jpg',330,'center 80%','','<div class=mt>LOCALIZAÇÃO DO TERRENO</div>')}</div></div>"
+          +sp(12)+ths(120)+sp(12)+chips(4)+"<div style='flex:1'></div>"+sp(8)+'<div class="cta z">Agende uma visita</div>'+sp(12)+PH)
+    return f"<html><head><meta charset=utf-8><style>{CSS}{LCSS}</style></head><body><div class=f style='--w:{w}px;--h:{h}px;{vs}'>{body}</div></body></html>"
 V=dict(hrf="22px",mtf="17px",pbp="18px 28px",pbs="14px",pbf="54px",p="64px",ph="1000px",pp="center 40%",lh="96px",e="24px",h1="70px",pr="120px",g="18px",cp="16px 18px",cf="27px",c="32px",cb="26px",t="50px")
 S=dict(hrf="17px",mtf="13px",pbp="10px 18px",pbs="11px",pbf="34px",p="48px",ph="470px",pp="center 40%",lh="64px",e="18px",h1="48px",pr="84px",g="12px",cp="10px 12px",cf="21px",c="24px",cb="16px",t="36px")
 (root/"html").mkdir(exist_ok=True); import json; jobs=[]
