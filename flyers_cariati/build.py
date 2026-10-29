@@ -42,6 +42,8 @@ h1 em{font-style:normal;color:#5fc1e3}
 .hero{position:absolute;left:0;top:0;width:100%;height:var(--hh);background-size:cover;background-position:center 35%}
 .hero{-webkit-mask-image:linear-gradient(180deg,#000 55%,transparent 100%);mask-image:linear-gradient(180deg,#000 55%,transparent 100%)}
 .hero:after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(3,10,16,.78) 0%,rgba(3,10,16,.35) 30%,rgba(3,10,16,.45) 100%)}
+.hero.nb:after{display:none}
+.hero.nb svg{-webkit-mask-image:linear-gradient(180deg,#000 93%,transparent);mask-image:linear-gradient(180deg,#000 93%,transparent)}
 .ov{color:#fff;text-shadow:0 4px 24px rgba(0,0,0,.6)}
 .ovs{font-weight:800;letter-spacing:.4em;font-size:calc(var(--ds)*.22)}
 .ovd{font-weight:800;font-size:var(--ds);line-height:1}
@@ -167,12 +169,29 @@ def dica(n,hook,corpo,pratica):
             return '<img class="logo z" src="assets/logo.png" style="height:130px;align-self:flex-start">'+flex()+tag+sp(30)+h+sp(40)+'<div class="rule" style="margin:0"></div>'+sp(40)+body+sp(46)+box+flex()+sig+small+sp(10)
         return '<img class="logo z" src="assets/logo.png" style="height:100px;align-self:flex-start">'+flex()+tag+sp(18)+h+sp(26)+body+sp(34)+box+flex()+sig+small
     return fn
+
+def blueprint(H,ry,rs):
+    W=1080
+    g="".join(f'<line x1="{x}" y1="0" x2="{x}" y2="{H}"/>' for x in range(0,W,40))+"".join(f'<line x1="0" y1="{y}" x2="{W}" y2="{y}"/>' for y in range(0,H,40))
+    t=H*0.2
+    plan=f"""<g transform="translate(110,{t:.0f}) scale({H/900:.3f})" fill="none" stroke="#5fc1e3" stroke-width="5" stroke-linecap="square">
+<rect x="0" y="120" width="640" height="420"/><rect x="12" y="132" width="616" height="396" stroke-width="2" opacity=".6"/>
+<path d="M0 330H260M260 120V330M260 330V540M420 330H640M420 330V540M420 120V250" stroke-width="4"/>
+<path d="M120 120h70M470 120h80M0 440v60M640 400v70M300 540h80" stroke="#0a2233" stroke-width="9"/>
+<path d="M120 120h70M470 120h80M0 440v60M640 400v70M300 540h80" stroke-width="2"/>
+<path d="M260 250a60 60 0 0 1 -60 60" stroke-width="2"/><path d="M420 440a70 70 0 0 0 70 -70" stroke-width="2"/>
+<g stroke-width="2" opacity=".8"><path d="M0 580H640M0 570v20M640 570v20M-30 120V540M-40 120h20M-40 540h20"/><path d="M60 180h120v90H60zM460 380h120v110H460z" stroke-dasharray="8 6"/></g>
+</g>"""
+    def roll(cx,cy,rot,label,sc=1):
+        return f"""<g transform="translate({cx},{cy}) rotate({rot}) scale({sc})"><rect x="-170" y="-34" width="340" height="68" rx="6" fill="#dfe8ee"/><rect x="-170" y="-34" width="340" height="68" rx="6" fill="url(#shade)"/><ellipse cx="-170" cy="0" rx="22" ry="34" fill="#c8d4dc"/><ellipse cx="-170" cy="0" rx="11" ry="20" fill="#9fb2bf"/><ellipse cx="170" cy="0" rx="22" ry="34" fill="#f2f6f8"/><ellipse cx="170" cy="0" rx="11" ry="20" fill="#cdd9e0"/><rect x="-20" y="-36" width="40" height="72" fill="#5fc1e3"/><rect x="-20" y="-36" width="40" height="72" fill="url(#shade)"/><text x="0" y="8" text-anchor="middle" font-family="Inter,sans-serif" font-weight="800" font-size="22" fill="#05212f" transform="rotate(0)">{label}</text></g>"""
+    rolls=roll(W-215,ry,-12,"+1",rs)+roll(W-200,ry+105*rs,-6,"+2",rs)
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" style="position:absolute;left:0;top:0"><defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0d2c40"/><stop offset="1" stop-color="#071622"/></linearGradient><linearGradient id="shade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".3"/></linearGradient></defs><rect width="{W}" height="{H}" fill="url(#bg)"/><g stroke="#5fc1e3" stroke-opacity=".13" stroke-width="1">{g}</g>{plan}{rolls}</svg>"""
 # promo outubro (clientes com orçamento de projeto)
 def fpromo(vert):
     bonus=lambda t:f'<li>{t}</li>'
     bl=bonus("Projeto de pontos elétricos")+bonus("Projeto de pontos hidráulicos")
     box=f'<div class="card z promo" style="text-align:left"><div class="l" style="letter-spacing:.22em;font-size:calc(var(--cl)*.8)">VOCÊ GANHA</div><ul class="list" style="margin-top:12px">{bl}</ul></div>'
-    hero="<div class='hero' style=\"background-image:url('assets/casa_piscina.jpg')\"></div>"
+    hero="<div class='hero nb' style='background:none;-webkit-mask-image:none;mask-image:none'>"+blueprint(900 if vert else 430, 660 if vert else 262, 0.95 if vert else 0.72)+"</div>"
     lg='<img class="logo z" src="assets/logo_branco.png" style="height:var(--lh);align-self:center">'
     urg='<div class="z" style="align-self:center"><span class="urg">Promoção de novembro</span></div>'
     date='<div class="z ov" style="text-align:center"><div class="ovs">SÓ ATÉ</div><div class="ovd">30/11</div></div>'
