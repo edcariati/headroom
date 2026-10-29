@@ -53,6 +53,7 @@ h1 em{font-style:normal;color:#5fc1e3}
 .hero.nb svg{-webkit-mask-image:linear-gradient(180deg,#000 93%,transparent);mask-image:linear-gradient(180deg,#000 93%,transparent)}
 .ov{color:#fff;text-shadow:0 4px 24px rgba(0,0,0,.6)}
 .ovs{font-weight:800;letter-spacing:.4em;font-size:calc(var(--ds)*.22)}
+.ovd.nov{font-size:var(--nv);letter-spacing:.01em}
 .ovd{font-weight:800;font-size:var(--ds);line-height:1}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--g3)}
 .card{background:rgba(255,255,255,.05);border-top:4px solid #5fc1e3;padding:var(--cd)}
@@ -90,8 +91,8 @@ PH=mkph('(15) 99841-9295')
 PH2=mkph('(15) 99841-9295')
 FOOT='<div class="foot z">CARIATI ARQUITETURA LTDA · RESP. TÉCNICO ARQUITETO CAU/SP A120704-0</div>'
 V=dict(w=1080,h=1920)
-VV=dict(p="90px",lh="190px",e="26px",h1="74px",s="36px",g="36px",c="34px",cp="30px 60px",t="44px",fs="19px",ls="42px",lg="30px",big="260px",hh="900px",ds="190px",ph="64px",dh="76px",sn="74px",sl="26px",chg="18px",chf="40px",chp="20px 20px",g3="22px",cd="26px",cl="30px",ch="38px",cp2="27px")
-SQ=dict(p="64px",lh="140px",e="21px",h1="64px",s="28px",g="26px",c="27px",cp="22px 46px",t="34px",fs="15px",ls="35px",lg="24px",big="150px",hh="430px",ds="110px",ph="44px",dh="52px",sn="42px",sl="19px",chg="10px",chf="25px",chp="11px 10px",g3="16px",cd="22px",cl="26px",ch="32px",cp2="23px")
+VV=dict(p="90px",lh="190px",e="26px",h1="74px",s="36px",g="36px",c="34px",cp="30px 60px",t="44px",fs="19px",ls="42px",lg="30px",big="260px",hh="900px",ds="190px",nv="148px",ph="64px",dh="76px",sn="74px",sl="26px",chg="18px",chf="40px",chp="20px 20px",g3="22px",cd="26px",cl="30px",ch="38px",cp2="27px")
+SQ=dict(p="64px",lh="140px",e="21px",h1="64px",s="28px",g="26px",c="27px",cp="22px 46px",t="34px",fs="15px",ls="35px",lg="24px",big="150px",hh="430px",ds="110px",nv="80px",ph="44px",dh="52px",sn="42px",sl="19px",chg="10px",chf="25px",chp="11px 10px",g3="16px",cd="22px",cl="26px",ch="32px",cp2="23px")
 def photo(img,h,pos="center"):
     return f"<div class='photo z' style=\"flex:none;height:{h}px;background-image:url('assets/{img}');background-position:{pos}\"></div>"
 def sp(n): return f"<div style='height:{n}px;flex:none'></div>"
@@ -194,12 +195,13 @@ def blueprint(H,ry,rs,photo=False):
     big=H>600
     tx,ty,ps=(500,720,.85) if big else (330,344,.45)
     pencil=f"""<g><line x1="{tx-95*ps*1.2:.0f}" y1="{ty}" x2="{tx}" y2="{ty}" stroke="#fff" stroke-width="{4*ps+1:.1f}" stroke-linecap="round" opacity=".95"/><g transform="translate({tx},{ty}) rotate(150) scale({ps})"><polygon points="0,0 44,-13 44,13" fill="#e8c9a0"/><polygon points="0,0 14,-4.3 14,4.3" fill="#2b2f33"/><rect x="44" y="-13" width="216" height="26" fill="#f4c542"/><rect x="44" y="-13" width="216" height="8" fill="#fff" opacity=".35"/><rect x="44" y="6" width="216" height="7" fill="#000" opacity=".18"/><rect x="260" y="-13" width="26" height="26" fill="#b7c0c7"/><rect x="260" y="-13" width="26" height="8" fill="#fff" opacity=".4"/><rect x="286" y="-13" width="24" height="26" rx="5" fill="#e86f7a"/></g></g>"""
-    rx1,ry1=W-215,ry; rx2,ry2=W-200,ry+105*rs
+    dx=50 if (photo and H>=400) else 0
+    rx1,ry1=W-215+dx,ry; rx2,ry2=W-200+dx,ry+105*rs
     def streak(cx,cy,L): return "".join(f'<line x1="{cx+175*rs+10+o}" y1="{cy+dy*rs}" x2="{cx+175*rs+10+o+L}" y2="{cy+dy*rs-4}" stroke="#bfe6f5" stroke-width="{3*rs:.1f}" stroke-linecap="round" opacity="{op}"/>' for o,dy,op in ((0,-18,.45),(30,0,.3),(10,20,.4)))
     rolls=streak(rx1,ry1,90*rs)+streak(rx2,ry2,80*rs)+roll(rx1,ry1,-12,"+1",rs)+roll(rx2,ry2,-6,"+2",rs)+pencil
     if photo:
         rolls=rolls.replace(pencil,'')
-        px,py,pr=(872,38,32) if H<400 else (872,245,26)
+        px,py,pr=(872,38,32) if H<400 else (922,250,24)
         plus=f'<g><circle cx="{px}" cy="{py}" r="{pr}" fill="#e8503a"/><circle cx="{px}" cy="{py}" r="{pr}" fill="none" stroke="#fff" stroke-width="3" opacity=".9"/><path d="M{px-pr*.5} {py}H{px+pr*.5}M{px} {py-pr*.5}V{py+pr*.5}" stroke="#fff" stroke-width="{pr*.28:.1f}" stroke-linecap="round"/></g>'
         return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" style="position:absolute;left:0;top:0;z-index:2"><defs><linearGradient id="shade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".3"/></linearGradient></defs>{rolls}{plus}</svg>"""
     return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" style="position:absolute;left:0;top:0"><defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0d2c40"/><stop offset="1" stop-color="#071622"/></linearGradient><linearGradient id="shade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".3"/></linearGradient></defs><rect width="{W}" height="{H}" fill="url(#bg)"/><g stroke="#5fc1e3" stroke-opacity=".13" stroke-width="1">{g}</g>{plan}{rolls}</svg>"""
@@ -211,12 +213,12 @@ def fpromo(vert):
     if vert:
         hero="<div class='hero hp2' style=\"background-image:url('assets/ref_desenho.jpg')\"></div><div style='position:absolute;left:0;top:630px;width:1080px;height:350px;z-index:2'>"+blueprint(350,125,1,True)+"</div>"
     else:
-        hero="<div class='hero hp' style=\"background-image:url('assets/ref_desenho.jpg');background-position:center 62%\"></div><div style='position:absolute;left:0;top:0;width:1080px;height:430px;z-index:2'>"+blueprint(430,330,0.72,True)+"</div>"
+        hero="<div class='hero hp' style=\"background-image:url('assets/ref_desenho.jpg');background-position:center 62%\"></div><div style='position:absolute;left:0;top:0;width:1080px;height:430px;z-index:2'>"+blueprint(430,340,0.6,True)+"</div>"
     lg='<img class="logo z" src="assets/logo.png" style="height:var(--lh);align-self:center">'
-    urg='<div class="z" style="align-self:center"><span class="urg">Promoção de novembro</span></div>'
-    date='<div class="z ov" style="text-align:center"><div class="ovs">SÓ ATÉ</div><div class="ovd">30/11</div></div>'
+    urg='<div class="z" style="align-self:center"><span class="urg">Oferta especial</span></div>'
+    date='<div class="z ov" style="text-align:center"><div class="ovs">PROMOÇÃO DE</div><div class="ovd nov">NOVEMBRO</div></div>'
     h='<h1 class="z" style="font-size:var(--ph);line-height:1.1">Feche o seu projeto e <em>ganhe 2 projetos complementares</em></h1>'
-    loss='<div class="sub z" style="font-size:var(--s)"><b>Passou o dia 30/11, o bônus acaba.</b></div>'
+    loss='<div class="sub z" style="font-size:var(--s)"><b>Válida somente em novembro.</b></div>'
     if vert:
         return hero+lg+sp(36)+urg+sp(40)+date+sp(330)+h+sp(30)+box+sp(28)+loss+flex()+'<div class="cta z">Garantir meu bônus agora</div>'+sp(34)+PH+sp(26)+FOOT
     return hero+lg+sp(10)+urg+sp(8)+date+sp(60)+h+sp(12)+box.replace('<ul class="list" style="margin-top:12px">','<ul class="list" style="margin-top:8px;--ls:27px;--lg:10px">')+sp(10)+loss+flex()+'<div class="cta z">Garantir meu bônus agora</div>'+sp(12)+PH+sp(4)
