@@ -174,14 +174,14 @@ def fpromo(vert):
     box=f'<div class="card z promo" style="text-align:left"><div class="l" style="letter-spacing:.22em;font-size:calc(var(--cl)*.8)">VOCÊ GANHA</div><ul class="list" style="margin-top:12px">{bl}</ul></div>'
     hero="<div class='hero' style=\"background-image:url('assets/casa_piscina.jpg')\"></div>"
     lg='<img class="logo z" src="assets/logo_branco.png" style="height:var(--lh);align-self:center">'
-    urg='<div class="z" style="align-self:center"><span class="urg">Últimos dias de outubro</span></div>'
-    date='<div class="z ov" style="text-align:center"><div class="ovs">SÓ ATÉ</div><div class="ovd">31/10</div></div>'
+    urg='<div class="z" style="align-self:center"><span class="urg">Promoção de novembro</span></div>'
+    date='<div class="z ov" style="text-align:center"><div class="ovs">SÓ ATÉ</div><div class="ovd">30/11</div></div>'
     h='<h1 class="z" style="font-size:var(--ph);line-height:1.1">Feche o seu projeto e <em>ganhe 2 projetos complementares</em></h1>'
-    loss='<div class="sub z" style="font-size:var(--s)"><b>Passou o dia 31, o bônus acaba.</b></div>'
+    loss='<div class="sub z" style="font-size:var(--s)"><b>Passou o dia 30/11, o bônus acaba.</b></div>'
     if vert:
         return hero+lg+sp(36)+urg+sp(40)+date+sp(330)+h+sp(30)+box+sp(28)+loss+flex()+'<div class="cta z">Garantir meu bônus agora</div>'+sp(34)+PH+sp(26)+FOOT
     return hero+lg+sp(10)+urg+sp(8)+date+sp(60)+h+sp(12)+box.replace('<ul class="list" style="margin-top:12px">','<ul class="list" style="margin-top:8px;--ls:27px;--lg:10px">')+sp(10)+loss+flex()+'<div class="cta z">Garantir meu bônus agora</div>'+sp(12)+PH+sp(4)
-FL=[("01_tudo_em_um_so_lugar",f1),("02_400_obras",f2),("03_metodo_ppg",f3),("04_vamos_conversar",f4),("05_financiamento_caixa",f5),("06_equipe",f6),("07_gestao_de_obras",f7),("08_projetos_e_equipe",f8)]+[(f"dica_{d[0]}",dica(*d)) for d in DICAS]+[("promo_outubro",fpromo)]
+FL=[("01_tudo_em_um_so_lugar",f1),("02_400_obras",f2),("03_metodo_ppg",f3),("04_vamos_conversar",f4),("05_financiamento_caixa",f5),("06_equipe",f6),("07_gestao_de_obras",f7),("08_projetos_e_equipe",f8)]+[(f"dica_{d[0]}",dica(*d)) for d in DICAS]+[("promo_novembro",fpromo)]
 import json
 jobs=[]
 (root/"html").mkdir(exist_ok=True)
