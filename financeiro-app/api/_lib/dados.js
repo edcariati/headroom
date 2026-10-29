@@ -35,12 +35,19 @@ const SEMENTES = () => {
   ];
 };
 const semeando = new WeakMap(); // store -> promessa em andamento
+const MAX_POR_CHAMADA = 40; // no máximo isto por chamada: a função da Vercel tem tempo curto e o resto fica para a próxima
 async function semearPendentes(store, existentes) {
+  // Instalação nova: grava tudo de uma vez. Atualização de um app que já tem dados: aos poucos.
+  let restante = existentes.has(MARCADOR) ? MAX_POR_CHAMADA : Infinity;
   for (const { marcador, itens } of SEMENTES()) {
     if (existentes.has(marcador)) continue;
     const faltam = itens.filter(([colecao, obj]) => !existentes.has(caminhoDe(colecao, obj.id)));
-    await emLotes(faltam, 6, ([colecao, obj]) => gravar(store, colecao, obj));
+    const agora = faltam.slice(0, restante);
+    await emLotes(agora, 8, ([colecao, obj]) => gravar(store, colecao, obj));
+    restante -= agora.length;
+    if (agora.length < faltam.length) return; // continua na próxima chamada
     await store.gravar(marcador, { criado_em: new Date().toISOString() });
+    if (restante <= 0) return;
   }
 }
 async function garantirSementes(store, lista) {
