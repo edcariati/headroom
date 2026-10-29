@@ -32,7 +32,7 @@ h1 em{font-style:normal;color:#5fc1e3}
 .ph small{display:block;font-weight:500;color:#9fb4bf;font-size:.5em;letter-spacing:.05em;margin-top:4px}
 """
 def chips(cols=4):
-    c=[("Medidas","12 × 30 m"),("Área","450 m²"),("Posição","Fachada leste"),("Terreno","Leve aclive")]
+    c=[("Medidas","15 × 30 m"),("Área","450 m²"),("Posição","Fachada leste"),("Terreno","Leve aclive")]
     return f'<div class="chips z" style="grid-template-columns:repeat({cols},1fr)">'+''.join(f'<div class=chip><span>{a}</span>{b}</div>' for a,b in c)+'</div>'
 PH='<div class="ph z"><span class=wa>WhatsApp</span>(15) 99701-8090</div>'
 def sp(n): return f"<div style='height:{n}px;flex:none'></div>"
