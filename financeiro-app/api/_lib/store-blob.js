@@ -19,9 +19,17 @@ export class StoreBlob {
     return JSON.parse(await new Response(r.stream).text());
   }
   async gravar(caminho, obj) {
-    const r = await this.sdk.put(caminho, JSON.stringify(obj), {
-      access: 'private', addRandomSuffix: false, allowOverwrite: true, contentType: 'application/json' });
-    return r.etag;
+    // tenta de novo se o Blob recusar por excesso de chamadas ou falhar por um instante
+    for (let tentativa = 1; ; tentativa++) {
+      try {
+        const r = await this.sdk.put(caminho, JSON.stringify(obj), {
+          access: 'private', addRandomSuffix: false, allowOverwrite: true, contentType: 'application/json' });
+        return r.etag;
+      } catch (e) {
+        if (tentativa >= 4) throw e;
+        await new Promise((ok) => setTimeout(ok, 250 * tentativa * tentativa));
+      }
+    }
   }
   async excluir(caminho) { await this.sdk.del(caminho); }
 }
