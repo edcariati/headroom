@@ -263,11 +263,13 @@ function telaLogin() {
   ultimaChave = null;
   $('#conteudo').innerHTML = `<form class="login-card glass glass-forte mira reveal" id="login-form">
     <img class="login-logo" src="logo-cariati.png" alt="Cariati Arquitetura &amp; Gestão"><h2>Financeiro interno</h2><p class="suave">Acesso restrito. Entre com seu e-mail e senha.</p>
-    <label class="f" style="text-align:left">E-mail<input class="campo" type="email" name="email" autocomplete="username" placeholder="seu@email.com.br"><span class="dica">Administrador: deixe o e-mail em branco e use a senha de administrador.</span></label>
-    <label class="f" style="text-align:left">Senha<input class="campo" type="password" name="senha" autocomplete="current-password" required></label>
+    <label class="f" style="text-align:left">E-mail<input class="campo" type="email" name="email" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email" placeholder="seu@email.com.br"><span class="dica">Administrador: deixe o e-mail em branco e use a senha de administrador.</span></label>
+    <label class="f" style="text-align:left">Senha<input class="campo" type="password" name="senha" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" required></label>
+    <label class="mostrar-senha" style="display:flex;gap:var(--s2);align-items:center;text-align:left;font-size:.82rem"><input type="checkbox" name="ver"> Mostrar a senha</label>
     <div class="erro" role="alert" style="justify-content:center"></div><button class="btn btn-primary" type="submit" style="width:100%">Entrar</button></form>`;
   $('#login-form').email.value = ler('ultimoEmail', '');
   $((ler('ultimoEmail', '') ? '[name=senha]' : '[name=email]'), $('#login-form')).focus();
+  $('#login-form').ver.onchange = (e) => { $('#login-form').senha.type = e.target.checked ? 'text' : 'password'; };
   $('#login-form').onsubmit = async (e) => {
     e.preventDefault();
     const botao = $('button', e.target);
