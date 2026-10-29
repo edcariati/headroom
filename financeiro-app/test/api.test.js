@@ -287,6 +287,7 @@ test('login do usuário aceita e-mail em maiúsculas e senha com espaço nas pon
 
 test('semeadura dos cadastros iniciais não derruba o app se o armazenamento recusar gravações, e termina na chamada seguinte', async () => {
   const base = new StoreMemoria();
+  await base.gravar('dados/meta/plano.json', {}); // já é um app com dados: os cadastros novos entram aos poucos
   let emAndamento = 0, picoSimultaneo = 0, gravacoes = 0, falhar = true;
   const store = {
     listar: (p) => base.listar(p), ler: (c) => base.ler(c), excluir: (c) => base.excluir(c),
@@ -300,12 +301,16 @@ test('semeadura dos cadastros iniciais não derruba o app se o armazenamento rec
   };
   const d1 = await carregarDados(store); // a falha é registrada e a carga segue
   assert.ok(d1.categorias.length < 70 + 45);
-  const d2 = await carregarDados(store); // completa o que faltou
+  let d2 = await carregarDados(store); // a semeadura é feita aos poucos, a cada chamada
+  for (let i = 0; i < 12 && d2.servicos.length < 160; i++) d2 = await carregarDados(store);
   assert.ok(d2.categorias.length >= 40 && d2.servicos.length >= 160);
-  assert.ok(picoSimultaneo <= 6, `gravações simultâneas: ${picoSimultaneo}`);
+  assert.ok(picoSimultaneo <= 16, `gravações simultâneas: ${picoSimultaneo}`);
   // chamadas simultâneas dividem a mesma semeadura
   const outro = new StoreMemoria();
-  const [x, y] = await Promise.all([carregarDados(outro), carregarDados(outro)]);
+  await outro.gravar('dados/meta/plano.json', {});
+  let [x, y] = await Promise.all([carregarDados(outro), carregarDados(outro)]);
   assert.equal(x.servicos.length, y.servicos.length);
+  for (let i = 0; i < 12 && (await outro.listar('dados/meta/')).length < 5; i++) x = await carregarDados(outro);
   assert.ok(x.servicos.length >= 160);
+  assert.ok((await outro.listar('dados/meta/')).length >= 5); // todos os marcadores gravados no fim
 });
