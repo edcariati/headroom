@@ -22,40 +22,42 @@ export async function excluir(store, colecao, id) {
   cacheDe(store).delete(caminho);
 }
 
-async function semearPlano(store) {
+// Cadastros iniciais, criados uma única vez (cada lote tem o seu marcador). Grava só o que falta, aos poucos, e uma
+// semeadura por vez em cada instância: muitas gravações juntas no Blob podem ser recusadas e derrubariam o aplicativo.
+const SEMENTES = () => {
   const { categorias, centros } = registrosDoPlano();
-  await Promise.all([...categorias.map((c) => gravar(store, 'categorias', c)), ...centros.map((c) => gravar(store, 'centros', c))]);
-  await store.gravar(MARCADOR, { criado_em: new Date().toISOString() });
+  return [
+    { marcador: MARCADOR, itens: [...categorias.map((c) => ['categorias', c]), ...centros.map((c) => ['centros', c])] },
+    { marcador: MARCADOR_PLANO2, itens: registrosPlano2().map((c) => ['categorias', c]) },
+    { marcador: MARCADOR_SERVICOS, itens: registrosDeServicos().map((x) => ['servicos', x]) },
+    { marcador: MARCADOR_RECEITAS, itens: registrosCategoriasReceita().map((c) => ['categorias', c]) },
+    { marcador: MARCADOR_CATALOGO, itens: registrosCatalogo().map((x) => ['servicos', x]) },
+  ];
+};
+const semeando = new WeakMap(); // store -> promessa em andamento
+async function semearPendentes(store, existentes) {
+  for (const { marcador, itens } of SEMENTES()) {
+    if (existentes.has(marcador)) continue;
+    const faltam = itens.filter(([colecao, obj]) => !existentes.has(caminhoDe(colecao, obj.id)));
+    await emLotes(faltam, 6, ([colecao, obj]) => gravar(store, colecao, obj));
+    await store.gravar(marcador, { criado_em: new Date().toISOString() });
+  }
 }
-
-async function semearPlano2(store) {
-  await Promise.all(registrosPlano2().map((c) => gravar(store, 'categorias', c)));
-  await store.gravar(MARCADOR_PLANO2, { criado_em: new Date().toISOString() });
-}
-
-async function semearServicos(store) {
-  await Promise.all(registrosDeServicos().map((s) => gravar(store, 'servicos', s)));
-  await store.gravar(MARCADOR_SERVICOS, { criado_em: new Date().toISOString() });
-}
-
-async function semearReceitas(store) {
-  await Promise.all(registrosCategoriasReceita().map((c) => gravar(store, 'categorias', c)));
-  await store.gravar(MARCADOR_RECEITAS, { criado_em: new Date().toISOString() });
-}
-
-async function semearCatalogo(store) {
-  await Promise.all(registrosCatalogo().map((s) => gravar(store, 'servicos', s)));
-  await store.gravar(MARCADOR_CATALOGO, { criado_em: new Date().toISOString() });
+async function garantirSementes(store, lista) {
+  const existentes = new Set(lista.map((x) => x.caminho));
+  if (SEMENTES().every((x) => existentes.has(x.marcador))) return false;
+  if (!semeando.has(store)) {
+    const p = semearPendentes(store, existentes).catch((e) => console.error('semeadura incompleta (tenta de novo na próxima chamada)', e)).finally(() => semeando.delete(store));
+    semeando.set(store, p);
+  }
+  await semeando.get(store);
+  return true;
 }
 
 export async function carregarDados(store) {
   const cache = cacheDe(store);
   let lista = await store.listar(PREFIXO);
-  if (!lista.some((x) => x.caminho === MARCADOR)) { await semearPlano(store); lista = await store.listar(PREFIXO); }
-  if (!lista.some((x) => x.caminho === MARCADOR_PLANO2)) { await semearPlano2(store); lista = await store.listar(PREFIXO); }
-  if (!lista.some((x) => x.caminho === MARCADOR_SERVICOS)) { await semearServicos(store); lista = await store.listar(PREFIXO); }
-  if (!lista.some((x) => x.caminho === MARCADOR_RECEITAS)) { await semearReceitas(store); lista = await store.listar(PREFIXO); }
-  if (!lista.some((x) => x.caminho === MARCADOR_CATALOGO)) { await semearCatalogo(store); lista = await store.listar(PREFIXO); }
+  if (await garantirSementes(store, lista)) lista = await store.listar(PREFIXO);
   const vivos = new Set(lista.map((x) => x.caminho));
   for (const k of [...cache.keys()]) if (!vivos.has(k)) cache.delete(k);
   await emLotes(lista.filter((x) => cache.get(x.caminho)?.etag !== x.etag), 24, async (x) => {

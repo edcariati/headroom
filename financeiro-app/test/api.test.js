@@ -284,3 +284,28 @@ test('login do usuário aceita e-mail em maiúsculas e senha com espaço nas pon
   assert.equal((await tentar('financeiro@cariati.com.br', ' SenhaForte123 ')).status, 200);
   assert.equal((await tentar('financeiro@cariati.com.br', 'senhaforte123')).status, 401);
 });
+
+test('semeadura dos cadastros iniciais não derruba o app se o armazenamento recusar gravações, e termina na chamada seguinte', async () => {
+  const base = new StoreMemoria();
+  let emAndamento = 0, picoSimultaneo = 0, gravacoes = 0, falhar = true;
+  const store = {
+    listar: (p) => base.listar(p), ler: (c) => base.ler(c), excluir: (c) => base.excluir(c),
+    async gravar(c, o) {
+      emAndamento++; picoSimultaneo = Math.max(picoSimultaneo, emAndamento);
+      await new Promise((r) => setTimeout(r, 1));
+      emAndamento--;
+      if (falhar && ++gravacoes === 40) { falhar = false; throw new Error('Blob recusou (429)'); }
+      return base.gravar(c, o);
+    },
+  };
+  const d1 = await carregarDados(store); // a falha é registrada e a carga segue
+  assert.ok(d1.categorias.length < 70 + 45);
+  const d2 = await carregarDados(store); // completa o que faltou
+  assert.ok(d2.categorias.length >= 40 && d2.servicos.length >= 160);
+  assert.ok(picoSimultaneo <= 6, `gravações simultâneas: ${picoSimultaneo}`);
+  // chamadas simultâneas dividem a mesma semeadura
+  const outro = new StoreMemoria();
+  const [x, y] = await Promise.all([carregarDados(outro), carregarDados(outro)]);
+  assert.equal(x.servicos.length, y.servicos.length);
+  assert.ok(x.servicos.length >= 160);
+});
