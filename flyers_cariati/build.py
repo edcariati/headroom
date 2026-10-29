@@ -38,6 +38,7 @@ h1 em{font-style:normal;color:#5fc1e3}
 .light .bg:after{background:linear-gradient(180deg,rgba(247,245,240,.68),rgba(247,245,240,.78) 45%,rgba(240,237,230,.96))}
 .dh{font-size:var(--dh)}
 .light .card p{color:#0b1f2b}
+.urg{display:inline-block;background:#e8503a;color:#fff;font-weight:800;letter-spacing:.2em;text-transform:uppercase;font-size:var(--e);padding:14px 26px}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--g3)}
 .card{background:rgba(255,255,255,.05);border-top:4px solid #5fc1e3;padding:var(--cd)}
 .card .l{font-size:var(--cl);font-weight:800;color:#5fc1e3}
@@ -164,14 +165,14 @@ def dica(n,hook,corpo,pratica):
 def fpromo(vert):
     bonus=lambda t:f'<li>{t}</li>'
     bl=bonus("Projeto de pontos elétricos")+bonus("Projeto de pontos hidráulicos")
-    box=f'<div class="card z promo" style="text-align:left"><div class="l" style="letter-spacing:.22em;font-size:calc(var(--cl)*.8)">SEU BÔNUS</div><ul class="list" style="margin-top:14px">{bl}</ul></div>'
-    badge='<div class="eyebrow z">Condição especial · Final de outubro</div>'
-    h='<h1 class="z" style="font-size:var(--ph);line-height:1.12">Contrate o seu projeto e <em>ganhe os projetos de pontos elétricos e hidráulicos</em></h1>'
-    intro='<p class="sub z">Você pediu um orçamento com a gente. Preparamos uma condição para fechar ainda em outubro.</p>'
-    valid='<div class="sub z" style="font-size:var(--s)"><b>Válida até 31 de outubro</b></div>'
+    box=f'<div class="card z promo" style="text-align:left"><div class="l" style="letter-spacing:.22em;font-size:calc(var(--cl)*.8)">VOCÊ LEVA DE BÔNUS, SEM CUSTO</div><ul class="list" style="margin-top:14px">{bl}</ul></div>'
+    badge='<div class="z" style="align-self:center"><span class="urg">Últimos dias de outubro</span></div>'
+    h='<h1 class="z" style="font-size:var(--ph);line-height:1.12">Feche o seu projeto até 31/10 e <em>leve dois projetos de graça</em></h1>'
+    intro='<p class="sub z">Você já tem o orçamento. Agora tem <b>um bom motivo para fechar.</b></p>'
+    valid='<div class="sub z" style="font-size:var(--s)"><b>Depois de 31/10, esse bônus sai do ar.</b></div>'
     if vert:
-        return L+sp(40)+badge+sp(26)+h+sp(30)+intro+flex()+box+sp(34)+valid+flex()+'<div class="cta z">Quero aproveitar</div>'+sp(36)+PH+sp(28)+FOOT
-    return L+sp(26)+badge+sp(16)+h+flex()+box+sp(18)+valid+flex()+'<div class="cta z">Quero aproveitar</div>'+sp(16)+PH+sp(10)+FOOT
+        return L+sp(40)+badge+sp(34)+h+sp(30)+intro+flex()+box+sp(34)+valid+flex()+'<div class="cta z">Garantir meu bônus</div>'+sp(36)+PH+sp(28)+FOOT
+    return L+sp(26)+badge+sp(18)+h+sp(10)+intro+flex()+box+sp(16)+valid+flex()+'<div class="cta z">Garantir meu bônus</div>'+sp(16)+PH+sp(10)+FOOT
 FL=[("01_tudo_em_um_so_lugar",f1),("02_400_obras",f2),("03_metodo_ppg",f3),("04_vamos_conversar",f4),("05_financiamento_caixa",f5),("06_equipe",f6),("07_gestao_de_obras",f7),("08_projetos_e_equipe",f8)]+[(f"dica_{d[0]}",dica(*d)) for d in DICAS]+[("promo_outubro",fpromo)]
 import json
 jobs=[]
