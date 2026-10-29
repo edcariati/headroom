@@ -42,6 +42,10 @@ h1 em{font-style:normal;color:#5fc1e3}
 .hero{position:absolute;left:0;top:0;width:100%;height:var(--hh);background-size:cover;background-position:center 35%}
 .hero{-webkit-mask-image:linear-gradient(180deg,#000 55%,transparent 100%);mask-image:linear-gradient(180deg,#000 55%,transparent 100%)}
 .hero:after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(3,10,16,.78) 0%,rgba(3,10,16,.35) 30%,rgba(3,10,16,.45) 100%)}
+.hero.hp{background-size:cover;background-position:center}
+.hero.hp:after{background:linear-gradient(180deg,rgba(3,10,16,.70) 0%,rgba(3,10,16,.50) 40%,rgba(3,10,16,.60) 100%)}
+.hero.hp2{top:630px;height:350px;background-size:100% auto;background-position:center 17%;-webkit-mask-image:linear-gradient(180deg,transparent 0%,#000 22%,#000 78%,transparent 100%);mask-image:linear-gradient(180deg,transparent 0%,#000 18%,#000 82%,transparent 100%)}
+.hero.hp2:after{background:linear-gradient(180deg,rgba(3,10,16,.25),rgba(3,10,16,.40) 60%,rgba(3,10,16,.55))}
 .hero.nb:after{display:none}
 .hero.nb svg{-webkit-mask-image:linear-gradient(180deg,#000 93%,transparent);mask-image:linear-gradient(180deg,#000 93%,transparent)}
 .ov{color:#fff;text-shadow:0 4px 24px rgba(0,0,0,.6)}
@@ -170,7 +174,7 @@ def dica(n,hook,corpo,pratica):
         return '<img class="logo z" src="assets/logo.png" style="height:100px;align-self:flex-start">'+flex()+tag+sp(18)+h+sp(26)+body+sp(34)+box+flex()+sig+small
     return fn
 
-def blueprint(H,ry,rs):
+def blueprint(H,ry,rs,photo=False):
     W=1080
     g="".join(f'<line x1="{x}" y1="0" x2="{x}" y2="{H}"/>' for x in range(0,W,40))+"".join(f'<line x1="0" y1="{y}" x2="{W}" y2="{y}"/>' for y in range(0,H,40))
     t=H*0.2
@@ -190,13 +194,19 @@ def blueprint(H,ry,rs):
     rx1,ry1=W-215,ry; rx2,ry2=W-200,ry+105*rs
     def streak(cx,cy,L): return "".join(f'<line x1="{cx+175*rs+10+o}" y1="{cy+dy*rs}" x2="{cx+175*rs+10+o+L}" y2="{cy+dy*rs-4}" stroke="#bfe6f5" stroke-width="{3*rs:.1f}" stroke-linecap="round" opacity="{op}"/>' for o,dy,op in ((0,-18,.45),(30,0,.3),(10,20,.4)))
     rolls=streak(rx1,ry1,90*rs)+streak(rx2,ry2,80*rs)+roll(rx1,ry1,-12,"+1",rs)+roll(rx2,ry2,-6,"+2",rs)+pencil
+    if photo:
+        rolls=rolls.replace(pencil,'')
+        return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" style="position:absolute;left:0;top:0;z-index:2"><defs><linearGradient id="shade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".3"/></linearGradient></defs>{rolls}</svg>"""
     return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" style="position:absolute;left:0;top:0"><defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0d2c40"/><stop offset="1" stop-color="#071622"/></linearGradient><linearGradient id="shade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".3"/></linearGradient></defs><rect width="{W}" height="{H}" fill="url(#bg)"/><g stroke="#5fc1e3" stroke-opacity=".13" stroke-width="1">{g}</g>{plan}{rolls}</svg>"""
 # promo outubro (clientes com orçamento de projeto)
 def fpromo(vert):
     bonus=lambda t:f'<li>{t}</li>'
     bl=bonus("Projeto de pontos elétricos")+bonus("Projeto de pontos hidráulicos")
     box=f'<div class="card z promo" style="text-align:left"><div class="l" style="letter-spacing:.22em;font-size:calc(var(--cl)*.8)">VOCÊ GANHA</div><ul class="list" style="margin-top:12px">{bl}</ul></div>'
-    hero="<div class='hero nb' style='background:none;-webkit-mask-image:none;mask-image:none'>"+blueprint(900 if vert else 430, 660 if vert else 262, 0.95 if vert else 0.72)+"</div>"
+    if vert:
+        hero="<div class='hero hp2' style=\"background-image:url('assets/ref_desenho.jpg')\"></div><div style='position:absolute;left:0;top:630px;width:1080px;height:350px;z-index:2'>"+blueprint(350,125,1,True)+"</div>"
+    else:
+        hero="<div class='hero hp' style=\"background-image:url('assets/ref_desenho.jpg');background-position:center 62%\"></div><div style='position:absolute;left:0;top:0;width:1080px;height:430px;z-index:2'>"+blueprint(430,330,0.72,True)+"</div>"
     lg='<img class="logo z" src="assets/logo_branco.png" style="height:var(--lh);align-self:center">'
     urg='<div class="z" style="align-self:center"><span class="urg">Promoção de novembro</span></div>'
     date='<div class="z ov" style="text-align:center"><div class="ovs">SÓ ATÉ</div><div class="ovd">30/11</div></div>'
@@ -211,7 +221,7 @@ jobs=[]
 (root/"html").mkdir(exist_ok=True)
 for name,fn in FL:
     for tag,(w,h,vars_,vert) in {"vertical_1080x1920":(1080,1920,VV,True),"quadrado_1080x1080":(1080,1080,SQ,False)}.items():
-        for light in (False,True):
+        for light in ((False,) if name.startswith('promo') else (False,True)):
             html=page(w,h,fn(vert),vars_,light).replace('assets/','../assets/')
             if light: html=html.replace('../assets/logo.png','../assets/logo_escuro.png')
             fn_=f"{name}_{tag}"+("_claro" if light else "")
