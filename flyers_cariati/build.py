@@ -74,8 +74,8 @@ PH=mkph('(15) 99841-9295')
 PH2=mkph('(15) 99841-9295')
 FOOT='<div class="foot z">CARIATI ARQUITETURA LTDA · RESP. TÉCNICO ARQUITETO CAU/SP A120704-0</div>'
 V=dict(w=1080,h=1920)
-VV=dict(p="90px",lh="190px",e="26px",h1="74px",s="36px",g="36px",c="34px",cp="30px 60px",t="44px",fs="19px",ls="42px",lg="30px",big="260px",dh="76px",sn="74px",sl="26px",chg="18px",chf="40px",chp="20px 20px",g3="22px",cd="26px",cl="30px",ch="38px",cp2="27px")
-SQ=dict(p="64px",lh="140px",e="21px",h1="64px",s="28px",g="26px",c="27px",cp="22px 46px",t="34px",fs="15px",ls="35px",lg="24px",big="150px",dh="52px",sn="42px",sl="19px",chg="10px",chf="25px",chp="11px 10px",g3="16px",cd="22px",cl="26px",ch="32px",cp2="23px")
+VV=dict(p="90px",lh="190px",e="26px",h1="74px",s="36px",g="36px",c="34px",cp="30px 60px",t="44px",fs="19px",ls="42px",lg="30px",big="260px",ph="64px",dh="76px",sn="74px",sl="26px",chg="18px",chf="40px",chp="20px 20px",g3="22px",cd="26px",cl="30px",ch="38px",cp2="27px")
+SQ=dict(p="64px",lh="140px",e="21px",h1="64px",s="28px",g="26px",c="27px",cp="22px 46px",t="34px",fs="15px",ls="35px",lg="24px",big="150px",ph="44px",dh="52px",sn="42px",sl="19px",chg="10px",chf="25px",chp="11px 10px",g3="16px",cd="22px",cl="26px",ch="32px",cp2="23px")
 def photo(img,h,pos="center"):
     return f"<div class='photo z' style=\"flex:none;height:{h}px;background-image:url('assets/{img}');background-position:{pos}\"></div>"
 def sp(n): return f"<div style='height:{n}px;flex:none'></div>"
@@ -160,7 +160,19 @@ def dica(n,hook,corpo,pratica):
             return '<img class="logo z" src="assets/logo.png" style="height:130px;align-self:flex-start">'+flex()+tag+sp(30)+h+sp(40)+'<div class="rule" style="margin:0"></div>'+sp(40)+body+sp(46)+box+flex()+sig+small+sp(10)
         return '<img class="logo z" src="assets/logo.png" style="height:100px;align-self:flex-start">'+flex()+tag+sp(18)+h+sp(26)+body+sp(34)+box+flex()+sig+small
     return fn
-FL=[("01_tudo_em_um_so_lugar",f1),("02_400_obras",f2),("03_metodo_ppg",f3),("04_vamos_conversar",f4),("05_financiamento_caixa",f5),("06_equipe",f6),("07_gestao_de_obras",f7),("08_projetos_e_equipe",f8)]+[(f"dica_{d[0]}",dica(*d)) for d in DICAS]
+# promo outubro (clientes com orçamento de projeto)
+def fpromo(vert):
+    bonus=lambda t:f'<li>{t}</li>'
+    bl=bonus("Projeto de pontos elétricos")+bonus("Projeto de pontos hidráulicos")
+    box=f'<div class="card z promo" style="text-align:left"><div class="l" style="letter-spacing:.22em;font-size:calc(var(--cl)*.8)">SEU BÔNUS</div><ul class="list" style="margin-top:14px">{bl}</ul></div>'
+    badge='<div class="eyebrow z">Condição especial · Final de outubro</div>'
+    h='<h1 class="z" style="font-size:var(--ph);line-height:1.12">Contrate o seu projeto e <em>ganhe os projetos de pontos elétricos e hidráulicos</em></h1>'
+    intro='<p class="sub z">Você pediu um orçamento com a gente. Preparamos uma condição para fechar ainda em outubro.</p>'
+    valid='<div class="sub z" style="font-size:var(--s)"><b>Válida até 31 de outubro</b></div>'
+    if vert:
+        return L+sp(40)+badge+sp(26)+h+sp(30)+intro+flex()+box+sp(34)+valid+flex()+'<div class="cta z">Quero aproveitar</div>'+sp(36)+PH+sp(28)+FOOT
+    return L+sp(26)+badge+sp(16)+h+flex()+box+sp(18)+valid+flex()+'<div class="cta z">Quero aproveitar</div>'+sp(16)+PH+sp(10)+FOOT
+FL=[("01_tudo_em_um_so_lugar",f1),("02_400_obras",f2),("03_metodo_ppg",f3),("04_vamos_conversar",f4),("05_financiamento_caixa",f5),("06_equipe",f6),("07_gestao_de_obras",f7),("08_projetos_e_equipe",f8)]+[(f"dica_{d[0]}",dica(*d)) for d in DICAS]+[("promo_outubro",fpromo)]
 import json
 jobs=[]
 (root/"html").mkdir(exist_ok=True)
@@ -171,5 +183,5 @@ for name,fn in FL:
             if light: html=html.replace('../assets/logo.png','../assets/logo_escuro.png')
             fn_=f"{name}_{tag}"+("_claro" if light else "")
             (root/"html"/f"{fn_}.html").write_text(html)
-            jobs.append(dict(f=fn_,w=w,h=h,d=("png_dicas" if name.startswith("dica") else "png")+("_claro" if light else "")))
+            jobs.append(dict(f=fn_,w=w,h=h,d=("png_dicas" if name.startswith("dica") else "png_promo" if name.startswith("promo") else "png")+("_claro" if light else "")))
 (root/"jobs.json").write_text(json.dumps(jobs))
