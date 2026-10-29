@@ -43,7 +43,8 @@ export async function excluirUsuario(store, id) {
 }
 export async function entrar(store, email, senha) {
   const u = await acharPorEmail(store, email);
-  return u && u.ativo && hashConfere(senha, u.senha_hash) ? u : null;
+  // Aceita também a senha sem espaços nas pontas (colada do WhatsApp ou e-mail costuma levar um espaço junto).
+  return u && u.ativo && (hashConfere(senha, u.senha_hash) || hashConfere(String(senha ?? '').trim(), u.senha_hash)) ? u : null;
 }
 // Usuários iniciais vindos do ambiente (USUARIOS_SEMENTE = JSON [{email, nome, senha}]). Cada e-mail é criado uma única vez,
 // então trocar a senha ou excluir o usuário pela tela continua valendo.

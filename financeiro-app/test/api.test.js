@@ -275,3 +275,12 @@ test('conta guarda dados e observações; conferência e conta aceitam anexos (e
   assert.equal(lista.length, 1); assert.equal(lista[0].contexto, 'Banco base antigo');
   assert.equal((await j(store, 'GET', 'anexos', { query: { vinculo_tipo: 'conferencia' } })).corpo[0].contexto, 'Conferência · Banco base antigo');
 });
+
+test('login do usuário aceita e-mail em maiúsculas e senha com espaço nas pontas; senha errada continua negada', async () => {
+  const store = new StoreMemoria();
+  const semente = JSON.stringify([{ email: 'financeiro@cariati.com.br', nome: 'Financeiro', senha: 'SenhaForte123' }]);
+  const tentar = (email, senha) => tratar({ metodo: 'POST', rota: 'login', corpo: { email, senha }, ip: '9.9.9.9' }, { store, senha: 'admin-secreta-1', semente, hoje: () => HOJE });
+  assert.equal((await tentar('Financeiro@Cariati.com.br ', 'SenhaForte123')).status, 200);
+  assert.equal((await tentar('financeiro@cariati.com.br', ' SenhaForte123 ')).status, 200);
+  assert.equal((await tentar('financeiro@cariati.com.br', 'senhaforte123')).status, 401);
+});
