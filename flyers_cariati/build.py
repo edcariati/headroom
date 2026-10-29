@@ -39,6 +39,12 @@ h1 em{font-style:normal;color:#5fc1e3}
 .dh{font-size:var(--dh)}
 .light .card p{color:#0b1f2b}
 .urg{display:inline-block;background:#e8503a;color:#fff;font-weight:800;letter-spacing:.2em;text-transform:uppercase;font-size:var(--e);padding:14px 26px}
+.hero{position:absolute;left:0;top:0;width:100%;height:var(--hh);background-size:cover;background-position:center 35%}
+.hero{-webkit-mask-image:linear-gradient(180deg,#000 55%,transparent 100%);mask-image:linear-gradient(180deg,#000 55%,transparent 100%)}
+.hero:after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(3,10,16,.78) 0%,rgba(3,10,16,.35) 30%,rgba(3,10,16,.45) 100%)}
+.ov{color:#fff;text-shadow:0 4px 24px rgba(0,0,0,.6)}
+.ovs{font-weight:800;letter-spacing:.4em;font-size:calc(var(--ds)*.22)}
+.ovd{font-weight:800;font-size:var(--ds);line-height:1}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--g3)}
 .card{background:rgba(255,255,255,.05);border-top:4px solid #5fc1e3;padding:var(--cd)}
 .card .l{font-size:var(--cl);font-weight:800;color:#5fc1e3}
@@ -75,8 +81,8 @@ PH=mkph('(15) 99841-9295')
 PH2=mkph('(15) 99841-9295')
 FOOT='<div class="foot z">CARIATI ARQUITETURA LTDA · RESP. TÉCNICO ARQUITETO CAU/SP A120704-0</div>'
 V=dict(w=1080,h=1920)
-VV=dict(p="90px",lh="190px",e="26px",h1="74px",s="36px",g="36px",c="34px",cp="30px 60px",t="44px",fs="19px",ls="42px",lg="30px",big="260px",ph="64px",dh="76px",sn="74px",sl="26px",chg="18px",chf="40px",chp="20px 20px",g3="22px",cd="26px",cl="30px",ch="38px",cp2="27px")
-SQ=dict(p="64px",lh="140px",e="21px",h1="64px",s="28px",g="26px",c="27px",cp="22px 46px",t="34px",fs="15px",ls="35px",lg="24px",big="150px",ph="44px",dh="52px",sn="42px",sl="19px",chg="10px",chf="25px",chp="11px 10px",g3="16px",cd="22px",cl="26px",ch="32px",cp2="23px")
+VV=dict(p="90px",lh="190px",e="26px",h1="74px",s="36px",g="36px",c="34px",cp="30px 60px",t="44px",fs="19px",ls="42px",lg="30px",big="260px",hh="900px",ds="190px",ph="64px",dh="76px",sn="74px",sl="26px",chg="18px",chf="40px",chp="20px 20px",g3="22px",cd="26px",cl="30px",ch="38px",cp2="27px")
+SQ=dict(p="64px",lh="140px",e="21px",h1="64px",s="28px",g="26px",c="27px",cp="22px 46px",t="34px",fs="15px",ls="35px",lg="24px",big="150px",hh="430px",ds="110px",ph="44px",dh="52px",sn="42px",sl="19px",chg="10px",chf="25px",chp="11px 10px",g3="16px",cd="22px",cl="26px",ch="32px",cp2="23px")
 def photo(img,h,pos="center"):
     return f"<div class='photo z' style=\"flex:none;height:{h}px;background-image:url('assets/{img}');background-position:{pos}\"></div>"
 def sp(n): return f"<div style='height:{n}px;flex:none'></div>"
@@ -165,14 +171,16 @@ def dica(n,hook,corpo,pratica):
 def fpromo(vert):
     bonus=lambda t:f'<li>{t}</li>'
     bl=bonus("Projeto de pontos elétricos")+bonus("Projeto de pontos hidráulicos")
-    box=f'<div class="card z promo" style="text-align:left"><div class="l" style="letter-spacing:.22em;font-size:calc(var(--cl)*.8)">VOCÊ LEVA DE BÔNUS, SEM CUSTO</div><ul class="list" style="margin-top:14px">{bl}</ul></div>'
-    badge='<div class="z" style="align-self:center"><span class="urg">Últimos dias de outubro</span></div>'
-    h='<h1 class="z" style="font-size:var(--ph);line-height:1.12">Feche o seu projeto até 31/10 e <em>leve dois projetos de graça</em></h1>'
-    intro='<p class="sub z">Você já tem o orçamento. Agora tem <b>um bom motivo para fechar.</b></p>'
-    valid='<div class="sub z" style="font-size:var(--s)"><b>Depois de 31/10, esse bônus sai do ar.</b></div>'
+    box=f'<div class="card z promo" style="text-align:left"><div class="l" style="letter-spacing:.22em;font-size:calc(var(--cl)*.8)">SEU BÔNUS, SEM CUSTO</div><ul class="list" style="margin-top:12px">{bl}</ul></div>'
+    hero="<div class='hero' style=\"background-image:url('assets/casa_piscina.jpg')\"></div>"
+    lg='<img class="logo z" src="assets/logo_branco.png" style="height:var(--lh);align-self:center">'
+    urg='<div class="z" style="align-self:center"><span class="urg">Últimos dias de outubro</span></div>'
+    date='<div class="z ov" style="text-align:center"><div class="ovs">SÓ ATÉ</div><div class="ovd">31/10</div></div>'
+    h='<h1 class="z" style="font-size:var(--ph);line-height:1.1">Feche o seu projeto e <em>leve dois projetos de graça</em></h1>'
+    loss='<div class="sub z" style="font-size:var(--s)"><b>Passou o dia 31, o bônus acaba.</b></div>'
     if vert:
-        return L+sp(40)+badge+sp(34)+h+sp(30)+intro+flex()+box+sp(34)+valid+flex()+'<div class="cta z">Garantir meu bônus</div>'+sp(36)+PH+sp(28)+FOOT
-    return L+sp(26)+badge+sp(18)+h+sp(10)+intro+flex()+box+sp(16)+valid+flex()+'<div class="cta z">Garantir meu bônus</div>'+sp(16)+PH+sp(10)+FOOT
+        return hero+lg+sp(36)+urg+sp(40)+date+sp(330)+h+sp(30)+box+sp(28)+loss+flex()+'<div class="cta z">Garantir meu bônus agora</div>'+sp(34)+PH+sp(26)+FOOT
+    return hero+lg+sp(10)+urg+sp(8)+date+sp(60)+h+sp(12)+box.replace('<ul class="list" style="margin-top:12px">','<ul class="list" style="margin-top:8px;--ls:27px;--lg:10px">')+sp(10)+loss+flex()+'<div class="cta z">Garantir meu bônus agora</div>'+sp(12)+PH+sp(4)
 FL=[("01_tudo_em_um_so_lugar",f1),("02_400_obras",f2),("03_metodo_ppg",f3),("04_vamos_conversar",f4),("05_financiamento_caixa",f5),("06_equipe",f6),("07_gestao_de_obras",f7),("08_projetos_e_equipe",f8)]+[(f"dica_{d[0]}",dica(*d)) for d in DICAS]+[("promo_outubro",fpromo)]
 import json
 jobs=[]
