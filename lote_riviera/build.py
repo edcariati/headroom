@@ -41,7 +41,7 @@ def img(f,h,pos="center",extra="",inner="",w=""):
 def tag(t): return f"<div class=tg>{t}</div>"
 BADGE='<div class=pb><small>VALOR DO LOTE</small><b>R$ 67.000</b></div>'
 LCSS="""
-.hl{display:flex;justify-content:center;gap:40px;font-weight:800;color:#2a7c99;font-size:var(--hlf);letter-spacing:.02em}
+.hl{display:flex;justify-content:center;gap:34px;flex-wrap:nowrap;white-space:nowrap;font-weight:800;color:#2a7c99;font-size:var(--hlf);letter-spacing:.02em}
 
 .f{background:linear-gradient(160deg,#ffffff 0%,#f6f4ef 60%,#ece8e0 100%);color:#0b1f2b}
 .eb{color:#2a7c99}h1 em{color:#2a7c99}
@@ -53,6 +53,7 @@ LCSS="""
 .cta{background:#0b1f2b;color:#fff}
 .ph .wa{color:#128c4a}.ph{color:#0b1f2b}
 """
+HLV='<div class="hl z" style="flex-direction:column;align-items:center;gap:4px"><span>✔ Vista para a represa</span><span>✔ Terreno ótimo para construção</span></div>'
 HL='<div class="hl z"><span>✔ Vista para a represa</span><span>✔ Terreno ótimo para construção</span></div>'
 def th(f,h,pos): return img(f,h,pos,'flex:1')
 def build(w,h,v,vert):
@@ -63,16 +64,16 @@ def build(w,h,v,vert):
     if vert:
         body=(top+sp(26)+title+sp(26)
           +f"<div class=z style='position:relative;flex:none'>{img('foto1.jpg',480,'center 42%')}{BADGE}</div>"
-          +sp(12)+ths(235)+sp(12)
+          +sp(12)+ths(200)+sp(12)
           +f"<div class='z mp'>{img('mapa.jpg',330,'center 78%','','<div class=mt>LOCALIZAÇÃO DO TERRENO</div>')}</div>"
-          +sp(16)+chips(4)+sp(18)+HL+"<div style='flex:1'></div>"+sp(10)+'<div class="cta z">Agende uma visita</div>'+sp(16)+PH)
+          +sp(14)+chips(4)+sp(16)+HLV+"<div style='flex:1'></div>"+sp(10)+'<div class="cta z">Agende uma visita</div>'+sp(16)+PH)
     else:
         body=(top+sp(16)+title+sp(18)
           +f"<div class='z' style='display:flex;gap:14px;flex:none'><div style='flex:1.25;position:relative'>{img('foto1.jpg',330,'center 42%')}{BADGE}</div><div style='flex:1;position:relative'>{img('mapa.jpg',330,'center 80%','','<div class=mt>LOCALIZAÇÃO DO TERRENO</div>')}</div></div>"
           +sp(12)+ths(120)+sp(12)+chips(4)+sp(12)+HL+"<div style='flex:1'></div>"+sp(8)+'<div class="cta z">Agende uma visita</div>'+sp(12)+PH)
     return f"<html><head><meta charset=utf-8><style>{CSS}{LCSS}</style></head><body><div class=f style='--w:{w}px;--h:{h}px;{vs}'>{body}</div></body></html>"
-V=dict(hlf="26px",hrf="22px",mtf="17px",pbp="18px 28px",pbs="14px",pbf="54px",p="64px",ph="1000px",pp="center 40%",lh="96px",e="24px",h1="66px",pr="120px",g="18px",cp="16px 18px",cf="27px",c="32px",cb="26px",t="50px")
-S=dict(hlf="21px",hrf="17px",mtf="13px",pbp="10px 18px",pbs="11px",pbf="34px",p="48px",ph="470px",pp="center 40%",lh="64px",e="18px",h1="48px",pr="84px",g="12px",cp="10px 12px",cf="21px",c="24px",cb="16px",t="36px")
+V=dict(hlf="38px",hrf="22px",mtf="17px",pbp="18px 28px",pbs="14px",pbf="54px",p="64px",ph="1000px",pp="center 40%",lh="96px",e="24px",h1="66px",pr="120px",g="18px",cp="16px 18px",cf="27px",c="32px",cb="26px",t="50px")
+S=dict(hlf="29px",hrf="17px",mtf="13px",pbp="10px 18px",pbs="11px",pbf="34px",p="48px",ph="470px",pp="center 40%",lh="64px",e="18px",h1="48px",pr="84px",g="12px",cp="10px 12px",cf="21px",c="24px",cb="16px",t="36px")
 (root/"html").mkdir(exist_ok=True); import json; jobs=[]
 for tag,(w,h,v,vert) in {"vertical_1080x1920":(1080,1920,V,True),"quadrado_1080x1080":(1080,1080,S,False)}.items():
     f=f"anuncio_lote_{tag}"; (root/"html"/f"{f}.html").write_text(build(w,h,v,vert)); jobs.append(dict(f=f,w=w,h=h))
