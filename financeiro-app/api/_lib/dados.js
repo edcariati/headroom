@@ -43,7 +43,8 @@ async function semearPendentes(store, existentes) {
     if (existentes.has(marcador)) continue;
     const faltam = itens.filter(([colecao, obj]) => !existentes.has(caminhoDe(colecao, obj.id)));
     const agora = faltam.slice(0, restante);
-    await emLotes(agora, 8, ([colecao, obj]) => gravar(store, colecao, obj));
+    if (store.gravarMuitos) await store.gravarMuitos(agora.map(([colecao, obj]) => [caminhoDe(colecao, obj.id), obj]));
+    else await emLotes(agora, 8, ([colecao, obj]) => gravar(store, colecao, obj));
     restante -= agora.length;
     if (agora.length < faltam.length) return; // continua na próxima chamada
     await store.gravar(marcador, { criado_em: new Date().toISOString() });
@@ -67,10 +68,16 @@ export async function carregarDados(store) {
   if (await garantirSementes(store, lista)) lista = await store.listar(PREFIXO);
   const vivos = new Set(lista.map((x) => x.caminho));
   for (const k of [...cache.keys()]) if (!vivos.has(k)) cache.delete(k);
-  await emLotes(lista.filter((x) => cache.get(x.caminho)?.etag !== x.etag), 24, async (x) => {
-    const obj = await store.ler(x.caminho);
-    if (obj) cache.set(x.caminho, { etag: x.etag, obj }); else cache.delete(x.caminho);
-  });
+  const mudaram = lista.filter((x) => cache.get(x.caminho)?.etag !== x.etag);
+  if (store.lerMuitos) {
+    const lidos = await store.lerMuitos(mudaram.map((x) => x.caminho));
+    for (const x of mudaram) { const obj = lidos.get(x.caminho); if (obj) cache.set(x.caminho, { etag: x.etag, obj }); else cache.delete(x.caminho); }
+  } else {
+    await emLotes(mudaram, 24, async (x) => {
+      const obj = await store.ler(x.caminho);
+      if (obj) cache.set(x.caminho, { etag: x.etag, obj }); else cache.delete(x.caminho);
+    });
+  }
   const colecoes = {};
   for (const [caminho, { obj }] of cache) {
     const col = caminho.split('/')[1];
