@@ -1,8 +1,12 @@
 // Função da Vercel: recebe todas as chamadas da API em /api/app?rota=...
 import { tratar } from './_lib/router.js';
 import { StoreBlob } from './_lib/store-blob.js';
+import { StoreSupabase } from './_lib/store-supabase.js';
 
-const store = new StoreBlob();
+// Com as variáveis do Supabase, os dados ficam no Supabase; sem elas, no Blob da Vercel.
+const store = process.env.FINANCEIRO_KV_SEGREDO
+  ? new StoreSupabase({ url: process.env.SUPABASE_URL, chave: process.env.SUPABASE_ANON_KEY, segredo: process.env.FINANCEIRO_KV_SEGREDO })
+  : new StoreBlob();
 
 export default async function handler(req, res) {
   const url = new URL(req.url, 'http://localhost');
